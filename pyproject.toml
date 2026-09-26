@@ -1,0 +1,24 @@
+[project]
+name = "scenerender"
+version = "0.1.0"
+description = "Generic Python renderer for scene-render 1.1 documents (schema/scene-render-1.1.xsd)."
+requires-python = ">=3.10"
+dependencies = ["lxml>=5", "numpy>=1.26", "pillow>=10", "imageio-ffmpeg>=0.5"]
+
+[project.optional-dependencies]
+# pycairo and PyGObject (Pango/PangoCairo) are taken from the system site-packages;
+# create the venv with `uv venv --system-site-packages`.
+test = ["pytest>=8"]
+
+[project.scripts]
+scenerender = "scenerender.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scenerender*"]
+
+[tool.setuptools.package-data]
+scenerender = ["schema/*.xsd"]

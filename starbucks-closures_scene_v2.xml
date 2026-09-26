@@ -1,0 +1,524 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<scene xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.1" xsi:noNamespaceSchemaLocation="scene-render-1.1.xsd">
+  <project width="3840" height="2160" fps="30" duration="90" seed="20260924" background="#081816" workingColorSpace="srgb" linearLight="true" motionBlur="true" shutterAngle="120" motionBlurSamples="8" safeArea="title_safe" />
+  <metadata title="Starbucks: 250 closures explained" language="en-US" revision="2.0" created="2026-09-26T08:22:49Z" description="Independent 90-second news explainer. Editorial snapshot of the September 24, 2026 announcement. Native motion graphics, inline captions and original music.">
+    <meta name="source.cnn_requested" value="https://edition.cnn.com/2026/09/24/food/starbucks-closures" />
+    <meta name="source.cnn_read" value="https://kesq.com/money/cnn-business-consumer/2026/09/24/starbucks-is-closing-hundreds-of-locations/" />
+    <meta name="source.starbucks" value="https://about.starbucks.com/press/2026/creating-coffeehouses-customers-love-and-partners-are-proud-of/" />
+    <meta name="editorial.as_of" value="2026-09-24; retrieved 2026-09-26. Announced plans, not confirmation that each closure occurred." />
+    <meta name="editorial.access" value="CNN original URL inaccessible; Jordan Valinsky CNN Newsource republication on KESQ read in full." />
+    <meta name="editorial.attribution" value="Independent report based on CNN and Starbucks. No CNN branding, footage or implication of affiliation." />
+    <meta name="editorial.graphics" value="Licensed file photographs from Wikimedia Commons behind each chapter, credited on screen. Photos are illustrative file images; no pictured location is identified as closing. Original schematic drawings retained only where they do not compete with photography." />
+    <meta name="editorial.percentage" value="About 1% is the company-rounded figure. Do not imply exactly 1.00% or infer an exact denominator." />
+    <meta name="editorial.costs" value="Estimated charges, not lost revenue or a count of jobs. $200m is a component of approximately $300m." />
+    <meta name="production.status" value="Voiced master: neural TTS narration aligned to caption windows, music ducked under voice." />
+    <meta name="production.voice" value="Neutral synthetic English newsreader voice (Microsoft Edge neural TTS, en-US-AndrewNeural). No impersonation." />
+    <meta name="production.validation" value="XSD and custom structural checks; renderer and companion Schematron not supplied, so no render or Schematron verification claimed." />
+    <accessibility description="All reported information appears in on-screen captions. Shapes illustrate topics without pretending to be documentary footage." requireCaptions="true" flashCheck="warn" contrastCheck="warn" />
+    <meta name="editorial.photo_changes" value="All photographs cropped to 16:9, darkened, partially desaturated and overlaid with a gradient scrim." />
+  </metadata>
+  <styles>
+    <textStyle id="caption_style" fontAsset="font_regular" size="60" color="#FFFFFF" lineHeight="1.2" shadowColor="#000000" shadowBlur="4" />
+  </styles>
+  <colorManagement workingSpace="linear-srgb" display="srgb" view="standard" toneMapping="none" />
+  <output id="master_4k" path="output/starbucks-closures-4k.mp4" codec="h264" container="mp4" width="3840" height="2160" fps="30" crf="18" preset="slow" audioCodec="aac" audioBitrate="192000" burnCaptions="captions_en" captions="captions_en" colorSpace="rec709" faststart="true">
+    <poster time="5" path="output/starbucks-poster.png" format="png" width="1920" />
+  </output>
+  <output id="web_1080" path="output/starbucks-closures-1080p.mp4" codec="h264" container="mp4" width="1920" height="1080" fps="30" crf="20" burnCaptions="captions_en" audioCodec="aac" audioBitrate="192000" />
+  <safeAreas>
+    <safeArea id="title_safe" preset="custom" left="0.05" right="0.05" top="0.05" bottom="0.05" enforce="warn" />
+  </safeAreas>
+  <assets>
+    <font id="font_regular" src="assets/DejaVuSans.ttf" family="DejaVu Sans" weight="400" sha256="ae7b7855e115a5966d8b1b3f80f254ccc117ec86f9965e202ee2940453837280" license="DejaVu font license; see assets/FONT-LICENSE.txt" />
+    <font id="font_bold" src="assets/DejaVuSans-Bold.ttf" family="DejaVu Sans" weight="700" sha256="5c1247acef7f2b8522a31742c76d6adcb5569bacc0be7ceaa4dc39dd252ce895" license="DejaVu font license; see assets/FONT-LICENSE.txt" />
+    <audio id="music" src="assets/news-bed.wav" duration="90" sampleRate="48000" channels="2" sha256="7a45695b982eb75f4908b337af9663d431186947fd5676cc432d50d5b6ed93f1" credit="Original procedural instrumental composed for this report" license="Original production audio" />
+    <audio id="narration" src="assets/narration.wav" duration="90" sampleRate="48000" channels="2" sha256="50462809336960506006f506e7c3baf1520d44b41f9359ea18c463fc0189c0fb" credit="Synthetic narration, Microsoft Edge neural TTS (en-US-AndrewNeural)" license="Generated for this report" />
+    <text id="brand_asset" text="BUSINESS / EXPLAINED" width="2200" height="90" size="48" fontAsset="font_bold" color="#8BCEB0" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="dateline_asset" text="24 SEP 2026" width="700" height="90" size="48" fontAsset="font_regular" color="#BBCDC3" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="eyebrow_0_asset" text="01 / THE ANNOUNCEMENT" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_0_asset" text="Sources: CNN / KESQ and Starbucks • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_1_asset" text="02 / SCALE" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_1_asset" text="Source: Starbucks • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_2_asset" text="03 / WHY CLOSE STORES?" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_2_asset" text="Source: Starbucks • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_3_asset" text="04 / THE COST" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_3_asset" text="Source: CNN / KESQ • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_4_asset" text="05 / EMPLOYEES" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_4_asset" text="Source: Starbucks • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_5_asset" text="06 / GROWTH OUTLOOK" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_5_asset" text="Source: CNN / KESQ • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_6_asset" text="07 / THE TURNAROUND" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_6_asset" text="Source: Starbucks • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_7_asset" text="08 / WHAT CUSTOMERS CAN CHECK" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_7_asset" text="Source: CNN / KESQ • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="eyebrow_8_asset" text="09 / SOURCES" width="3300" height="90" size="48" fontAsset="font_bold" color="#93CBAE" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="42" maxLines="4" overflow="clip" />
+    <text id="source_8_asset" text="Sources: CNN / KESQ and Starbucks • 24 Sep 2026" width="3456" height="78" size="40" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="hero_title_asset" text="STARBUCKS" width="2100" height="230" size="170" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="149" maxLines="4" overflow="clip" />
+    <text id="hero_number_asset" text="≈250" width="2100" height="490" size="370" fontAsset="font_bold" color="#8AE0B3" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="325" maxLines="4" overflow="clip" />
+    <text id="hero_deck_asset" text="North American stores&#10;slated to close" width="2130" height="270" size="100" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="88" maxLines="4" overflow="clip" />
+    <text id="hero_label_asset" text="SCHEMATIC ILLUSTRATION" width="1100" height="100" size="36" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="31" maxLines="4" overflow="clip" />
+    <text id="scale_big_asset" text="18,000+" width="2370" height="360" size="270" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="237" maxLines="4" overflow="clip" />
+    <text id="scale_sub_asset" text="coffeehouses in North America" width="2700" height="155" size="80" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="70" maxLines="4" overflow="clip" />
+    <text id="scale_pct_asset" text="About 1%" width="1100" height="140" size="105" fontAsset="font_bold" color="#9EE6BA" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="92" maxLines="4" overflow="clip" />
+    <text id="scale_pct_note_asset" text="company-rounded share" width="1830" height="90" size="51" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="44" maxLines="4" overflow="clip" />
+    <text id="why_title_asset" text="Why these locations?" width="3300" height="185" size="135" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="118" maxLines="4" overflow="clip" />
+    <text id="reason_h_0_asset" text="FINANCIAL PERFORMANCE" width="1535" height="180" size="65" fontAsset="font_bold" color="#93DFB6" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="57" maxLines="4" overflow="clip" />
+    <text id="reason_b_0_asset" text="No acceptable path forward" width="1535" height="215" size="84" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="73" maxLines="4" overflow="clip" />
+    <text id="reason_h_1_asset" text="COFFEEHOUSE EXPERIENCE" width="1535" height="180" size="65" fontAsset="font_bold" color="#93DFB6" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="57" maxLines="4" overflow="clip" />
+    <text id="reason_b_1_asset" text="Unable to meet company expectations" width="1535" height="215" size="84" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="73" maxLines="4" overflow="clip" />
+    <text id="cost_total_asset" text="≈$300M" width="2600" height="380" size="280" fontAsset="font_bold" color="#E6C28C" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="246" maxLines="4" overflow="clip" />
+    <text id="cost_desc_asset" text="estimated closure-related charges" width="3000" height="150" size="82" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="72" maxLines="4" overflow="clip" />
+    <text id="cost_component_text_asset" text="$200M: early lease exits + severance" width="3400" height="140" size="78" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="68" maxLines="4" overflow="clip" />
+    <text id="cost_other_asset" text="Remaining ≈$100M shown in gray; not classified here" width="3400" height="80" size="40" fontAsset="font_regular" color="#B9CBBF" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="35" maxLines="4" overflow="clip" />
+    <text id="people_title_asset" text="What happens to staff?" width="3450" height="190" size="130" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="114" maxLines="4" overflow="clip" />
+    <text id="people_head_0_asset" text="TRANSFER" width="1510" height="170" size="100" fontAsset="font_bold" color="#A0E7BF" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="88" maxLines="4" overflow="clip" />
+    <text id="people_body_0_asset" text="where possible" width="1510" height="190" size="76" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="66" maxLines="4" overflow="clip" />
+    <text id="people_head_1_asset" text="SEVERANCE" width="1510" height="170" size="100" fontAsset="font_bold" color="#A0E7BF" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="88" maxLines="4" overflow="clip" />
+    <text id="people_body_1_asset" text="if no placement is available" width="1510" height="190" size="76" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="66" maxLines="4" overflow="clip" />
+    <text id="people_note_asset" text="Company commitments • no employee count inferred" width="3450" height="85" size="44" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="38" maxLines="4" overflow="clip" />
+    <text id="growth_title_asset" text="A lower global opening forecast" width="3400" height="250" size="118" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="103" maxLines="4" overflow="clip" />
+    <text id="growth_before_asset" text="600–650" width="1600" height="240" size="165" fontAsset="font_bold" color="#92A99A" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="145" maxLines="4" overflow="clip" />
+    <text id="growth_after_asset" text="≈440" width="1400" height="330" size="250" fontAsset="font_bold" color="#E7C694" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="220" maxLines="4" overflow="clip" />
+    <text id="growth_old_label_asset" text="previous outlook" width="1600" height="100" size="58" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="51" maxLines="4" overflow="clip" />
+    <text id="growth_new_label_asset" text="revised outlook" width="1400" height="100" size="58" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="51" maxLines="4" overflow="clip" />
+    <text id="growth_scope_asset" text="Global openings this fiscal year, as reported by CNN" width="3400" height="130" size="58" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="51" maxLines="4" overflow="clip" />
+    <text id="strategy_title_asset" text="The wider turnaround" width="3300" height="190" size="140" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="123" maxLines="4" overflow="clip" />
+    <text id="strategy_program_asset" text="BACK TO STARBUCKS" width="3300" height="120" size="70" fontAsset="font_bold" color="#A0E7BF" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="61" maxLines="4" overflow="clip" />
+    <text id="strategy_h_0_asset" text="1,500" width="970" height="150" size="100" fontAsset="font_bold" color="#ACE9C8" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="88" maxLines="4" overflow="clip" />
+    <text id="strategy_b_0_asset" text="coffeehouse uplifts" width="970" height="165" size="66" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="58" maxLines="4" overflow="clip" />
+    <text id="strategy_h_1_asset" text="SERVICE" width="970" height="150" size="100" fontAsset="font_bold" color="#ACE9C8" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="88" maxLines="4" overflow="clip" />
+    <text id="strategy_b_1_asset" text="more consistent experience" width="970" height="165" size="66" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="58" maxLines="4" overflow="clip" />
+    <text id="strategy_h_2_asset" text="GROWTH" width="970" height="150" size="100" fontAsset="font_bold" color="#ACE9C8" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="88" maxLines="4" overflow="clip" />
+    <text id="strategy_b_2_asset" text="new stores still planned" width="970" height="165" size="66" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="58" maxLines="4" overflow="clip" />
+    <text id="customer_title_asset" text="Check your local store" width="3200" height="230" size="140" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="123" maxLines="4" overflow="clip" />
+    <text id="customer_action_asset" text="In-store notices&#10;+ the Starbucks app" width="2670" height="340" size="130" fontAsset="font_bold" color="#A0E7BF" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="114" maxLines="4" overflow="clip" />
+    <text id="customer_note_asset" text="No store list was immediately released in CNN’s report." width="3300" height="170" size="68" fontAsset="font_regular" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="59" maxLines="4" overflow="clip" />
+    <text id="end_title_asset" text="CLOSURES. COSTS. CUSTOMERS." width="3456" height="330" size="135" fontAsset="font_bold" color="#F4F4E9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="118" maxLines="4" overflow="clip" />
+    <text id="end_sources_asset" text="CNN / Jordan Valinsky&#10;Starbucks / Mike Grams" width="3300" height="300" size="90" fontAsset="font_regular" color="#9ADDB9" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="79" maxLines="4" overflow="clip" />
+    <text id="end_stamp_asset" text="Announcement: 24 September 2026&#10;Independent explainer • photos via Wikimedia Commons, credited on screen" width="3450" height="160" size="49" fontAsset="font_regular" color="#BDCEC4" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="43" maxLines="4" overflow="clip" />
+    <image id="photo_1" src="assets/photos/J.jpg" sha256="d879a6202fb7c0d564acb04c94dccf0ed5325ea4d5a50afbcc40f15e203667e3" credit="Brad.K / Wikimedia Commons" license="CC BY 2.0" licenseUrl="https://creativecommons.org/licenses/by/2.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Starbucks_Long_Beach,_CA.jpg" />
+    <text id="credit_1_asset" text="Photo: Brad.K / CC BY 2.0 / Wikimedia Commons • File photo; location not identified as closing" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_2" src="assets/photos/F.jpg" sha256="ab600add5dfda3739e36dda4435e9251ab36ad414632adec0bdfcd6be7edbda8" credit="Joe Mabel / Wikimedia Commons" license="CC BY-SA 4.0" licenseUrl="https://creativecommons.org/licenses/by-sa/4.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Starbucks_Reserve_Roastery_interior_02.jpg" />
+    <text id="credit_2_asset" text="Photo: Joe Mabel / CC BY-SA 4.0 / Wikimedia Commons • File photo" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_3" src="assets/photos/C.jpg" sha256="b77f425cd3bc659773477f34bb9cbc2b78e3b02f6ffe0b90f65e8bf2f4aff59d" credit="Fumikas Sagisavas / Wikimedia Commons" license="CC BY-SA 4.0" licenseUrl="https://creativecommons.org/licenses/by-sa/4.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Starbucks_coffee_shop_interior_design.jpg" />
+    <text id="credit_3_asset" text="Photo: Fumikas Sagisavas / CC BY-SA 4.0 / Wikimedia Commons • File photo" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_4" src="assets/photos/D.jpg" sha256="6f8272adab19da2ca55efa5e82398ff6692dcffc2584d84dda5383604d1aecec" credit="Jackilometresan / Wikimedia Commons" license="CC0" licenseUrl="http://creativecommons.org/publicdomain/zero/1.0/deed.en" sourceUrl="https://commons.wikimedia.org/wiki/File:An_empty_storefront_advertising_space_for_lease_at_The_Shops_at_Willow_Bend_in_Plano,_Texas.jpg" />
+    <text id="credit_4_asset" text="Photo: Jackilometresan / CC0 / Wikimedia Commons • File photo" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_5" src="assets/photos/P.jpg" sha256="e60a0ba190f046fae489d780e30a7a6e93a91d03507dc0e9d83483cf88c7cfc1" credit="Craft Coffee Spot / Wikimedia Commons" license="CC BY 2.0" licenseUrl="https://creativecommons.org/licenses/by/2.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Pouring_Latte_Art.jpg" />
+    <text id="credit_5_asset" text="Photo: Craft Coffee Spot / CC BY 2.0 / Wikimedia Commons • File photo" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_6" src="assets/photos/G.jpg" sha256="c922b8fa8aa3263048b8e58aec036c4c5b2d842cbdb9c19557d38255af596f04" credit="Jkafader / Wikimedia Commons" license="CC BY-SA 3.0" licenseUrl="https://creativecommons.org/licenses/by-sa/3.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Beans_Dropping_from_a_Coffee_Roaster.JPG" />
+    <text id="credit_6_asset" text="Photo: Jkafader / CC BY-SA 3.0 / Wikimedia Commons • File photo" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_7" src="assets/photos/L.jpg" sha256="453993b533a8afb143eb2b49932218cae295015647b8b8bf11c0e8b6f395d878" credit="Joe Mabel / Wikimedia Commons" license="CC BY-SA 4.0" licenseUrl="https://creativecommons.org/licenses/by-sa/4.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Starbucks_Reserve_Roastery_interior_10.jpg" />
+    <text id="credit_7_asset" text="Photo: Joe Mabel / CC BY-SA 4.0 / Wikimedia Commons • File photo" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_8" src="assets/photos/N.jpg" sha256="571b556ebe1b4107ef36cab266565b7fdefdee2f428163533478a33a003d875e" credit="GoToVan from Vancouver, Canada / Wikimedia Commons" license="CC BY 2.0" licenseUrl="https://creativecommons.org/licenses/by/2.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Starbucks_Mobile-Order-Only_Pickup,_Olympic_Village,_Vancouver_during_coronavirus_pandemic_(49771202266).jpg" />
+    <text id="credit_8_asset" text="Photo: GoToVan from Vancouver, Canada / CC BY 2.0 / Wikimedia Commons • File photo; location not identified as closing" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+    <image id="photo_9" src="assets/photos/A.jpg" sha256="4bcd2bb536400aee164cc5927f3e9617792723fc204748a0c34f806653ae8368" credit="Ken Wuschke / Wikimedia Commons" license="CC BY-SA 3.0" licenseUrl="https://creativecommons.org/licenses/by-sa/3.0" sourceUrl="https://commons.wikimedia.org/wiki/File:Pike_Place_Starbucks_sign.jpg" />
+    <text id="credit_9_asset" text="Photo: Ken Wuschke / CC BY-SA 3.0 / Wikimedia Commons • File photo; location not identified as closing" width="2400" height="60" size="32" fontAsset="font_regular" color="#BDCEC4CC" lineHeight="1.12" wrap="word" autoFit="shrink" minSize="26" maxLines="1" overflow="clip" align="right" />
+  </assets>
+  <paints>
+    <linearGradient id="background_gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" color="#071714" />
+      <stop offset="1" color="#143A33" />
+    </linearGradient>
+    <linearGradient id="scrim_h" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" color="#071714F2" />
+      <stop offset="0.42" color="#071714D0" />
+      <stop offset="0.68" color="#07171470" />
+      <stop offset="1" color="#07171438" />
+    </linearGradient>
+    <linearGradient id="scrim_v" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" color="#071714B3" />
+      <stop offset="0.2" color="#07171400" />
+      <stop offset="0.62" color="#07171400" />
+      <stop offset="1" color="#071714E6" />
+    </linearGradient>
+  </paints>
+  <symbols>
+    <symbol id="coffeehouse" width="500" height="460" duration="90">
+      <shape id="shop_wall" shape="rounded-rect" x="20" y="100" width="460" height="340" fill="#CFDDD3" radius="15" />
+      <shape id="shop_awning" shape="rect" x="0" y="72" width="500" height="75" fill="#3FBA93" />
+      <shape id="shop_roof" shape="rect" x="0" y="54" width="500" height="18" fill="#D9B77A" />
+      <shape id="shop_glass_l" shape="rect" x="55" y="175" width="170" height="170" fill="#183F38" />
+      <shape id="shop_glass_r" shape="rect" x="265" y="175" width="165" height="170" fill="#183F38" />
+      <shape id="shop_door" shape="rect" x="235" y="175" width="20" height="265" fill="#56776B" />
+      <shape id="shop_step" shape="rect" x="0" y="440" width="500" height="20" fill="#759A87" />
+    </symbol>
+  </symbols>
+  <markers>
+    <marker id="chapter_1" time="0" duration="10" kind="chapter" label="The announcement" />
+    <marker id="chapter_2" time="10" duration="10" kind="chapter" label="Scale" />
+    <marker id="chapter_3" time="20" duration="11" kind="chapter" label="Why close stores?" />
+    <marker id="chapter_4" time="31" duration="11" kind="chapter" label="The cost" />
+    <marker id="chapter_5" time="42" duration="12" kind="chapter" label="Employees" />
+    <marker id="chapter_6" time="54" duration="11" kind="chapter" label="Growth outlook" />
+    <marker id="chapter_7" time="65" duration="12" kind="chapter" label="The turnaround" />
+    <marker id="chapter_8" time="77" duration="8" kind="chapter" label="What customers can check" />
+    <marker id="chapter_9" time="85" duration="5" kind="chapter" label="Sources" />
+  </markers>
+  <composition>
+    <shape id="backdrop" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#background_gradient)" z="-100" />
+    <shape id="ambient_line_0" shape="rect" x="-300" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="-300" />
+        <key time="90" value="-100" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_1" shape="rect" x="270" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="270" />
+        <key time="90" value="470" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_2" shape="rect" x="840" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="840" />
+        <key time="90" value="1040" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_3" shape="rect" x="1410" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="1410" />
+        <key time="90" value="1610" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_4" shape="rect" x="1980" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="1980" />
+        <key time="90" value="2180" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_5" shape="rect" x="2550" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="2550" />
+        <key time="90" value="2750" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_6" shape="rect" x="3120" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="3120" />
+        <key time="90" value="3320" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_7" shape="rect" x="3690" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="3690" />
+        <key time="90" value="3890" />
+      </animate>
+    </shape>
+    <shape id="ambient_line_8" shape="rect" x="4260" y="0" width="2" height="2160" fill="#84C5A6" opacity="0.055" z="-90">
+      <animate property="x" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="4260" />
+        <key time="90" value="4460" />
+      </animate>
+    </shape>
+    <shape id="caption_back" shape="rounded-rect" x="192" y="1750" width="3456" height="275" fill="#071714" radius="22" z="900" />
+    <shape id="top_rule" shape="rect" x="192" y="256" width="3456" height="3" fill="#527768" z="100" />
+    <shape id="progress_track" shape="rect" x="192" y="2080" width="3456" height="6" fill="#2E5046" z="100" />
+    <shape id="progress_fill" shape="rect" x="192" y="2080" width="3456" height="6" fill="#7AE0B3" z="101">
+      <animate property="scaleX" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="0" />
+        <key time="90" value="1" />
+      </animate>
+    </shape>
+    <layer id="brand" asset="brand_asset" x="192" y="132" z="110" />
+    <layer id="dateline" asset="dateline_asset" x="2940" y="132" z="110" />
+    <group id="shot_1" name="The announcement" start="0" end="10" isolate="true" z="10">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="0" value="0" />
+        <key time="0.3" value="1" />
+        <key time="9.7" value="1" />
+        <key time="10" value="0" />
+      </animate>
+      <layer id="photo_layer_1" asset="photo_1" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.5" focusY="0.42" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="0.0" value="1.0" />
+          <key time="10.0" value="1.07" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_1" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_1" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_0" asset="eyebrow_0_asset" x="192" y="330" />
+      <layer id="source_0" asset="source_0_asset" x="192" y="1608" />
+      <layer id="hero_title" asset="hero_title_asset" x="192" y="505" />
+      <layer id="hero_number" asset="hero_number_asset" x="192" y="730" />
+      <layer id="hero_deck" asset="hero_deck_asset" x="210" y="1260" />
+      <layer id="credit_1" asset="credit_1_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_2" name="Scale" start="10" end="20" isolate="true" z="11">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="10" value="0" />
+        <key time="10.3" value="1" />
+        <key time="19.7" value="1" />
+        <key time="20" value="0" />
+      </animate>
+      <layer id="photo_layer_2" asset="photo_2" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.5" focusY="0.55" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="10.0" value="1.07" />
+          <key time="20.0" value="1.0" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_2" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_2" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_1" asset="eyebrow_1_asset" x="192" y="330" />
+      <layer id="source_1" asset="source_1_asset" x="192" y="1608" />
+      <layer id="scale_big" asset="scale_big_asset" x="192" y="530" />
+      <layer id="scale_sub" asset="scale_sub_asset" x="205" y="925" />
+      <shape id="scale_card" shape="rounded-rect" x="192" y="1180" width="2090" height="330" fill="#224C3D" radius="24" />
+      <layer id="scale_pct" asset="scale_pct_asset" x="240" y="1230" />
+      <layer id="scale_pct_note" asset="scale_pct_note_asset" x="240" y="1395" />
+      <layer id="credit_2" asset="credit_2_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_3" name="Why close stores?" start="20" end="31" isolate="true" z="12">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="20" value="0" />
+        <key time="20.3" value="1" />
+        <key time="30.7" value="1" />
+        <key time="31" value="0" />
+      </animate>
+      <layer id="photo_layer_3" asset="photo_3" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.62" focusY="0.5" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="20.0" value="1.0" />
+          <key time="31.0" value="1.07" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_3" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_3" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_2" asset="eyebrow_2_asset" x="192" y="330" />
+      <layer id="source_2" asset="source_2_asset" x="192" y="1608" />
+      <layer id="why_title" asset="why_title_asset" x="192" y="525" />
+      <group id="reason_card_0" x="192" y="875">
+        <shape id="reason_bg_0" shape="rounded-rect" x="0" y="0" width="1675" height="610" fill="#21483B" radius="24" />
+        <layer id="reason_h_0" asset="reason_h_0_asset" x="70" y="85" />
+        <layer id="reason_b_0" asset="reason_b_0_asset" x="70" y="315" />
+        <mask type="rect" width="1675" height="610">
+          <animate property="width" defaultInterpolation="ease-in-out" timeBase="composition">
+            <key time="20.0" value="1" />
+            <key time="21.0" value="1675" />
+          </animate>
+        </mask>
+      </group>
+      <group id="reason_card_1" x="1967" y="875">
+        <shape id="reason_bg_1" shape="rounded-rect" x="0" y="0" width="1675" height="610" fill="#21483B" radius="24" />
+        <layer id="reason_h_1" asset="reason_h_1_asset" x="70" y="85" />
+        <layer id="reason_b_1" asset="reason_b_1_asset" x="70" y="315" />
+        <mask type="rect" width="1675" height="610">
+          <animate property="width" defaultInterpolation="ease-in-out" timeBase="composition">
+            <key time="20.35" value="1" />
+            <key time="21.35" value="1675" />
+          </animate>
+        </mask>
+      </group>
+      <layer id="credit_3" asset="credit_3_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_4" name="The cost" start="31" end="42" isolate="true" z="13">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="31" value="0" />
+        <key time="31.3" value="1" />
+        <key time="41.7" value="1" />
+        <key time="42" value="0" />
+      </animate>
+      <layer id="photo_layer_4" asset="photo_4" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.5" focusY="0.52" z="-20">
+        <effect type="color-grade" brightness="0.72" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="31.0" value="1.07" />
+          <key time="42.0" value="1.0" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_4" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_4" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_3" asset="eyebrow_3_asset" x="192" y="330" />
+      <layer id="source_3" asset="source_3_asset" x="192" y="1608" />
+      <layer id="cost_total" asset="cost_total_asset" x="192" y="530" />
+      <layer id="cost_desc" asset="cost_desc_asset" x="205" y="930" />
+      <shape id="cost_track" shape="rect" x="192" y="1170" width="3456" height="118" fill="#51665E" />
+      <shape id="cost_component" shape="rect" x="192" y="1170" width="2304" height="118" fill="#DDBC82">
+        <animate property="scaleX" defaultInterpolation="ease-in-out" timeBase="composition">
+          <key time="31" value="0" />
+          <key time="32.5" value="1" />
+        </animate>
+      </shape>
+      <layer id="cost_component_text" asset="cost_component_text_asset" x="192" y="1340" />
+      <layer id="cost_other" asset="cost_other_asset" x="192" y="1490" />
+      <layer id="credit_4" asset="credit_4_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_5" name="Employees" start="42" end="54" isolate="true" z="14">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="42" value="0" />
+        <key time="42.3" value="1" />
+        <key time="53.7" value="1" />
+        <key time="54" value="0" />
+      </animate>
+      <layer id="photo_layer_5" asset="photo_5" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.55" focusY="0.42" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="42.0" value="1.0" />
+          <key time="54.0" value="1.07" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_5" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_5" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_4" asset="eyebrow_4_asset" x="192" y="330" />
+      <layer id="source_4" asset="source_4_asset" x="192" y="1608" />
+      <layer id="people_title" asset="people_title_asset" x="192" y="530" />
+      <shape id="people_box_0" shape="rounded-rect" x="192" y="900" width="1675" height="570" fill="#21483B" radius="24" />
+      <layer id="people_head_0" asset="people_head_0_asset" x="272" y="985" />
+      <layer id="people_body_0" asset="people_body_0_asset" x="272" y="1200" />
+      <shape id="people_box_1" shape="rounded-rect" x="1967" y="900" width="1675" height="570" fill="#21483B" radius="24" />
+      <layer id="people_head_1" asset="people_head_1_asset" x="2047" y="985" />
+      <layer id="people_body_1" asset="people_body_1_asset" x="2047" y="1200" />
+      <layer id="people_note" asset="people_note_asset" x="192" y="1518" />
+      <layer id="credit_5" asset="credit_5_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_6" name="Growth outlook" start="54" end="65" isolate="true" z="15">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="54" value="0" />
+        <key time="54.3" value="1" />
+        <key time="64.7" value="1" />
+        <key time="65" value="0" />
+      </animate>
+      <layer id="photo_layer_6" asset="photo_6" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.5" focusY="0.6" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="54.0" value="1.07" />
+          <key time="65.0" value="1.0" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_6" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_6" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_5" asset="eyebrow_5_asset" x="192" y="330" />
+      <layer id="source_5" asset="source_5_asset" x="192" y="1608" />
+      <layer id="growth_title" asset="growth_title_asset" x="192" y="515" />
+      <layer id="growth_before" asset="growth_before_asset" x="192" y="900" />
+      <layer id="growth_after" asset="growth_after_asset" x="2220" y="865" />
+      <shape id="growth_arrow" shape="path" x="1820" y="1040" width="225" height="70" fill="#E7C694" path="M 0 20 L 150 20 L 150 0 L 225 35 L 150 70 L 150 50 L 0 50 Z" />
+      <layer id="growth_old_label" asset="growth_old_label_asset" x="192" y="1190" />
+      <layer id="growth_new_label" asset="growth_new_label_asset" x="2220" y="1220" />
+      <layer id="growth_scope" asset="growth_scope_asset" x="192" y="1445" />
+      <layer id="credit_6" asset="credit_6_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_7" name="The turnaround" start="65" end="77" isolate="true" z="16">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="65" value="0" />
+        <key time="65.3" value="1" />
+        <key time="76.7" value="1" />
+        <key time="77" value="0" />
+      </animate>
+      <layer id="photo_layer_7" asset="photo_7" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.5" focusY="0.5" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="65.0" value="1.0" />
+          <key time="77.0" value="1.07" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_7" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_7" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_6" asset="eyebrow_6_asset" x="192" y="330" />
+      <layer id="source_6" asset="source_6_asset" x="192" y="1608" />
+      <layer id="strategy_title" asset="strategy_title_asset" x="192" y="520" />
+      <layer id="strategy_program" asset="strategy_program_asset" x="192" y="740" />
+      <group id="strategy_card_0" x="192" y="1030">
+        <shape id="strategy_bg_0" shape="rounded-rect" x="0" y="0" width="1090" height="470" fill="#21483B" radius="24" />
+        <layer id="strategy_h_0" asset="strategy_h_0_asset" x="60" y="70" />
+        <layer id="strategy_b_0" asset="strategy_b_0_asset" x="60" y="265" />
+        <animate property="y" defaultInterpolation="ease-in-out" timeBase="composition">
+          <key time="65.0" value="1100" />
+          <key time="66.0" value="1030" />
+        </animate>
+      </group>
+      <group id="strategy_card_1" x="1357" y="1030">
+        <shape id="strategy_bg_1" shape="rounded-rect" x="0" y="0" width="1090" height="470" fill="#21483B" radius="24" />
+        <layer id="strategy_h_1" asset="strategy_h_1_asset" x="60" y="70" />
+        <layer id="strategy_b_1" asset="strategy_b_1_asset" x="60" y="265" />
+        <animate property="y" defaultInterpolation="ease-in-out" timeBase="composition">
+          <key time="65.18" value="1100" />
+          <key time="66.18" value="1030" />
+        </animate>
+      </group>
+      <group id="strategy_card_2" x="2522" y="1030">
+        <shape id="strategy_bg_2" shape="rounded-rect" x="0" y="0" width="1090" height="470" fill="#21483B" radius="24" />
+        <layer id="strategy_h_2" asset="strategy_h_2_asset" x="60" y="70" />
+        <layer id="strategy_b_2" asset="strategy_b_2_asset" x="60" y="265" />
+        <animate property="y" defaultInterpolation="ease-in-out" timeBase="composition">
+          <key time="65.36" value="1100" />
+          <key time="66.36" value="1030" />
+        </animate>
+      </group>
+      <layer id="credit_7" asset="credit_7_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_8" name="What customers can check" start="77" end="85" isolate="true" z="17">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="77" value="0" />
+        <key time="77.3" value="1" />
+        <key time="84.7" value="1" />
+        <key time="85" value="0" />
+      </animate>
+      <layer id="photo_layer_8" asset="photo_8" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.5" focusY="0.5" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="77.0" value="1.07" />
+          <key time="85.0" value="1.0" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_8" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_8" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_7" asset="eyebrow_7_asset" x="192" y="330" />
+      <layer id="source_7" asset="source_7_asset" x="192" y="1608" />
+      <layer id="customer_title" asset="customer_title_asset" x="192" y="525" />
+      <layer id="customer_action" asset="customer_action_asset" x="192" y="880" />
+      <layer id="customer_note" asset="customer_note_asset" x="192" y="1390" />
+      <layer id="credit_8" asset="credit_8_asset" x="1248" y="1622" z="5" />
+    </group>
+    <group id="shot_9" name="Sources" start="85" end="90" isolate="true" z="18">
+      <animate property="opacity" defaultInterpolation="linear" timeBase="composition">
+        <key time="85" value="0" />
+        <key time="85.3" value="1" />
+        <key time="89.7" value="1" />
+        <key time="90" value="0" />
+      </animate>
+      <layer id="photo_layer_9" asset="photo_9" x="0" y="0" width="3840" height="2160" fit="cover" focusX="0.5" focusY="0.42" z="-20">
+        <effect type="color-grade" brightness="0.9" saturation="0.82" tint="#0E2A24" tintAmount="0.12" />
+        <animate property="scale" defaultInterpolation="linear" timeBase="composition">
+          <key time="85.0" value="1.0" />
+          <key time="90.0" value="1.07" />
+        </animate>
+      </layer>
+      <shape id="scrim_h_9" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_h)" z="-19" />
+      <shape id="scrim_v_9" shape="rect" x="0" y="0" width="3840" height="2160" fill="url(#scrim_v)" z="-18" />
+      <layer id="eyebrow_8" asset="eyebrow_8_asset" x="192" y="330" />
+      <layer id="source_8" asset="source_8_asset" x="192" y="1608" />
+      <layer id="end_title" asset="end_title_asset" x="192" y="550" />
+      <layer id="end_sources" asset="end_sources_asset" x="192" y="1000" />
+      <layer id="end_stamp" asset="end_stamp_asset" x="192" y="1400" />
+      <layer id="credit_9" asset="credit_9_asset" x="1248" y="1622" z="5" />
+    </group>
+  </composition>
+  <audioMix sampleRate="48000" channels="2" bitDepth="24">
+    <audioTrack id="music_track" asset="music" start="0" clipIn="0" clipOut="90" role="music" volume="0.65" fadeIn="0.5" fadeOut="2" duckBy="dialogue" duckAmount="-10" duckAttack="0.04" duckRelease="0.45" />
+    <audioTrack id="narration_track" asset="narration" start="0" clipIn="0" clipOut="90" role="dialogue" volume="1.0" />
+    <master normalize="integrated" loudness="-18" truePeak="-1" limiter="true" />
+  </audioMix>
+  <captions>
+    <captionTrack id="captions_en" language="en-US" label="English report and narration script" mode="both" format="srt" preset="classic" style="caption_style" x="50%" y="1810" width="3210" maxCharsPerLine="66" maxLines="2" safeArea="title_safe">
+      <cue start="0.8" end="5.4" text="Starbucks plans to close about 250 stores in North America." speaker="Narrator" />
+      <cue start="5.5" end="9.5" text="The company announced the move on September 24." speaker="Narrator" />
+      <cue start="10.5" end="15.4" text="It has more than 18,000 coffeehouses in the region." speaker="Narrator" />
+      <cue start="15.5" end="19.5" text="Starbucks puts the affected share at about one percent." speaker="Narrator" />
+      <cue start="20.5" end="25.4" text="The company cites locations with weak financial prospects" speaker="Narrator" />
+      <cue start="25.5" end="30.5" text="or difficulty delivering the experience it wants for customers and staff." speaker="Narrator" />
+      <cue start="31.5" end="36.5" text="CNN reports roughly 300 million dollars in expected closure-related charges." speaker="Narrator" />
+      <cue start="36.6" end="41.5" text="Two hundred million covers early lease exits and employee severance." speaker="Narrator" />
+      <cue start="42.5" end="47.5" text="Starbucks says it will offer transfers wherever possible." speaker="Narrator" />
+      <cue start="47.6" end="53.4" text="Employees it cannot place in another coffeehouse will receive severance support." speaker="Narrator" />
+      <cue start="54.5" end="59.5" text="CNN also reports a lower global opening forecast this fiscal year:" speaker="Narrator" />
+      <cue start="59.6" end="64.5" text="about 440 locations, down from 600 to 650." speaker="Narrator" />
+      <cue start="65.5" end="70.5" text="The closures sit alongside the company’s broader turnaround plan." speaker="Narrator" />
+      <cue start="70.6" end="76.5" text="Starbucks says it is accelerating 1,500 coffeehouse uplifts and still plans new stores." speaker="Narrator" />
+      <cue start="77.4" end="81.3" text="CNN says affected cafés will display notices." speaker="Narrator" />
+      <cue start="81.4" end="84.5" text="Changes will also appear in the app." speaker="Narrator" />
+      <cue start="85.3" end="89.4" text="Reporting: CNN and Starbucks. Announcement dated September 24." speaker="Narrator" />
+    </captionTrack>
+  </captions>
+</scene>
