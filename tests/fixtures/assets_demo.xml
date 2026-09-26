@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Asset-kind demo for scenerender (tests/test_assets.py). Four 1-second pages, 4x3 grid each:
+     t 0-1 generators, 1-2 charts (draw on 1.0-1.5), 2-3 codes/formula/generated/lottie/svg,
+     3-4 video/vector/audiogram. Media: tests/fixtures/media (make_media.py). -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="4" seed="7" background="#0B0F1AFF"/>
+  <styles>
+    <token name="teal" value="#3DD6D0FF"/>
+    <token name="accent" value="#FFC23DFF"/>
+    <textStyle id="ts-chart" font="Sans" size="13" color="#F4F6FBFF"/>
+    <textStyle id="ts-counter" font="Sans" size="72" weight="700" color="#F4F6FBFF"/>
+  </styles>
+  <assets>
+    <!-- generators -->
+    <generator id="gen-solid" kind="solid" width="300" height="200" paint="url(#grad-brand)"/>
+    <generator id="gen-gradient" kind="gradient" width="300" height="200" paint="#3DD6D0FF" paint2="#7C3AEDFF"/>
+    <generator id="gen-noise" kind="noise" width="300" height="200" scale="40" seed="3"/>
+    <generator id="gen-fractal" kind="fractal-noise" width="300" height="200" paint="#3DD6D0FF" paint2="#0B0F1AFF" scale="120" octaves="5" contrast="1.4" seed="11"/>
+    <generator id="gen-cells" kind="cells" width="300" height="200" paint="#3DD6D0FF" paint2="#161D30FF" scale="50" seed="5"/>
+    <generator id="gen-checker" kind="checkerboard" width="300" height="200" paint="#F4F6FBFF" paint2="#2A3350FF" scale="25"/>
+    <generator id="gen-grid" kind="grid" width="300" height="200" paint="#3DD6D0FF" paint2="#0B0F1AFF" scale="30" angle="15"/>
+    <generator id="gen-stripes" kind="stripes" width="300" height="200" paint="#FFC23DFF" paint2="#0B0F1AFF" scale="30" angle="45"/>
+    <generator id="gen-grain" kind="film-grain" width="300" height="200" paint="#FFFFFFFF" paint2="#000000FF" scale="150" contrast="0.8"/>
+    <generator id="gen-rays" kind="light-rays" width="300" height="200" paint="#FFC23DFF" paint2="#0B0F1AFF" angle="-20" scale="30" seed="3"/>
+    <generator id="gen-fractal-anim" kind="fractal-noise" width="300" height="200" paint="url(#grad-brand)" paint2="#0B0F1AFF" scale="80" octaves="3" seed="2">
+      <animate property="evolution"><key time="0" value="0"/><key time="1" value="2"/></animate>
+    </generator>
+    <generator id="gen-gradient45" kind="gradient" width="300" height="200" paint="#FF6B6BFF" paint2="#FFC23D00" angle="45"/>
+
+    <!-- charts -->
+    <chart id="ch-bar" kind="bar" width="300" height="200" labels="Mon,Tue,Wed,Thu" textStyle="ts-chart" showValues="true" progress="0">
+      <series name="Visits" values="12 30 22 41" color="var(--teal)"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-column" kind="column" width="300" height="200" labels="2022,2023,2024,2025" textStyle="ts-chart" showValues="true" format="0" progress="0">
+      <series name="Scenes (k)" values="12 30 71 140" color="var(--teal)"/>
+      <series name="Templates (k)" values="2 6 15 33" color="var(--accent)"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-line" kind="line" width="300" height="200" labels="J,F,M,A,M,J" textStyle="ts-chart" progress="0">
+      <series name="A" values="3 5 4 8 7 10" color="#FF6B6BFF"/>
+      <series name="B" values="1 2 4 3 6 7" color="#7C8CFFFF"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-area" kind="area" width="300" height="200" labels="1,2,3,4,5,6,7" textStyle="ts-chart" format="#,##0.0" progress="0">
+      <series name="Load" values="0.5 1.2 0.9 2.4 1.8 2.9 2.2" color="url(#grad-brand)"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-pie" kind="pie" width="300" height="200" labels="Video,Audio,Text" textStyle="ts-chart" showValues="true" format="0%" progress="0">
+      <series name="Share" values="0.5 0.3 0.2"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-donut" kind="donut" width="300" height="200" labels="A,B,C,D" textStyle="ts-chart" progress="0">
+      <series name="Mix" values="4 3 2 1"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-scatter" kind="scatter" width="300" height="200" textStyle="ts-chart" progress="0">
+      <series name="S1" values="1 2 2 3.5 3 2.5 4 5 5 4.2 6 6.5" color="var(--teal)"/>
+      <series name="S2" values="1.5 5 2.5 4.5 4.5 1.5 5.5 2" color="var(--accent)"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-counter" kind="counter" width="300" height="200" textStyle="ts-counter" format="#,##0" progress="0">
+      <series name="frames" values="0 5400"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-progress" kind="progress" width="300" height="200" textStyle="ts-chart" showValues="true" progress="0">
+      <series name="done" values="72" color="var(--accent)"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-csv" kind="column" width="300" height="200" src="media/chart.csv" textStyle="ts-chart" progress="0">
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-bar-neg" kind="column" width="300" height="200" labels="a,b,c,d,e" textStyle="ts-chart" showValues="true" format="{:+.0f}" progress="0">
+      <series name="Delta" values="5 -3 8 -6 2" color="#9BE564FF"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-pie-series" kind="pie" width="300" height="200" textStyle="ts-chart" progress="0">
+      <series name="Red" values="3" color="#FF6B6BFF"/>
+      <series name="Blue" values="2" color="#7C8CFFFF"/>
+      <series name="Gold" values="1" color="#FFC23DFF"/>
+      <animate property="progress"><key time="1" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+
+    <!-- codes, formula, generated, lottie, svg -->
+    <code id="code-qr" kind="qr" data="https://example.com/scene-render/docs" width="200" height="200" foreground="#0B0F1AFF" background="#F4F6FBFF" errorCorrection="Q"/>
+    <code id="code-dm" kind="datamatrix" data="SCENE-RENDER-1.1" width="200" height="200"/>
+    <code id="code-pdf417" kind="pdf417" data="scene-render deterministic" width="300" height="120"/>
+    <code id="code-ean13" kind="ean13" data="400638133393" width="300" height="140"/>
+    <code id="code-upca" kind="upc-a" data="03600029145" width="300" height="140"/>
+    <code id="code-128" kind="code128" data="SR-2026-000123" width="300" height="120" quietZone="10"/>
+    <formula id="formula-1" tex="\mathrm{frame}(t) = f(\mathrm{scene},\ \mathrm{seed},\ t)" width="300" height="80" size="22" color="#F4F6FBFF"/>
+    <formula id="formula-2" tex="e^{i\pi} + 1 = 0,\quad \sum_{k=1}^{n} k = \frac{n(n+1)}{2}" width="300" height="80" size="20" color="url(#grad-brand)"/>
+    <generated id="gen-img" kind="image" provider="demo" model="none" cache="media/gen.png"
+               cacheSha256="12ff6898d8387f0876fdc77f4ce03356ed84bc6a09c7d43b9262a62404298ba7" width="200" height="200"/>
+    <generated id="gen-bad" kind="image" provider="demo" model="none" cache="media/gen.png"
+               cacheSha256="0000000000000000000000000000000000000000000000000000000000000000" width="200" height="200"/>
+    <generated id="gen-voice" kind="speech" provider="demo" model="none" cache="media/tone.wav"
+               cacheSha256="1b3213fa30b3d02ca93b7ec755969219b088a5cc6e0fae223027eddb64803c05" duration="1"/>
+    <lottie id="lot" src="media/missing.lottie" width="200" height="200"/>
+    <vector id="vec-svg" shape="svg" src="media/badge.svg" width="200" height="200"/>
+    <mesh id="mesh-x" src="media/missing.glb" format="glb"/>
+
+    <!-- video, vector, audiogram -->
+    <video id="vid-testsrc" src="media/testsrc.mp4" width="64" height="36" fps="10" duration="1" hasAudio="true"/>
+    <video id="vid-alpha" src="media/index_alpha.mkv" width="16" height="8" fps="4" duration="1"/>
+    <video id="vid-rot90" src="media/testsrc.mp4" width="64" height="36" fps="10" duration="1" rotation="90"/>
+    <video id="vid-par2" src="media/testsrc.mp4" width="64" height="36" fps="10" duration="1" pixelAspect="2"/>
+    <vector id="vec-star" shape="star" width="200" height="200" points="5" innerRadius="40" fill="url(#grad-brand)" stroke="#F4F6FBFF" strokeWidth="4" strokeJoin="round"/>
+    <vector id="vec-path" shape="path" width="200" height="200"
+            path="M100 10 L190 60 L190 140 L100 190 L10 140 L10 60 Z M100 50 L150 78 L150 122 L100 150 L50 122 L50 78 Z"
+            fill="#3DD6D0FF" stroke="#F4F6FBFF" strokeWidth="3" dash="10 6"/>
+    <vector id="vec-rrect" shape="rounded-rect" width="260" height="120" radius="30" fill="#FFC23DFF" stroke="#FF6B6BFF" strokeWidth="6" strokePosition="outside"/>
+    <audio id="aud-tone" src="media/tone.wav" duration="1"/>
+    <audiogram id="ag-bars" source="gen-voice" width="300" height="200" style="bars" bars="32" color="url(#grad-brand)" smoothing="0.5"/>
+    <audiogram id="ag-line" source="aud-tone" width="300" height="200" style="line" bars="64" color="#3DD6D0FF"/>
+    <audiogram id="ag-wave" source="aud-tone" width="300" height="200" style="wave" color="#FFC23DFF" smoothing="0.2"/>
+    <audiogram id="ag-circle" source="aud-tone" width="200" height="200" style="circle" bars="48" color="#FF6B6BFF"/>
+    <audiogram id="ag-spectrum" source="vid-testsrc" width="300" height="200" style="spectrum" bars="48" color="#7C8CFFFF" smoothing="0"/>
+  </assets>
+  <paints>
+    <linearGradient id="grad-brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" color="var(--teal)"/>
+      <stop offset="1" color="var(--accent)"/>
+    </linearGradient>
+  </paints>
+  <composition>
+    <group id="p0" start="0" end="1">
+      <shape id="p0-bg0" shape="rect" x="10" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l0" asset="gen-solid" x="10" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg1" shape="rect" x="330" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l1" asset="gen-gradient" x="330" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg2" shape="rect" x="650" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l2" asset="gen-noise" x="650" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg3" shape="rect" x="970" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l3" asset="gen-fractal" x="970" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg4" shape="rect" x="10" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l4" asset="gen-cells" x="10" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg5" shape="rect" x="330" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l5" asset="gen-checker" x="330" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg6" shape="rect" x="650" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l6" asset="gen-grid" x="650" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg7" shape="rect" x="970" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l7" asset="gen-stripes" x="970" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg8" shape="rect" x="10" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l8" asset="gen-grain" x="10" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg9" shape="rect" x="330" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l9" asset="gen-rays" x="330" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg10" shape="rect" x="650" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l10" asset="gen-fractal-anim" x="650" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p0-bg11" shape="rect" x="970" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer id="p0-l11" asset="gen-gradient45" x="970" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+    </group>
+    <group id="p1" start="1" end="2">
+      <shape id="p1-bg0" shape="rect" x="10" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l0" asset="ch-bar" x="10" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg1" shape="rect" x="330" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l1" asset="ch-column" x="330" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg2" shape="rect" x="650" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l2" asset="ch-line" x="650" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg3" shape="rect" x="970" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l3" asset="ch-area" x="970" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg4" shape="rect" x="10" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l4" asset="ch-pie" x="10" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg5" shape="rect" x="330" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l5" asset="ch-donut" x="330" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg6" shape="rect" x="650" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l6" asset="ch-scatter" x="650" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg7" shape="rect" x="970" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l7" asset="ch-counter" x="970" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg8" shape="rect" x="10" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l8" asset="ch-progress" x="10" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg9" shape="rect" x="330" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l9" asset="ch-csv" x="330" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg10" shape="rect" x="650" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l10" asset="ch-bar-neg" x="650" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p1-bg11" shape="rect" x="970" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="1" id="p1-l11" asset="ch-pie-series" x="970" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+    </group>
+    <group id="p2" start="2" end="3">
+      <shape id="p2-bg0" shape="rect" x="10" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l0" asset="code-qr" x="10" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg1" shape="rect" x="330" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l1" asset="code-dm" x="330" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg2" shape="rect" x="650" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l2" asset="code-pdf417" x="650" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg3" shape="rect" x="970" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l3" asset="code-ean13" x="970" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg4" shape="rect" x="10" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l4" asset="code-upca" x="10" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg5" shape="rect" x="330" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l5" asset="code-128" x="330" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg6" shape="rect" x="650" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l6" asset="formula-1" x="650" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg7" shape="rect" x="970" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l7" asset="gen-img" x="970" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg8" shape="rect" x="10" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l8" asset="gen-bad" x="10" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg9" shape="rect" x="330" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l9" asset="lot" x="330" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg10" shape="rect" x="650" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l10" asset="vec-svg" x="650" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p2-bg11" shape="rect" x="970" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="2" id="p2-l11" asset="formula-2" x="970" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+    </group>
+    <group id="p3" start="3" end="4">
+      <shape id="p3-bg0" shape="rect" x="10" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l0" asset="vid-testsrc" x="10" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg1" shape="rect" x="330" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l1" asset="vid-alpha" x="330" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg2" shape="rect" x="650" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l2" asset="vid-rot90" x="650" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg3" shape="rect" x="970" y="10" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l3" asset="vid-par2" x="970" y="10" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg4" shape="rect" x="10" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l4" asset="vec-star" x="10" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg5" shape="rect" x="330" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l5" asset="vec-path" x="330" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg6" shape="rect" x="650" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l6" asset="vec-rrect" x="650" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg7" shape="rect" x="970" y="250" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l7" asset="ag-spectrum" x="970" y="250" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg8" shape="rect" x="10" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l8" asset="ag-bars" x="10" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg9" shape="rect" x="330" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l9" asset="ag-line" x="330" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg10" shape="rect" x="650" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l10" asset="ag-wave" x="650" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+      <shape id="p3-bg11" shape="rect" x="970" y="490" width="300" height="200" fill="#161D30FF"/>
+      <layer start="3" id="p3-l11" asset="ag-circle" x="970" y="490" boxWidth="300" boxHeight="200" fit="contain"/>
+    </group>  </composition>
+</scene>

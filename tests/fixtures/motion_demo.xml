@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Motion demo for scenerender (tests/test_particles.py, test_modifiers.py, test_physics.py):
+     particle presets, shape modifiers, a 2.5D card under an animated camera, object3D fallbacks,
+     deformers and rigid bodies. 1280x720, 4 s. -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="4" seed="7" background="#0B0F1AFF"/>
+  <materials>
+    <material id="mat-paint" baseColor="#FF5A36FF" roughness="0.35"/>
+    <material id="mat-chrome" baseColor="#E8ECF2FF" metallic="1" roughness="0.1"/>
+    <material id="mat-glass" baseColor="#8FD8FFFF" transmission="0.6"/>
+  </materials>
+  <composition>
+    <!-- particles -->
+    <particleEmitter id="em-dust" preset="dust" x="50%" y="50%" emitterWidth="1280" emitterHeight="720" rate="25" preroll="3" seed="1" blend="add"/>
+    <particleEmitter id="em-smoke" preset="smoke" x="140" y="660" emitterShape="ellipse" emitterWidth="80" emitterHeight="20" seed="2" forceFields="ff-vortex"/>
+    <particleEmitter id="em-fire" preset="fire" x="140" y="680" emitterShape="line" emitterWidth="60" seed="3" blend="add"/>
+    <particleEmitter id="em-sparks" preset="sparks" x="640" y="700" emitterShape="line" emitterWidth="200" collide="true" bounce="0.4" seed="4" blend="add"/>
+    <particleEmitter id="em-confetti" preset="confetti" x="50%" y="-20" emitterShape="line" emitterWidth="1280" rate="0" direction="90" spread="30" speed="150" lifetime="4" seed="5">
+      <burst time="0.2" count="120"/>
+      <burst time="1.5" count="60" repeat="1" interval="1"/>
+    </particleEmitter>
+    <particleEmitter id="em-bubbles" preset="bubbles" x="1180" y="700" emitterShape="rect" emitterWidth="120" emitterHeight="10" seed="6"/>
+    <particleEmitter id="em-glitter" preset="glitter" x="1000" y="160" emitterShape="ellipse" emitterWidth="60" emitterHeight="60" rate="0" seed="8" blend="add">
+      <burst time="0.4" count="150"/>
+      <burst time="2.4" count="150"/>
+    </particleEmitter>
+
+    <!-- shape modifiers -->
+    <shape id="shp-flower" shape="ellipse" x="260" y="200" width="30" height="90" anchorX="15" anchorY="90" fill="#2EC4B6FF" opacity="0.85">
+      <shapeModifier type="repeater" copies="10" rotation="36" startOpacity="1" endOpacity="0.3">
+        <animate property="copies"><key time="0" value="1"/><key time="1.5" value="10"/></animate>
+      </shapeModifier>
+      <shapeModifier type="wiggle-path" size="4" detail="4" frequency="1.5" seed="9"/>
+    </shape>
+    <shape id="shp-zig" shape="star" x="420" y="110" width="180" height="180" points="5" fill="#FFC23DFF">
+      <shapeModifier type="zig-zag" size="6" ridges="4" mode="smooth"/>
+    </shape>
+    <shape id="shp-bloat" shape="polygon" x="630" y="110" width="170" height="170" points="6" fill="#6B4BFFFF">
+      <shapeModifier type="pucker-bloat">
+        <animate property="amount"><key time="0" value="-40"/><key time="3" value="40"/></animate>
+      </shapeModifier>
+    </shape>
+    <shape id="shp-merge" shape="path" x="840" y="110" width="180" height="180" fill="#FF4FA3FF"
+           path="M0 0 L120 0 L120 120 L0 120 Z M60 60 L180 60 L180 180 L60 180 Z">
+      <shapeModifier type="merge" mode="exclude"/>
+      <shapeModifier type="round-corners" amount="10"/>
+    </shape>
+    <shape id="shp-offset" shape="rect" x="40" y="330" width="120" height="80" fill="#00000000" stroke="#F4F6FBFF" strokeWidth="3">
+      <shapeModifier type="offset-path" amount="12" mode="round"/>
+    </shape>
+
+    <!-- 2.5D card and camera -->
+    <camera id="cam" x="0" y="0" z="1400" fov="50">
+      <animate property="x" defaultInterpolation="sine-in-out"><key time="0" value="-250"/><key time="4" value="250"/></animate>
+      <shake amplitude="3" frequency="1.5" seed="3" start="2" end="4"/>
+    </camera>
+    <shape id="card" shape="rounded-rect" x="640" y="420" width="300" height="180" anchorX="150" anchorY="90" radius="18"
+           fill="#161D30FF" stroke="#3DD6D0FF" strokeWidth="4" threeD="true" zDepth="100">
+      <animate property="rotationY"><key time="0" value="-35"/><key time="4" value="35"/></animate>
+    </shape>
+    <object3D id="o-box" primitive="box" material="mat-paint" width="120" height="120" x="330" y="-40" z="0" rotationX="20">
+      <expression property="rotationY">time * 40</expression>
+    </object3D>
+    <object3D id="o-sphere" primitive="sphere" material="mat-chrome" radius="60" x="-330" y="-60" z="0"/>
+    <object3D id="o-torus" primitive="torus" material="mat-glass" radius="60" x="0" y="-220" z="0" rotationX="60"/>
+
+    <!-- deform (needs the compositor deform hook to show) -->
+    <shape id="wobble" shape="rect" x="1100" y="330" width="120" height="120" fill="#2EC4B6FF">
+      <deform>
+        <modifier type="wave" amount="10" frequency="1" axis="x">
+          <expression property="phase">time * 180</expression>
+        </modifier>
+      </deform>
+    </shape>
+
+    <!-- physics -->
+    <shape id="box-a" shape="rect" x="820" y="300" width="50" height="50" fill="#FF5A36FF" rotation="10">
+      <rigidBody type="dynamic" shape="box" restitution="0.2" activateAt="0.5"/>
+    </shape>
+    <shape id="ball-a" shape="ellipse" x="900" y="250" width="40" height="40" fill="#FFC23DFF">
+      <rigidBody type="dynamic" shape="circle" restitution="0.6" velocityX="-1"/>
+    </shape>
+    <shape id="ground" shape="rect" x="760" y="600" width="300" height="20" fill="#2A3350FF">
+      <rigidBody type="static" shape="box"/>
+    </shape>
+  </composition>
+  <physics gravityY="-9.80665" pixelsPerMeter="100" bounds="frame">
+    <forceField id="ff-vortex" type="vortex" x="140" y="560" strength="60" radius="200" falloff="1" affects="particles"/>
+  </physics>
+</scene>

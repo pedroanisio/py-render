@@ -1,0 +1,2 @@
+[console_scripts]
+scenerender = scenerender.cli:main

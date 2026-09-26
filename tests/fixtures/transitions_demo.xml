@@ -1,0 +1,680 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated test fixture: a blend-mode showcase followed by coloured scenes joined by every
+     transition type. Markers tr-NAME sit at the middle of each transition. -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="24" duration="55" seed="4242" background="#202020FF"/>
+  <paints>
+    <linearGradient id="g-back" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" color="#0D1B2AFF"/><stop offset="0.5" color="#E0E1DDFF"/><stop offset="1" color="#F4A261FF"/>
+    </linearGradient>
+    <linearGradient id="g-matte" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" color="#000000FF"/><stop offset="1" color="#FFFFFFFF"/>
+    </linearGradient>
+  </paints>
+  <symbols>
+    <symbol id="sym-matte" width="1280" height="720">
+      <shape id="luma-matte" shape="rect" width="1280" height="720" fill="url(#g-matte)"/>
+    </symbol>
+  </symbols>
+  <markers>
+    <marker id="tr-crossfade" time="4"/>
+    <marker id="tr-additive-dissolve" time="5.5"/>
+    <marker id="tr-dip-to-color" time="7"/>
+    <marker id="tr-wipe" time="8.5"/>
+    <marker id="tr-slide" time="10"/>
+    <marker id="tr-push" time="11.5"/>
+    <marker id="tr-cover" time="13"/>
+    <marker id="tr-reveal" time="14.5"/>
+    <marker id="tr-zoom-in" time="16"/>
+    <marker id="tr-zoom-out" time="17.5"/>
+    <marker id="tr-spin" time="19"/>
+    <marker id="tr-whip-pan" time="20.5"/>
+    <marker id="tr-circle-open" time="22"/>
+    <marker id="tr-circle-close" time="23.5"/>
+    <marker id="tr-iris" time="25"/>
+    <marker id="tr-clock-wipe" time="26.5"/>
+    <marker id="tr-radial-wipe" time="28"/>
+    <marker id="tr-barn-door" time="29.5"/>
+    <marker id="tr-blinds" time="31"/>
+    <marker id="tr-luma" time="32.5"/>
+    <marker id="tr-blur" time="34"/>
+    <marker id="tr-glitch" time="35.5"/>
+    <marker id="tr-pixelize" time="37"/>
+    <marker id="tr-flip" time="38.5"/>
+    <marker id="tr-cube" time="40"/>
+    <marker id="tr-page-curl" time="41.5"/>
+    <marker id="tr-film-roll" time="43"/>
+    <marker id="tr-stripe" time="44.5"/>
+    <marker id="tr-squash" time="46"/>
+    <marker id="tr-shuffle" time="47.5"/>
+    <marker id="tr-carousel" time="49"/>
+    <marker id="tr-light-leak" time="50.5"/>
+    <marker id="tr-morph" time="52"/>
+    <marker id="tr-shader" time="53.5"/>
+  </markers>
+  <composition>
+    <group id="sc0" width="1280" height="720" end="4" isolate="true">
+      <shape id="sc0-bg" shape="rect" width="1280" height="720" fill="url(#g-back)"/>
+      <shape id="sc0-band0" shape="rect" y="120" width="1280" height="40" fill="#E63946FF"/>
+      <shape id="sc0-band1" shape="rect" y="210" width="1280" height="40" fill="#2A9D8FFF"/>
+      <shape id="sc0-band2" shape="rect" y="300" width="1280" height="40" fill="#457B9DFF"/>
+      <shape id="sc0-c0" shape="ellipse" x="40" y="90" width="110" height="300" fill="#F2C94CFF" blend="normal" opacity="1"/>
+      <shape id="sc0-c1" shape="ellipse" x="162" y="90" width="110" height="300" fill="#F2C94CFF" blend="multiply" opacity="1"/>
+      <shape id="sc0-c2" shape="ellipse" x="284" y="90" width="110" height="300" fill="#F2C94CFF" blend="screen" opacity="1"/>
+      <shape id="sc0-c3" shape="ellipse" x="406" y="90" width="110" height="300" fill="#F2C94CFF" blend="overlay" opacity="1"/>
+      <shape id="sc0-c4" shape="ellipse" x="528" y="90" width="110" height="300" fill="#F2C94CFF" blend="difference" opacity="1"/>
+      <shape id="sc0-c5" shape="ellipse" x="650" y="90" width="110" height="300" fill="#F2C94CFF" blend="color-dodge" opacity="1"/>
+      <shape id="sc0-c6" shape="ellipse" x="772" y="90" width="110" height="300" fill="#F2C94CFF" blend="soft-light" opacity="1"/>
+      <shape id="sc0-c7" shape="ellipse" x="894" y="90" width="110" height="300" fill="#F2C94CFF" blend="hue" opacity="1"/>
+      <shape id="sc0-c8" shape="ellipse" x="1016" y="90" width="110" height="300" fill="#F2C94CFF" blend="luminosity" opacity="1"/>
+      <shape id="sc0-c9" shape="ellipse" x="1138" y="90" width="110" height="300" fill="#F2C94CFF" blend="dissolve" opacity="0.6"/>
+      <group id="sc0-st0" x="140" y="430" width="260" height="260" isolate="true">
+        <shape id="sc0-st0-0" shape="rect" y="0" width="260" height="44" fill="#1F4E99FF"/>
+        <shape id="sc0-st0-1" shape="rect" y="44" width="260" height="44" fill="#C0392BFF"/>
+        <shape id="sc0-st0-2" shape="rect" y="88" width="260" height="44" fill="#16A085FF"/>
+        <shape id="sc0-st0-3" shape="rect" y="132" width="260" height="44" fill="#8E44ADFF"/>
+        <shape id="sc0-st0-4" shape="rect" y="176" width="260" height="44" fill="#D35400FF"/>
+        <shape id="sc0-st0-5" shape="rect" y="220" width="260" height="44" fill="#2C3E50FF"/>
+        <shape id="sc0-st0-m" shape="star" points="5" innerRadius="55" outerRadius="130" width="260" height="260" fill="#FFFFFFFF" blend="stencil-alpha"/>
+      </group>
+      <group id="sc0-st1" x="520" y="430" width="260" height="260" isolate="true">
+        <shape id="sc0-st1-0" shape="rect" y="0" width="260" height="44" fill="#1F4E99FF"/>
+        <shape id="sc0-st1-1" shape="rect" y="44" width="260" height="44" fill="#C0392BFF"/>
+        <shape id="sc0-st1-2" shape="rect" y="88" width="260" height="44" fill="#16A085FF"/>
+        <shape id="sc0-st1-3" shape="rect" y="132" width="260" height="44" fill="#8E44ADFF"/>
+        <shape id="sc0-st1-4" shape="rect" y="176" width="260" height="44" fill="#D35400FF"/>
+        <shape id="sc0-st1-5" shape="rect" y="220" width="260" height="44" fill="#2C3E50FF"/>
+        <shape id="sc0-st1-m" shape="star" points="5" innerRadius="55" outerRadius="130" width="260" height="260" fill="#FFFFFFFF" blend="silhouette-alpha"/>
+      </group>
+      <group id="sc0-st2" x="900" y="430" width="260" height="260" isolate="true">
+        <shape id="sc0-st2-0" shape="rect" y="0" width="260" height="44" fill="#1F4E99FF"/>
+        <shape id="sc0-st2-1" shape="rect" y="44" width="260" height="44" fill="#C0392BFF"/>
+        <shape id="sc0-st2-2" shape="rect" y="88" width="260" height="44" fill="#16A085FF"/>
+        <shape id="sc0-st2-3" shape="rect" y="132" width="260" height="44" fill="#8E44ADFF"/>
+        <shape id="sc0-st2-4" shape="rect" y="176" width="260" height="44" fill="#D35400FF"/>
+        <shape id="sc0-st2-5" shape="rect" y="220" width="260" height="44" fill="#2C3E50FF"/>
+        <shape id="sc0-st2-m" shape="ellipse" width="260" height="260" fill="url(#g-matte)" blend="stencil-luma"/>
+      </group>
+    </group>
+    <group id="sc1" width="1280" height="720" start="4" end="5.5">
+      <shape id="sc1-bg" shape="rect" width="1280" height="720" fill="#C0392BFF"/>
+      <shape id="sc1-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc1-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc1-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc1-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc1-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc1-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc1-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc1-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc1-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc1-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc1-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc1-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc1-tag" shape="rect" x="40" y="40" width="80" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc2" width="1280" height="720" start="5.5" end="7">
+      <shape id="sc2-bg" shape="rect" width="1280" height="720" fill="#16A085FF"/>
+      <shape id="sc2-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc2-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc2-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc2-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc2-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc2-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc2-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc2-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc2-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc2-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc2-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc2-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc2-tag" shape="rect" x="40" y="40" width="100" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc3" width="1280" height="720" start="7" end="8.5">
+      <shape id="sc3-bg" shape="rect" width="1280" height="720" fill="#8E44ADFF"/>
+      <shape id="sc3-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc3-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc3-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc3-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc3-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc3-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc3-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc3-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc3-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc3-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc3-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc3-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc3-tag" shape="rect" x="40" y="40" width="120" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc4" width="1280" height="720" start="8.5" end="10">
+      <shape id="sc4-bg" shape="rect" width="1280" height="720" fill="#D35400FF"/>
+      <shape id="sc4-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc4-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc4-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc4-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc4-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc4-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc4-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc4-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc4-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc4-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc4-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc4-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc4-tag" shape="rect" x="40" y="40" width="140" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc5" width="1280" height="720" start="10" end="11.5">
+      <shape id="sc5-bg" shape="rect" width="1280" height="720" fill="#2C3E50FF"/>
+      <shape id="sc5-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc5-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc5-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc5-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc5-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc5-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc5-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc5-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc5-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc5-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc5-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc5-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc5-tag" shape="rect" x="40" y="40" width="160" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc6" width="1280" height="720" start="11.5" end="13">
+      <shape id="sc6-bg" shape="rect" width="1280" height="720" fill="#27AE60FF"/>
+      <shape id="sc6-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc6-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc6-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc6-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc6-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc6-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc6-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc6-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc6-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc6-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc6-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc6-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc6-tag" shape="rect" x="40" y="40" width="180" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc7" width="1280" height="720" start="13" end="14.5">
+      <shape id="sc7-bg" shape="rect" width="1280" height="720" fill="#B8860BFF"/>
+      <shape id="sc7-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc7-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc7-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc7-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc7-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc7-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc7-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc7-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc7-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc7-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc7-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc7-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc7-tag" shape="rect" x="40" y="40" width="200" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc8" width="1280" height="720" start="14.5" end="16">
+      <shape id="sc8-bg" shape="rect" width="1280" height="720" fill="#1F4E99FF"/>
+      <shape id="sc8-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc8-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc8-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc8-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc8-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc8-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc8-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc8-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc8-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc8-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc8-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc8-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc8-tag" shape="rect" x="40" y="40" width="220" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc9" width="1280" height="720" start="16" end="17.5">
+      <shape id="sc9-bg" shape="rect" width="1280" height="720" fill="#C0392BFF"/>
+      <shape id="sc9-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc9-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc9-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc9-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc9-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc9-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc9-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc9-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc9-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc9-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc9-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc9-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc9-tag" shape="rect" x="40" y="40" width="240" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc10" width="1280" height="720" start="17.5" end="19">
+      <shape id="sc10-bg" shape="rect" width="1280" height="720" fill="#16A085FF"/>
+      <shape id="sc10-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc10-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc10-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc10-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc10-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc10-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc10-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc10-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc10-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc10-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc10-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc10-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc10-tag" shape="rect" x="40" y="40" width="60" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc11" width="1280" height="720" start="19" end="20.5">
+      <shape id="sc11-bg" shape="rect" width="1280" height="720" fill="#8E44ADFF"/>
+      <shape id="sc11-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc11-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc11-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc11-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc11-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc11-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc11-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc11-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc11-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc11-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc11-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc11-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc11-tag" shape="rect" x="40" y="40" width="80" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc12" width="1280" height="720" start="20.5" end="22">
+      <shape id="sc12-bg" shape="rect" width="1280" height="720" fill="#D35400FF"/>
+      <shape id="sc12-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc12-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc12-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc12-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc12-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc12-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc12-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc12-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc12-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc12-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc12-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc12-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc12-tag" shape="rect" x="40" y="40" width="100" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc13" width="1280" height="720" start="22" end="23.5">
+      <shape id="sc13-bg" shape="rect" width="1280" height="720" fill="#2C3E50FF"/>
+      <shape id="sc13-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc13-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc13-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc13-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc13-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc13-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc13-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc13-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc13-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc13-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc13-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc13-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc13-tag" shape="rect" x="40" y="40" width="120" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc14" width="1280" height="720" start="23.5" end="25">
+      <shape id="sc14-bg" shape="rect" width="1280" height="720" fill="#27AE60FF"/>
+      <shape id="sc14-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc14-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc14-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc14-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc14-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc14-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc14-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc14-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc14-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc14-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc14-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc14-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc14-tag" shape="rect" x="40" y="40" width="140" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc15" width="1280" height="720" start="25" end="26.5">
+      <shape id="sc15-bg" shape="rect" width="1280" height="720" fill="#B8860BFF"/>
+      <shape id="sc15-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc15-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc15-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc15-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc15-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc15-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc15-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc15-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc15-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc15-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc15-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc15-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc15-tag" shape="rect" x="40" y="40" width="160" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc16" width="1280" height="720" start="26.5" end="28">
+      <shape id="sc16-bg" shape="rect" width="1280" height="720" fill="#1F4E99FF"/>
+      <shape id="sc16-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc16-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc16-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc16-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc16-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc16-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc16-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc16-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc16-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc16-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc16-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc16-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc16-tag" shape="rect" x="40" y="40" width="180" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc17" width="1280" height="720" start="28" end="29.5">
+      <shape id="sc17-bg" shape="rect" width="1280" height="720" fill="#C0392BFF"/>
+      <shape id="sc17-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc17-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc17-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc17-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc17-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc17-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc17-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc17-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc17-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc17-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc17-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc17-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc17-tag" shape="rect" x="40" y="40" width="200" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc18" width="1280" height="720" start="29.5" end="31">
+      <shape id="sc18-bg" shape="rect" width="1280" height="720" fill="#16A085FF"/>
+      <shape id="sc18-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc18-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc18-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc18-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc18-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc18-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc18-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc18-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc18-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc18-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc18-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc18-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc18-tag" shape="rect" x="40" y="40" width="220" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc19" width="1280" height="720" start="31" end="32.5">
+      <shape id="sc19-bg" shape="rect" width="1280" height="720" fill="#8E44ADFF"/>
+      <shape id="sc19-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc19-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc19-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc19-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc19-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc19-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc19-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc19-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc19-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc19-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc19-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc19-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc19-tag" shape="rect" x="40" y="40" width="240" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc20" width="1280" height="720" start="32.5" end="34">
+      <shape id="sc20-bg" shape="rect" width="1280" height="720" fill="#D35400FF"/>
+      <shape id="sc20-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc20-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc20-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc20-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc20-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc20-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc20-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc20-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc20-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc20-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc20-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc20-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc20-tag" shape="rect" x="40" y="40" width="60" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc21" width="1280" height="720" start="34" end="35.5">
+      <shape id="sc21-bg" shape="rect" width="1280" height="720" fill="#2C3E50FF"/>
+      <shape id="sc21-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc21-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc21-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc21-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc21-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc21-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc21-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc21-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc21-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc21-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc21-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc21-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc21-tag" shape="rect" x="40" y="40" width="80" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc22" width="1280" height="720" start="35.5" end="37">
+      <shape id="sc22-bg" shape="rect" width="1280" height="720" fill="#27AE60FF"/>
+      <shape id="sc22-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc22-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc22-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc22-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc22-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc22-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc22-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc22-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc22-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc22-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc22-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc22-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc22-tag" shape="rect" x="40" y="40" width="100" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc23" width="1280" height="720" start="37" end="38.5">
+      <shape id="sc23-bg" shape="rect" width="1280" height="720" fill="#B8860BFF"/>
+      <shape id="sc23-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc23-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc23-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc23-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc23-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc23-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc23-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc23-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc23-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc23-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc23-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc23-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc23-tag" shape="rect" x="40" y="40" width="120" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc24" width="1280" height="720" start="38.5" end="40">
+      <shape id="sc24-bg" shape="rect" width="1280" height="720" fill="#1F4E99FF"/>
+      <shape id="sc24-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc24-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc24-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc24-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc24-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc24-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc24-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc24-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc24-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc24-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc24-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc24-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc24-tag" shape="rect" x="40" y="40" width="140" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc25" width="1280" height="720" start="40" end="41.5">
+      <shape id="sc25-bg" shape="rect" width="1280" height="720" fill="#C0392BFF"/>
+      <shape id="sc25-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc25-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc25-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc25-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc25-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc25-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc25-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc25-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc25-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc25-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc25-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc25-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc25-tag" shape="rect" x="40" y="40" width="160" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc26" width="1280" height="720" start="41.5" end="43">
+      <shape id="sc26-bg" shape="rect" width="1280" height="720" fill="#16A085FF"/>
+      <shape id="sc26-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc26-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc26-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc26-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc26-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc26-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc26-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc26-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc26-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc26-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc26-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc26-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc26-tag" shape="rect" x="40" y="40" width="180" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc27" width="1280" height="720" start="43" end="44.5">
+      <shape id="sc27-bg" shape="rect" width="1280" height="720" fill="#8E44ADFF"/>
+      <shape id="sc27-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc27-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc27-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc27-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc27-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc27-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc27-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc27-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc27-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc27-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc27-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc27-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc27-tag" shape="rect" x="40" y="40" width="200" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc28" width="1280" height="720" start="44.5" end="46">
+      <shape id="sc28-bg" shape="rect" width="1280" height="720" fill="#D35400FF"/>
+      <shape id="sc28-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc28-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc28-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc28-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc28-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc28-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc28-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc28-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc28-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc28-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc28-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc28-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc28-tag" shape="rect" x="40" y="40" width="220" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc29" width="1280" height="720" start="46" end="47.5">
+      <shape id="sc29-bg" shape="rect" width="1280" height="720" fill="#2C3E50FF"/>
+      <shape id="sc29-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc29-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc29-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc29-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc29-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc29-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc29-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc29-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc29-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc29-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc29-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc29-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc29-tag" shape="rect" x="40" y="40" width="240" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc30" width="1280" height="720" start="47.5" end="49">
+      <shape id="sc30-bg" shape="rect" width="1280" height="720" fill="#27AE60FF"/>
+      <shape id="sc30-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc30-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc30-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc30-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc30-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc30-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc30-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc30-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc30-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc30-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc30-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc30-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc30-tag" shape="rect" x="40" y="40" width="60" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc31" width="1280" height="720" start="49" end="50.5">
+      <shape id="sc31-bg" shape="rect" width="1280" height="720" fill="#B8860BFF"/>
+      <shape id="sc31-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc31-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc31-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc31-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc31-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc31-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc31-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc31-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc31-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc31-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc31-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc31-sh" shape="rounded-rect" radius="40" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc31-tag" shape="rect" x="40" y="40" width="80" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc32" width="1280" height="720" start="50.5" end="52">
+      <shape id="sc32-bg" shape="rect" width="1280" height="720" fill="#1F4E99FF"/>
+      <shape id="sc32-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc32-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc32-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc32-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc32-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc32-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc32-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc32-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc32-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc32-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc32-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc32-sh" shape="star" points="5" innerRadius="60" outerRadius="150" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc32-tag" shape="rect" x="40" y="40" width="100" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc33" width="1280" height="720" start="52" end="53.5">
+      <shape id="sc33-bg" shape="rect" width="1280" height="720" fill="#C0392BFF"/>
+      <shape id="sc33-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc33-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc33-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc33-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc33-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc33-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc33-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc33-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc33-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc33-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc33-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc33-sh" shape="ellipse" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc33-tag" shape="rect" x="40" y="40" width="120" height="40" fill="#000000B0"/>
+    </group>
+    <group id="sc34" width="1280" height="720" start="53.5">
+      <shape id="sc34-bg" shape="rect" width="1280" height="720" fill="#16A085FF"/>
+      <shape id="sc34-gx1" shape="rect" x="158" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc34-gx2" shape="rect" x="318" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc34-gx3" shape="rect" x="478" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc34-gx4" shape="rect" x="638" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc34-gx5" shape="rect" x="798" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc34-gx6" shape="rect" x="958" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc34-gx7" shape="rect" x="1118" width="4" height="720" fill="#FFFFFF40"/>
+      <shape id="sc34-gy1" shape="rect" y="142" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc34-gy2" shape="rect" y="286" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc34-gy3" shape="rect" y="430" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc34-gy4" shape="rect" y="574" width="1280" height="4" fill="#FFFFFF40"/>
+      <shape id="sc34-sh" shape="polygon" points="6" x="490" y="210" width="300" height="300" fill="#FFFFFFE6"/>
+      <shape id="sc34-tag" shape="rect" x="40" y="40" width="140" height="40" fill="#000000B0"/>
+    </group>
+    <transition id="tr-in" type="dip-to-color" to="sc0" duration="0.5" alignment="start" color="#000000FF"/>
+    <transition id="t-crossfade" type="crossfade" from="sc0" to="sc1" duration="0.6"/>
+    <transition id="t-additive-dissolve" type="additive-dissolve" from="sc1" to="sc2" duration="0.6"/>
+    <transition id="t-dip-to-color" type="dip-to-color" from="sc2" to="sc3" duration="0.6" color="#FFFFFFFF"/>
+    <transition id="t-wipe" type="wipe" from="sc3" to="sc4" duration="0.6" direction="angle" angle="30" softness="0.15"/>
+    <transition id="t-slide" type="slide" from="sc4" to="sc5" duration="0.6" direction="left"/>
+    <transition id="t-push" type="push" from="sc5" to="sc6" duration="0.6" direction="up"/>
+    <transition id="t-cover" type="cover" from="sc6" to="sc7" duration="0.6" direction="right"/>
+    <transition id="t-reveal" type="reveal" from="sc7" to="sc8" duration="0.6" direction="down"/>
+    <transition id="t-zoom-in" type="zoom-in" from="sc8" to="sc9" duration="0.6"/>
+    <transition id="t-zoom-out" type="zoom-out" from="sc9" to="sc10" duration="0.6"/>
+    <transition id="t-spin" type="spin" from="sc10" to="sc11" duration="0.6"/>
+    <transition id="t-whip-pan" type="whip-pan" from="sc11" to="sc12" duration="0.6" direction="left"/>
+    <transition id="t-circle-open" type="circle-open" from="sc12" to="sc13" duration="0.6" softness="0.05"/>
+    <transition id="t-circle-close" type="circle-close" from="sc13" to="sc14" duration="0.6" softness="0.05"/>
+    <transition id="t-iris" type="iris" from="sc14" to="sc15" duration="0.6" softness="0.02"/>
+    <transition id="t-clock-wipe" type="clock-wipe" from="sc15" to="sc16" duration="0.6" softness="0.05"/>
+    <transition id="t-radial-wipe" type="radial-wipe" from="sc16" to="sc17" duration="0.6" softness="0.05"/>
+    <transition id="t-barn-door" type="barn-door" from="sc17" to="sc18" duration="0.6" direction="up" softness="0.05"/>
+    <transition id="t-blinds" type="blinds" from="sc18" to="sc19" duration="0.6" softness="0.1"/>
+    <transition id="t-luma" type="luma" from="sc19" to="sc20" duration="0.6" matte="luma-matte" softness="0.1"/>
+    <transition id="t-blur" type="blur" from="sc20" to="sc21" duration="0.6"/>
+    <transition id="t-glitch" type="glitch" from="sc21" to="sc22" duration="0.6"/>
+    <transition id="t-pixelize" type="pixelize" from="sc22" to="sc23" duration="0.6"/>
+    <transition id="t-flip" type="flip" from="sc23" to="sc24" duration="0.6"/>
+    <transition id="t-cube" type="cube" from="sc24" to="sc25" duration="0.6"/>
+    <transition id="t-page-curl" type="page-curl" from="sc25" to="sc26" duration="0.6"/>
+    <transition id="t-film-roll" type="film-roll" from="sc26" to="sc27" duration="0.6" direction="up"/>
+    <transition id="t-stripe" type="stripe" from="sc27" to="sc28" duration="0.6" softness="0.05"/>
+    <transition id="t-squash" type="squash" from="sc28" to="sc29" duration="0.6"/>
+    <transition id="t-shuffle" type="shuffle" from="sc29" to="sc30" duration="0.6"/>
+    <transition id="t-carousel" type="carousel" from="sc30" to="sc31" duration="0.6"/>
+    <transition id="t-light-leak" type="light-leak" from="sc31" to="sc32" duration="0.6"/>
+    <transition id="t-morph" type="morph" from="sc32" to="sc33" duration="0.6"/>
+    <transition id="t-shader" type="shader" from="sc33" to="sc34" duration="0.6" shader="shaders/doorway.glsl"/>
+    <transition id="tr-out" type="circle-close" from="sc34" duration="0.5" alignment="end" softness="0.05"/>
+  </composition>
+</scene>

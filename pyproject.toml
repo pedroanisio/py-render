@@ -3,12 +3,14 @@ name = "scenerender"
 version = "0.1.0"
 description = "Generic Python renderer for scene-render 1.1 documents (schema/scene-render-1.1.xsd)."
 requires-python = ">=3.10"
-dependencies = ["lxml>=5", "numpy>=1.26", "pillow>=10", "imageio-ffmpeg>=0.5"]
+dependencies = ["lxml>=5", "numpy>=1.26", "pillow>=10", "imageio-ffmpeg>=0.5", "segno>=1.5"]
 
 [project.optional-dependencies]
 # pycairo and PyGObject (Pango/PangoCairo) are taken from the system site-packages;
 # create the venv with `uv venv --system-site-packages`.
-test = ["pytest>=8"]
+test = ["pytest>=8", "zxing-cpp>=3"]
+# Data Matrix and PDF417 code assets (also used by the tests to decode every barcode kind).
+codes = ["zxing-cpp>=3"]
 
 [project.scripts]
 scenerender = "scenerender.cli:main"

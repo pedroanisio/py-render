@@ -51,8 +51,8 @@ def register_font_file(path: str) -> bool:
     ok = bool(_fc.FcConfigAppFontAddFile(None, path.encode()))
     if ok:
         _registered.add(path)
-        # Pango caches the font map; a fresh map picks up the new file.
-        PangoCairo.FontMap.set_default(None)
+        # Pango caches the font map; a fresh map picks up files added after first use.
+        PangoCairo.FontMap.set_default(PangoCairo.FontMap.new())
     return ok
 
 

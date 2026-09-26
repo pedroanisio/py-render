@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Text feature demo for scenerender: spans, styles, fitting, alignment, backgrounds,
+     animator presets, a text path and burned captions. System fonts only (DejaVu Sans / Serif). -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="4" seed="7" background="#161B24FF" safeArea="sa"/>
+  <styles>
+    <token name="accent" value="#FF5A5FFF"/>
+    <token name="gold" value="#FFC94AFF"/>
+    <textStyle id="ts-base" font="DejaVu Sans" size="28" color="#EEF2F8FF" lineHeight="1.25"/>
+    <textStyle id="ts-head" basedOn="ts-base" weight="700" size="54" lineHeight="1.1"/>
+    <textStyle id="ts-kick" basedOn="ts-base" weight="700" size="18" tracking="120" color="var(--gold)" textTransform="uppercase"/>
+    <textStyle id="ts-serif" font="DejaVu Serif" fontStyle="italic" size="26" color="#C9D3E0FF"/>
+    <textStyle id="ts-cap" basedOn="ts-base" weight="700" size="30" shadowColor="#000000CC" shadowBlur="6" shadowOffsetY="2"/>
+    <textStyle id="ts-cap-active" basedOn="ts-cap" color="var(--gold)"/>
+  </styles>
+  <safeAreas>
+    <safeArea id="sa" preset="action-safe"/>
+  </safeAreas>
+  <assets>
+    <!-- spans: style inheritance, per-span colour, decoration, highlight, gradient fill, stroke -->
+    <text id="t-title" width="760" height="150" size="28" style="ts-base">
+      <span style="ts-kick">scene-render · text</span>
+      <span>&#10;</span>
+      <span style="ts-head" color="url(#g-title)" strokeColor="#00000099" strokeWidth="3" strokePosition="outside">Spans &amp; styles</span>
+      <span style="ts-serif"> with </span>
+      <span decoration="underline" color="#7FD1FFFF">underline</span>
+      <span>, </span>
+      <span highlight="#FF5A5F66">highlight</span>
+      <span> and </span>
+      <span role="price" weight="700" color="var(--gold)">€1,299</span>
+    </text>
+    <!-- autoFit shrink inside a fixed box with a block background -->
+    <text id="t-fit" width="360" height="110" size="40" style="ts-base" autoFit="shrink" minSize="12"
+          background="#FFFFFF1A" backgroundMode="block" backgroundPadding="8" backgroundRadius="10"
+          text="autoFit shrinks this long sentence until every word fits inside the box."/>
+    <!-- alignment and line backgrounds -->
+    <text id="t-center" width="360" height="130" size="22" style="ts-base" align="center" verticalAlign="middle"
+          background="#FF5A5FCC" backgroundMode="line" backgroundPadding="5" backgroundRadius="4"
+          text="Centred lines, each with its own rounded background box."/>
+    <text id="t-end" width="360" height="90" size="22" style="ts-base" align="end"
+          text="End-aligned text sits against the right edge of the box."/>
+    <text id="t-justify" width="360" height="130" size="20" style="ts-serif" align="justify" fontStyle="normal"
+          text="Justified text stretches the spaces of every line except the last one so both edges line up neatly."/>
+    <!-- maxLines + ellipsis, word backgrounds -->
+    <text id="t-ellipsis" width="360" height="100" size="22" style="ts-base" maxLines="2" overflow="ellipsis"
+          text="This paragraph is limited to two lines, so everything after the second line is cut with an ellipsis."/>
+    <text id="t-words" width="560" height="50" size="24" style="ts-base" background="#2E7DFFCC" backgroundMode="word"
+          backgroundPadding="4" backgroundRadius="6" text="one box per word"/>
+    <!-- animated -->
+    <text id="t-type" width="560" height="40" size="26" style="ts-base" font="DejaVu Sans Mono" text="typewriter: hello, world_"/>
+    <text id="t-slide" width="560" height="44" size="30" style="ts-base" weight="700" text="Slide up, word by word"/>
+    <text id="t-pop" width="560" height="44" size="30" style="ts-base" weight="700" color="var(--accent)" text="Pop! Goes each word"/>
+    <text id="t-karaoke" width="560" height="44" size="28" style="ts-base" text="Karaoke fills the words in time"/>
+    <text id="t-counter" width="300" height="70" size="56" style="ts-head" color="var(--gold)" text="12,480"/>
+    <text id="t-scramble" width="420" height="44" size="30" style="ts-base" font="DejaVu Sans Mono" text="DECODING SIGNAL"/>
+    <text id="t-path" width="300" height="40" size="22" style="ts-base" weight="700" color="#9BE7C4FF" wrap="none"
+          text="Text flows along a curved path"/>
+    <text id="t-vertical" width="60" height="300" size="26" style="ts-base" writingMode="vertical-rl" text="VERTICAL TEXT"/>
+  </assets>
+  <paints>
+    <linearGradient id="g-title" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" color="#FF5A5FFF"/>
+      <stop offset="1" color="#FFC94AFF"/>
+    </linearGradient>
+  </paints>
+  <composition>
+    <layer id="l-title" asset="t-title" x="60" y="40"/>
+    <layer id="l-fit" asset="t-fit" x="860" y="48"/>
+    <layer id="l-center" asset="t-center" x="60" y="220"/>
+    <layer id="l-end" asset="t-end" x="460" y="220"/>
+    <layer id="l-justify" asset="t-justify" x="860" y="200"/>
+    <layer id="l-ellipsis" asset="t-ellipsis" x="460" y="330"/>
+    <layer id="l-words" asset="t-words" x="60" y="370"/>
+    <layer id="l-vertical" asset="t-vertical" x="1205" y="300"/>
+
+    <layer id="l-type" asset="t-type" x="60" y="440">
+      <textAnimator preset="typewriter" presetStart="0.2" presetDuration="1.6"/>
+    </layer>
+    <layer id="l-slide" asset="t-slide" x="60" y="490">
+      <textAnimator preset="slide-up" presetStart="0.3" presetDuration="1.6" unit="word"/>
+    </layer>
+    <layer id="l-pop" asset="t-pop" x="60" y="545">
+      <textAnimator preset="pop" presetStart="1.0" presetDuration="1.2" unit="word"/>
+    </layer>
+    <layer id="l-karaoke" asset="t-karaoke" x="660" y="440">
+      <textAnimator preset="karaoke" presetStart="0.5" presetDuration="2.5" unit="word" fill="#7FD1FFFF"/>
+    </layer>
+    <layer id="l-counter" asset="t-counter" x="660" y="490">
+      <textAnimator preset="counter" presetStart="0.2" presetDuration="2"/>
+    </layer>
+    <layer id="l-scramble" asset="t-scramble" x="900" y="505">
+      <textAnimator preset="scramble" presetStart="0.5" presetDuration="2" seed="3"/>
+    </layer>
+    <layer id="l-path" asset="t-path" x="850" y="300">
+      <textPath path="M0 100 C80 20 200 10 300 60">
+        <animate property="startOffset"><key time="0" value="40"/><key time="4" value="0"/></animate>
+      </textPath>
+      <textAnimator preset="wave" presetStart="0" presetDuration="4"/>
+    </layer>
+  </composition>
+  <captions>
+    <captionTrack id="cap-demo" language="en" mode="both" format="vtt" preset="karaoke" style="ts-cap"
+                  activeColor="var(--gold)" maxCharsPerLine="40" maxLines="2" x="50%" y="84%" width="80%">
+      <cue start="0.2" end="2.0" text="Captions burn in with word timing">
+        <word start="0.2" end="0.6" text="Captions"/>
+        <word start="0.6" end="0.9" text="burn"/>
+        <word start="0.9" end="1.1" text="in"/>
+        <word start="1.1" end="1.3" text="with"/>
+        <word start="1.3" end="1.6" text="word" emphasis="true"/>
+        <word start="1.6" end="2.0" text="timing"/>
+      </cue>
+      <cue start="2.2" end="4.0" text="and plain cues get timings shared out by length."/>
+    </captionTrack>
+  </captions>
+</scene>

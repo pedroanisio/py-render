@@ -1,0 +1,119 @@
+"""Command line: scenerender {render,still,validate,coverage,info} SCENE [options]."""
+from __future__ import annotations
+
+import argparse
+import logging
+import os
+import sys
+import time
+
+
+def _common(p: argparse.ArgumentParser) -> None:
+    p.add_argument("scene")
+    p.add_argument("--param", action="append", default=[], metavar="ID=VALUE", help="override a parameter")
+    p.add_argument("--variant")
+    p.add_argument("--layout")
+    p.add_argument("--scale", type=float, default=1.0, help="output pixels per document pixel")
+    p.add_argument("--strict", action="store_true", help="refuse documents that fail schema validation")
+    p.add_argument("--representation", help="preferred asset representation (e.g. proxy)")
+    p.add_argument("--assets-dir", help="directory asset paths resolve against (default: the scene's directory)")
+    p.add_argument("-v", "--verbose", action="store_true")
+
+
+def _params(args) -> dict[str, str]:
+    out = {}
+    for kv in args.param:
+        k, _, v = kv.partition("=")
+        out[k] = v
+    return out
+
+
+def _open(args):
+    from .render import Renderer
+    return Renderer.open(args.scene, scale=args.scale, params=_params(args), variant=args.variant,
+                         layout=args.layout, strict=args.strict, representation=args.representation,
+                         assets_dir=args.assets_dir)
+
+
+def cmd_still(args) -> int:
+    from PIL import Image
+    r = _open(args)
+    for spec in args.time.split(","):
+        t = r.doc.markers[spec] if spec in r.doc.markers else float(spec)
+        t0 = time.perf_counter()
+        rgb = r.frame_rgb(t)
+        out = args.out if "," not in args.time else f"{os.path.splitext(args.out)[0]}_{t:07.3f}{os.path.splitext(args.out)[1] or '.png'}"
+        Image.fromarray(rgb).save(out)
+        print(f"{out}  t={t:.3f}s  {time.perf_counter() - t0:.2f}s")
+    return 0
+
+
+def cmd_render(args) -> int:
+    from .output import render_outputs
+    r = _open(args)
+    return render_outputs(r, args)
+
+
+def cmd_validate(args) -> int:
+    from . import document
+    try:
+        doc = document.load(args.scene, strict=False)
+    except document.SceneError as e:
+        print(e)
+        return 3
+    if doc.validation_errors:
+        print(f"{args.scene}: INVALID ({len(doc.validation_errors)} errors)")
+        for e in doc.validation_errors[: args.max_errors]:
+            print("  line", e)
+        return 3
+    print(f"{args.scene}: valid scene-render {doc.root.get('version')}")
+    return 0
+
+
+def cmd_coverage(args) -> int:
+    from .coverage import report
+    print(report(args.scene, all_features=args.all))
+    return 0
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="scenerender", description="Render scene-render 1.1 documents.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("still", help="render stills at given times or marker ids")
+    _common(p)
+    p.add_argument("-t", "--time", required=True, help="seconds or marker id, comma-separated")
+    p.add_argument("-o", "--out", default="still.png")
+    p.set_defaults(fn=cmd_still)
+
+    p = sub.add_parser("render", help="render the document's outputs, or one file with -o")
+    _common(p)
+    p.add_argument("-o", "--out", help="single output file (.mp4/.mov/.mkv/.webm/.gif, or a dir for PNG frames)")
+    p.add_argument("--output", action="append", default=[], help="render only these output ids")
+    p.add_argument("--fps", type=float, help="override frame rate")
+    p.add_argument("--from", dest="t0", type=float, default=None)
+    p.add_argument("--to", dest="t1", type=float, default=None)
+    p.add_argument("--frames-dir", help="keep rendered frames here; rerunning resumes")
+    p.add_argument("--jobs", type=int, default=0, help="parallel frame workers (0 = CPU count)")
+    p.add_argument("--no-audio", action="store_true")
+    p.add_argument("--crf", type=int)
+    p.set_defaults(fn=cmd_render)
+
+    p = sub.add_parser("validate", help="validate against the XSD")
+    p.add_argument("scene")
+    p.add_argument("--max-errors", type=int, default=30)
+    p.set_defaults(fn=cmd_validate)
+
+    p = sub.add_parser("coverage", help="list which features of a document the Python renderer supports")
+    p.add_argument("scene")
+    p.add_argument("--all", action="store_true", help="also list supported features")
+    p.set_defaults(fn=cmd_coverage)
+
+    args = ap.parse_args(argv)
+    logging.basicConfig(level=logging.INFO if getattr(args, "verbose", False) else logging.WARNING,
+                        format="%(levelname)s %(message)s")
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
