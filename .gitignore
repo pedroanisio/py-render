@@ -1,2 +1,3 @@
 assets/
 digital-front/
+*.pyc
