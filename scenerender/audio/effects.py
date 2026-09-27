@@ -518,20 +518,21 @@ def tail_seconds(fx_el, bpm: float | None = None) -> float:
 def process_chain(effects: list, x: np.ndarray, make_ctx) -> np.ndarray:
     """Run audioEffect elements in document order."""
     for el in effects:
-        if not parse_bool(el.get("enabled", "true"), True):
+        fx = make_ctx(el)
+        enabled = np.asarray(fx.curve("enabled", 1.0, x.shape[0]), np.float32)
+        if not np.any(enabled):
             continue
-        typ = el.get("type")
+        typ = fx.get("type", el.get("type"))
         fn = AUDIO_EFFECTS.get(typ)
         if fn is None:
             warn_once("audioEffect", typ, "not supported by the Python renderer; passed through")
             continue
-        fx = make_ctx(el)
         y = fn(fx, x)
         if typ not in GAIN_CONSUMERS:
             g = np.asarray(fx.curve("gain", 0.0, x.shape[0]), np.float64)
             if np.any(np.abs(g) > 1e-12):
                 y = (y * np.asarray(dsp.db_to_lin(g), np.float32).reshape(-1, 1)).astype(np.float32)
-        mix = np.clip(np.asarray(fx.curve("mix", 1.0, x.shape[0]), np.float64), 0.0, 1.0)
+        mix = np.clip(np.asarray(fx.curve("mix", 1.0, x.shape[0]), np.float64), 0.0, 1.0) * enabled
         if np.all(mix >= 1.0):
             x = y
         else:

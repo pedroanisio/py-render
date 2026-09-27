@@ -251,6 +251,220 @@ def test_isf_multipass_and_defaults(tmp_path, tile):
     np.testing.assert_allclose(fx(rc, "off", tile).px, tile.px, atol=2e-3)
 
 
+def test_isf_additional_named_image_inputs(tmp_path, tile):
+    import json
+    from PIL import Image
+    image = tmp_path / "blue.png"
+    Image.new("RGBA", (4, 4), (0, 0, 255, 255)).save(image)
+    header = {"INPUTS": [{"NAME": n, "TYPE": "image"} for n in ("inputImage", "other", "third", "fourth")]}
+    code = "/*" + json.dumps(header) + "*/\nvoid main() { gl_FragColor = " \
+           "0.5 * IMG_THIS_NORM_PIXEL(third) + 0.5 * IMG_THIS_NORM_PIXEL(fourth); }"
+    src = tmp_path / "many.fs"
+    src.write_text(code)
+    rc = make_doc(tmp_path, body='<shape id="red" shape="rect" width="96" height="64" fill="#ff0000"/>',
+                  effects=f'<effect id="many" type="shader" space="raw" src="{src}">'
+                          f'<param name="third" value="red"/><param name="fourth" value="{image}"/></effect>')
+    got = fx(rc, "many", tile)
+    np.testing.assert_allclose(got.px[..., :3], np.broadcast_to([.5, 0, .5], got.px[..., :3].shape), atol=1e-6)
+    np.testing.assert_allclose(got.px[..., 3], 1, atol=1e-6)
+
+
+@pytest.mark.parametrize("kind", ["generator", "imageSequence"])
+@pytest.mark.parametrize("included", [False, True])
+def test_shader_asset_inputs_render_at_source_size_and_time(tmp_path, kind, included):
+    from PIL import Image
+    from scenerender.render import Renderer
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    src = sub / "asset.fs"
+    src.write_text('''/*{"INPUTS":[{"NAME":"assetImage","TYPE":"image"}]}*/
+        void main() { vec4 sample = IMG_NORM_PIXEL(assetImage, vec2(.9, .5));
+          gl_FragColor = vec4(sample.rg, IMG_SIZE(assetImage).x / 1024.0, sample.a); }''')
+    if kind == "generator":
+        asset = '<generator id="picture" kind="solid" width="512" height="128" paint="#ff0000">' \
+                '<animate property="paint"><key time="0" value="#ff0000"/>' \
+                '<key time="1" value="#00ff00"/></animate></generator>'
+    else:
+        Image.new("RGBA", (512, 128), (255, 0, 0, 255)).save(sub / "frame0.png")
+        Image.new("RGBA", (512, 128), (0, 255, 0, 255)).save(sub / "frame1.png")
+        asset = '<imageSequence id="picture" src="frame%d.png" first="0" last="1" fps="1" width="512" height="128"/>'
+    project = '<project width="16" height="12" fps="24" duration="2"/>'
+    child = sub / "child.xml"
+    child.write_text('<scene version="1.1">' + project + f'<assets>{asset}</assets>'
+        '<composition><shape id="node" shape="rect" width="16" height="12" effects="sample"/></composition>'
+        '<effects><effect id="sample" type="shader" space="raw" src="asset.fs">'
+        '<param name="assetImage" value="picture"/></effect></effects></scene>')
+    path = child
+    if included:
+        path = tmp_path / "parent.xml"
+        path.write_text('<scene version="1.1">' + project + '<composition>'
+                        '<include id="child" src="sub/child.xml"/></composition></scene>')
+    r = Renderer.open(str(path), strict=True)
+    for t, expected in ((0., [1, 0, .5, 1]), (1.1, [0, 1, .5, 1]), (0., [1, 0, .5, 1])):
+        px = r.frame_linear(t)
+        np.testing.assert_allclose(px, np.broadcast_to(expected, px.shape), atol=1e-6)
+        assert (r.rc.width, r.rc.height) == (16, 12)
+
+
+def test_isf_persistent_feedback_replays_upstream_effects_and_seeks(tmp_path):
+    import json
+    header = {"INPUTS": [{"NAME": "inputImage", "TYPE": "image"}],
+              "PASSES": [{"TARGET": "history", "PERSISTENT": True, "FLOAT": True}]}
+    code = "/*" + json.dumps(header) + "*/\nvoid main() { gl_FragColor = vec4(" \
+           "mix(IMG_THIS_NORM_PIXEL(inputImage).rgb, IMG_THIS_NORM_PIXEL(history).rgb, 0.5), 1.0); }"
+    src = tmp_path / "feedback.fs"
+    src.write_text(code)
+    upstream = urllib.parse.quote("void main() { fragColor = vec4(time, 0.0, 0.0, 1.0); }")
+
+    def renderer():
+        return make_doc(tmp_path, body='<shape id="feedback" shape="rect" width="96" height="64" '
+                                      'effects="clock feedbackfx"/>',
+                        effects=f'<effect id="clock" type="shader" space="raw" src="data:,{upstream}"/>'
+                                f'<effect id="feedbackfx" type="shader" space="raw" src="{src}"/>')
+    rc = renderer()
+    for n in (12, 3, 12, 0, 7):
+        expected = 0.
+        for k in range(n + 1):
+            expected = .5 * (k / 24) + .5 * expected
+        got = rc.render_frame(n / 24, n).px
+        np.testing.assert_allclose(got[..., 0], expected, atol=1e-6)
+        np.testing.assert_allclose(got, renderer().render_frame(n / 24, n).px, atol=1e-6)
+
+
+def test_isf_feedback_is_separate_for_each_node(tmp_path):
+    code = '''/*{"INPUTS":[{"NAME":"inputImage","TYPE":"image"}],
+                "PASSES":[{"TARGET":"previous","PERSISTENT":true,"FLOAT":true}]}*/
+        void main() { gl_FragColor = vec4(0.5 * (IMG_THIS_NORM_PIXEL(inputImage).rgb
+                                          + IMG_THIS_NORM_PIXEL(previous).rgb), 1.0); }'''
+    src = tmp_path / "shared.fs"
+    src.write_text(code)
+    rc = make_doc(tmp_path, body='<shape id="left" shape="rect" width="48" height="64" '
+                                'fill="#ff0000" effects="shared"/>'
+                                '<shape id="right" shape="rect" x="48" width="48" height="64" '
+                                'fill="#00ff00" effects="shared" start="0.125"/>',
+                  effects=f'<effect id="shared" type="shader" space="raw" src="{src}"/>')
+    for frame in (6, 4, 6):
+        got = rc.render_frame(frame / 24, frame).px
+        np.testing.assert_allclose(got[20, 20, :3], [1 - .5 ** (frame + 1), 0, 0], atol=1e-6)
+        np.testing.assert_allclose(got[20, 70, :3], [0, 1 - .5 ** (frame - 2), 0], atol=1e-6)
+
+
+def test_isf_feedback_checkpoints_bound_replay_and_memory(tmp_path, monkeypatch):
+    from scenerender.effects import shader
+    src = tmp_path / "accumulate.fs"
+    src.write_text('''/*{"PASSES":[{"TARGET":"previous","PERSISTENT":true,"FLOAT":true}]}*/
+        void main() { gl_FragColor = vec4(IMG_THIS_NORM_PIXEL(previous).r + .001, 0, 0, 1); }''')
+    rc = make_doc(tmp_path, body='<shape id="s" shape="rect" width="96" height="64" effects="acc"/>',
+                  effects=f'<effect id="acc" type="shader" space="raw" src="{src}"/>')
+    render, replayed = rc.render_frame, []
+    def counted(t, frame=0):
+        if rc.cache.get("isf-replaying"):
+            replayed.append(frame)
+        return render(t, frame)
+    monkeypatch.setattr(rc, "render_frame", counted)
+    monkeypatch.setattr(shader, "PERSISTENT_CACHE_BYTES", 96 * 64 * 4 * 4 * 2)
+    for n in (24, 25, 26, 12, 27, 28):
+        before = len(replayed)
+        px = rc.render_frame(n / 24, n).px
+        np.testing.assert_allclose(px[..., 0], .001 * (n + 1), atol=1e-7)
+        if n in (25, 26, 28):
+            assert len(replayed) - before == 1
+        assert sum(size for _, size in rc.cache["isf-checkpoints"].values()) <= shader.PERSISTENT_CACHE_BYTES
+
+
+@pytest.mark.parametrize("motion_blur", [False, True])
+@pytest.mark.parametrize("convention", ["isf", "shadertoy", "plain"])
+def test_shader_frame_index_is_derived_for_time_only_render_calls(tmp_path, motion_blur, convention):
+    from scenerender.render import Renderer
+    codes = {
+        "isf": '/*{"ISFVSN":"2"}*/ void main() { gl_FragColor = vec4(float(FRAMEINDEX)/100., 0, 0, 1); }',
+        "shadertoy": 'void mainImage(out vec4 color, in vec2 coord) { color = vec4(float(iFrame)/100., 0, 0, 1); }',
+        "plain": 'void main() { fragColor = vec4(float(frame)/100., 0, 0, 1); }',
+    }
+    rc = make_doc(tmp_path, body='<shape id="s" shape="rect" width="96" height="64" effects="index"/>',
+                  effects=f'<effect id="index" type="shader" space="raw" src="data:,{urllib.parse.quote(codes[convention])}"/>')
+    rc.motion_blur = motion_blur
+    r = Renderer(rc.doc, rc)
+    for t in (.5, .25, .5):
+        np.testing.assert_allclose(r.frame_linear(t)[..., 0], round(t * 24) / 100, atol=1e-6)
+        np.testing.assert_allclose(rc.render_frame(t).px[..., 0], round(t * 24) / 100, atol=1e-6)
+    # Explicit indices remain authoritative, including zero and all shutter samples.
+    np.testing.assert_allclose(r.frame_linear(.5, 0)[..., 0], 0, atol=1e-6)
+    np.testing.assert_allclose(r.frame_linear(.5, 7)[..., 0], .07, atol=1e-6)
+
+
+def test_isf_final_target_size_uses_animated_input_without_live_uniform(tmp_path, tile):
+    src = tmp_path / "size.fs"
+    src.write_text('''/*{"INPUTS":[{"NAME":"columns","TYPE":"float","DEFAULT":12}],
+        "PASSES":[{"TARGET":"small","WIDTH":"$columns","HEIGHT":"$HEIGHT/2","FLOAT":true}]}*/
+        void main() { gl_FragColor = vec4(RENDERSIZE / 100.0, TIMEDELTA, 1.0); }''')
+    rc = make_doc(tmp_path, effects=f'<effect id="size" type="shader" space="raw" src="{src}">'
+        '<animate property="columns"><key time="0" value="12"/><key time="1" value="24"/></animate></effect>')
+    for t in (0., .5, 1.):
+        got = fx(rc, "size", tile, Ctx(t, t, frame=round(t * 24))).px
+        assert got.shape == tile.px.shape
+        # columns is used only by the JSON size expression, so GLSL removes it.
+        np.testing.assert_allclose(got[..., 0], (.12 + .12 * t), atol=1e-6)
+        np.testing.assert_allclose(got[..., 1], tile.h / 200., atol=1e-6)
+        np.testing.assert_allclose(got[..., 2], 0. if t == 0 else 1 / 24, atol=1e-6)
+
+
+def test_shader_default_input_can_be_animated_without_param(tmp_path, tile):
+    src = tmp_path / "input.fs"
+    src.write_text('''/*{"INPUTS":[{"NAME":"inputAmount","TYPE":"float","DEFAULT":0.1}]}*/
+        void main() { gl_FragColor = vec4(inputAmount, 0, 0, 1); }''')
+    rc = make_doc(tmp_path, effects=f'<effect id="v" type="shader" space="raw" src="{src}">'
+        '<animate property="inputAmount"><key time="0" value=".2"/><key time="1" value=".8"/></animate></effect>')
+    np.testing.assert_allclose(fx(rc, "v", tile, Ctx(.5, .5)).px[..., 0], .5, atol=1e-6)
+
+
+@pytest.mark.parametrize("lookup,expected", [("IMG_THIS_PIXEL", [0, 0, 1, 1]),
+                                            ("IMG_THIS_NORM_PIXEL", [.5, .5, .5, 1]),
+                                            ("IMG_NORM_THIS_PIXEL", [.5, .5, .5, 1])])
+def test_isf_pixel_and_normalized_lookups_differ_for_small_target(tmp_path, lookup, expected):
+    src = tmp_path / "lookup.fs"
+    src.write_text('''/*{"INPUTS":[{"NAME":"inputImage","TYPE":"image"}],
+        "PASSES":[{"TARGET":"tiny","WIDTH":"1","HEIGHT":"1"}]}*/
+        void main() { gl_FragColor = ''' + lookup + '(inputImage); }')
+    rc = make_doc(tmp_path, effects=f'<effect id="v" type="shader" space="raw" src="{src}"/>')
+    tile = Buf(np.array([[[1, 0, 0, 1], [0, 1, 0, 1]], [[0, 0, 1, 1], [1, 1, 1, 1]]], np.float32), 0, 0)
+    np.testing.assert_allclose(fx(rc, "v", tile).px, np.broadcast_to(expected, tile.px.shape), atol=1e-6)
+
+
+@pytest.mark.parametrize("kind,width,source", [("audio", 2048, "sound"), ("audio", 1, "sound"),
+                                              ("audioFFT", 1025, "sound"), ("audioFFT", 1, "master")])
+def test_isf_audio_inputs_bind_pcm_channels_and_fft(tmp_path, kind, width, source):
+    import json
+    import wave
+    from scenerender.render import Renderer
+    sr = 48000
+    times = np.arange(sr) / sr
+    samples = (np.stack([.5 * np.sin(2 * np.pi * 1500 * times), np.zeros(sr)], 1) if kind == "audioFFT"
+               else np.tile([.5, -.25], (sr, 1)))
+    with wave.open(str(tmp_path / "sound.wav"), "wb") as wav:
+        wav.setparams((2, 2, sr, 0, "NONE", "not compressed"))
+        wav.writeframes((samples * 32768).astype("<i2").tobytes())
+    header = {"INPUTS": [{"NAME": "audioInput", "TYPE": kind, "MAX": width}]}
+    pixel = .5 if width == 1 else (64.5 if kind == "audioFFT" else 1024.5)
+    src = tmp_path / "audio.fs"
+    src.write_text('/*' + json.dumps(header) + '*/\nvoid main() { gl_FragColor = vec4('
+        f'IMG_PIXEL(audioInput, vec2({pixel}, .5)).r, IMG_PIXEL(audioInput, vec2({pixel}, 1.5)).r, '
+        'IMG_SIZE(audioInput).x / 2048.0, 1.0); }')
+    p = tmp_path / "audio.xml"
+    p.write_text('<scene version="1.1"><project width="8" height="8" fps="24" duration="1"/>'
+        '<assets><audio id="sound" src="sound.wav"/></assets>'
+        '<composition><shape id="s" shape="rect" width="8" height="8" effects="fx"/></composition>'
+        '<effects><effect id="fx" type="shader" space="raw" src="audio.fs">'
+        + (f'<param name="audioInput" value="{source}"/>' if source != "master" else '') + '</effect></effects>'
+        '<audioMix><audioTrack id="track" asset="sound"/></audioMix></scene>')
+    r = Renderer.open(str(p), strict=True)
+    expected = [.5, 0] if kind == "audioFFT" else ([.75, .625] if width == 1 else [.75, .375])
+    for t in (.5, .25, .5):
+        px = r.rc.render_frame(t, round(t * 24)).px
+        np.testing.assert_allclose(px[..., :2], np.broadcast_to(expected, px[..., :2].shape), atol=1e-4)
+        np.testing.assert_allclose(px[..., 2], width / 2048., atol=1e-6)
+
+
 @pytest.mark.parametrize("space", ["srgb", "linear-srgb", "rec709", "display-p3", "rec2020", "acescg",
                                    "aces2065-1", "acescct", "xyz-d65", "raw"])
 def test_identity_shader_round_trips_every_space(tmp_path, tile, space):

@@ -93,11 +93,26 @@ def default_material() -> Material:
     return Material(dict(DEFAULTS, baseColor=_lin((0.8, 0.8, 0.82, 1.0))), {}, ("default",))
 
 
+def map_uvs(item, material: Material) -> dict:
+    """Resolve each map's UV set and KHR texture transform before interpolation."""
+    out = {}
+    for key in MAP_KEYS:
+        spec = material.p.get("mapUV", {}).get(key, {})
+        uv = item.uv_sets.get(spec.get("texCoord", 0), item.uvs)
+        if uv is None:
+            continue
+        angle = spec.get("rotation", 0.)
+        c, s = np.cos(angle), np.sin(angle)
+        uv = np.asarray(uv) * spec.get("scale", (1., 1.))
+        out[key] = (uv @ np.array([[c, s], [-s, c]]) + spec.get("offset", (0., 0.))).astype(np.float32)
+    return out
+
+
 def evaluate(rc, mat_el, ctx) -> Material:
     """A <material> element evaluated at ctx (all attributes animate)."""
     ev = rc.ev
     p = dict(DEFAULTS)
-    mx = mat_el.get("materialX")
+    mx = ev.str(mat_el, "materialX", ctx)
     if mx:
         spec = load_materialx(rc, rc.doc.resolve_path(mx))
         if spec is not None:
@@ -109,20 +124,20 @@ def evaluate(rc, mat_el, ctx) -> Material:
     else:
         maps = {}
     for k in NUM_KEYS:
-        if mat_el.get(k) is not None or _animated(mat_el, k) or not mx:
+        if ev.explicit(mat_el, k, ctx) or not mx:
             p[k] = ev.num(mat_el, k, ctx, p[k])
     for k in COLOR_KEYS:
-        if mat_el.get(k) is not None or _animated(mat_el, k) or not mx:
+        if ev.explicit(mat_el, k, ctx) or not mx:
             d = DEFAULTS[k]
             p[k] = _lin(ev.color(mat_el, k, ctx, d))
     for k in BOOL_KEYS:
-        if mat_el.get(k) is not None or not mx:
+        if ev.explicit(mat_el, k, ctx) or not mx:
             p[k] = ev.bool(mat_el, k, ctx, DEFAULTS[k])
     p["alphaMode"] = ev.str(mat_el, "alphaMode", ctx, p["alphaMode"]) or "opaque"
-    if mat_el.get("attenuationDistance") is None and not _animated(mat_el, "attenuationDistance"):
+    if not ev.explicit(mat_el, "attenuationDistance", ctx):
         p["attenuationDistance"] = p.get("attenuationDistance", float("inf")) if mx else float("inf")
     for k in MAP_KEYS:
-        src = mat_el.get(k)
+        src = ev.str(mat_el, k, ctx)
         if src:
             arr = texture(rc, src, srgb=k in ("baseColorMap", "emissiveMap"))
             if arr is not None:
@@ -143,7 +158,7 @@ def from_spec(spec: MaterialSpec | None) -> Material:
         if k in COLOR_KEYS and v is not None:
             v = tuple(float(x) for x in v)
             p[k] = v + (1.0,) if len(v) == 3 else v
-        elif k in p and v is not None:
+        elif (k in p or k in ("mapUV", "mapSamplers", "occlusionStrength")) and v is not None:
             p[k] = v
     return Material(p, {k: v for k, v in spec.textures.items() if v is not None}, ("spec", id(spec)))
 
@@ -405,7 +420,7 @@ def _mx_file_of(node) -> str | None:
 
 def material_for(rc, el, ctx) -> Material | None:
     """object3D @material evaluated, or None when the object has none (mesh materials apply)."""
-    mid = el.get("material")
+    mid = rc.ev.str(el, "material", ctx)
     if not mid:
         return None
     m = rc.doc.ids.get(mid)

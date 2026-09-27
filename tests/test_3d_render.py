@@ -48,6 +48,181 @@ def centroid(a: np.ndarray) -> np.ndarray:
 KEY = '<light id="k" type="directional" pitch="-40" yaw="-30" intensity="3"/>'
 
 
+@pytest.mark.parametrize("wrap_s,wrap_t", [(10497, 10497), (33071, 10497), (10497, 33071),
+                                          (33648, 33071), (33071, 33648), (33648, 33648)])
+def test_gltf_texture_wrap_modes_render(tmp_path, wrap_s, wrap_t):
+    from test_3d_loaders import Builder
+    from scenerender.raster import srgb_to_linear
+    import pygltflib as gt
+    b = Builder()
+    pos = b.add([[-40, 30, 0], [40, 30, 0], [40, -30, 0], [-40, -30, 0]], "VEC3")
+    uv = b.add([[-.5, -.5], [2.5, -.5], [2.5, 2.5], [-.5, 2.5]], "VEC2")
+    idx = b.add([0, 2, 1, 0, 3, 2], "SCALAR", gt.UNSIGNED_SHORT)
+    img = np.array([[[255, 0, 0, 255], [0, 255, 0, 255]], [[0, 0, 255, 255], [255, 255, 255, 255]]], np.uint8)
+    tex = b.image_png(img)
+    b.g.samplers = [gt.Sampler(wrapS=wrap_s, wrapT=wrap_t, minFilter=9728, magFilter=9728)]
+    b.g.textures[tex].sampler = 0
+    b.g.materials = [gt.Material(pbrMetallicRoughness=gt.PbrMetallicRoughness(baseColorTexture=gt.TextureInfo(index=tex)),
+                                extensions={"KHR_materials_unlit": {}})]
+    b.g.meshes = [gt.Mesh(primitives=[gt.Primitive(indices=idx, material=0,
+                                                  attributes=gt.Attributes(POSITION=pos, TEXCOORD_0=uv))])]
+    b.g.nodes, b.g.scenes = [gt.Node(mesh=0)], [gt.Scene(nodes=[0])]
+    path = b.save(tmp_path / "sampler.gltf")
+    actual = frame(doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="m"/>', h=120,
+                       assets=f'<mesh id="m" src="{path}" format="gltf"/>'))
+    # Interior points away from texel boundaries: expected texel indices follow
+    # the authored repeat/clamp/reflection modes independently on each axis.
+    def index(u, wrap):
+        u = 1 - abs(u % 2 - 1) if wrap == 33648 else (u % 1 if wrap == 10497 else np.clip(u, 0, 1))
+        return min(1, int(u * 2))
+    for y in (34, 44, 54, 64, 74, 84):
+        for x in (45, 59, 71, 85, 99, 111):
+            u, v = (x + .5 - 40) / 80 * 3 - .5, (y + .5 - 30) / 60 * 3 - .5
+            expected = srgb_to_linear(img[index(v, wrap_t), index(u, wrap_s), :3] / 255.)
+            np.testing.assert_allclose(actual[y, x, :3], expected, atol=1e-5)
+
+
+@pytest.mark.parametrize("minimum,expected", [(9728, [0, 1, 0]), (9729, [.3, .7, 0]),
+    (9984, [.5, .5, 0]), (9985, [.5, .5, .1]), (9986, [.5, .5, .15]), (9987, [.5, .5, .22])])
+def test_material_minification_filters_on_gpu(minimum, expected):
+    import moderngl
+    from scenerender.three.materials import Material
+    from scenerender.three.renderer import _material_texture
+    ctx = gl.context()
+    pixels = np.tile(np.array([[[1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1], [1, 1, 1, 1]]], np.float32), (4, 1, 1))
+    material = Material({"mapSamplers": {"baseColorMap": {"minFilter": minimum, "magFilter": 9728}}},
+                        {"baseColorMap": pixels})
+    texture = _material_texture(ctx, material, "baseColorMap", {})
+    prog = ctx.program(vertex_shader=gl.FULLSCREEN_VS, fragment_shader='''#version 330
+        uniform sampler2D image; uniform float gradient; out vec4 color;
+            void main() { color = textureLod(image, vec2(.3, .5), gradient); }''')
+    quad, fbo = gl.fullscreen_quad(prog), gl.framebuffer(1, 1)
+    try:
+        fbo.use()
+        ctx.disable(moderngl.BLEND | moderngl.DEPTH_TEST | moderngl.CULL_FACE)
+        texture.use(0)
+        prog["image"].value = 0
+        prog["gradient"].value = 1.3
+        quad.render(moderngl.TRIANGLE_STRIP)
+        # Explicit LOD isolates filter behavior from hardware derivative approximations.
+        np.testing.assert_allclose(gl.read_rgba(fbo, 1, 1)[0, 0, :3], expected, atol=.01)
+    finally:
+        texture.release()
+        quad.release()
+        prog.release()
+        for attachment in fbo.color_attachments:
+            attachment.release()
+        fbo.release()
+
+
+@pytest.mark.parametrize("mode", [0, 1, 2, 3])
+def test_gltf_point_and_line_modes_render(tmp_path, mode):
+    from test_3d_loaders import Builder
+    import pygltflib as gt
+    b = Builder()
+    pos = b.add([[-30, -20, 0], [30, -20, 0], [30, 20, 0], [-30, 20, 0]], "VEC3")
+    col = b.add([[1, 0, 0, 1]] * 4, "VEC4")
+    b.g.meshes = [gt.Mesh(primitives=[gt.Primitive(mode=mode, attributes=gt.Attributes(POSITION=pos, COLOR_0=col))])]
+    b.g.nodes, b.g.scenes = [gt.Node(mesh=0)], [gt.Scene(nodes=[0])]
+    path = b.save(tmp_path / "lines.gltf")
+    r = doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="mesh"/>',
+            assets=f'<mesh id="mesh" src="{path}" format="gltf"/>')
+    px = frame(r)
+    red = (px[..., 0] > .1) & (px[..., 1] < .01)
+    assert red.sum() >= (4 if mode == 0 else 80)
+    # LINE_LOOP alone closes the left edge; LINE_STRIP includes the right edge.
+    if mode > 0:
+        assert bool(red[45, 50]) == (mode == 2)
+        assert bool(red[45, 109]) == (mode in (2, 3))
+
+
+@pytest.mark.parametrize("slot", ["baseColorMap", "emissiveMap", "metallicRoughnessMap", "occlusionMap", "normalMap"])
+def test_gltf_maps_use_their_own_uv_set_and_transform(tmp_path, slot):
+    from test_3d_loaders import Builder
+    import pygltflib as gt
+    b = Builder()
+    pos = b.add([[-40, -30, 0], [40, -30, 0], [40, 30, 0], [-40, 30, 0]], "VEC3")
+    uv0 = b.add([[.125, .5]] * 4, "VEC2")
+    uv1 = b.add([[.375, .5]] * 4, "VEC2")
+    idx = b.add([0, 1, 2, 0, 2, 3], "SCALAR", gt.UNSIGNED_SHORT)
+    # Left half and right half differ strongly in every material channel.
+    img = np.zeros((8, 8, 4), np.uint8)
+    img[:, :4] = [255, 20, 20, 255]
+    img[:, 4:] = [20, 255, 255, 255]
+    tex = b.image_png(img)
+    props = dict(index=tex, texCoord=1, extensions={"KHR_texture_transform": {"offset": [.25, 0]}})
+    pbr = gt.PbrMetallicRoughness(baseColorFactor=[1, 1, 1, 1], metallicFactor=1, roughnessFactor=1)
+    mat = gt.Material(pbrMetallicRoughness=pbr)
+    if slot == "baseColorMap":
+        pbr.baseColorTexture = gt.TextureInfo(**props)
+    elif slot == "emissiveMap":
+        mat.emissiveTexture, mat.emissiveFactor = gt.TextureInfo(**props), [1, 1, 1]
+    elif slot == "normalMap":
+        mat.normalTexture = gt.NormalMaterialTexture(**props)
+    elif slot == "metallicRoughnessMap":
+        pbr.metallicRoughnessTexture = gt.TextureInfo(**props)
+    else:
+        mat.occlusionTexture = gt.OcclusionTextureInfo(**props)
+    b.g.materials = [mat]
+    b.g.meshes = [gt.Mesh(primitives=[gt.Primitive(indices=idx, material=0,
+        attributes=gt.Attributes(POSITION=pos, TEXCOORD_0=uv0, TEXCOORD_1=uv1))])]
+    b.g.nodes = [gt.Node(mesh=0)]
+    b.g.scenes = [gt.Scene(nodes=[0])]
+    path = b.save(tmp_path / "multi.gltf")
+    assets = f'<mesh id="mesh" src="{path}" format="gltf"/>'
+    body = '<object3D id="o" primitive="mesh" mesh="mesh"/>'
+    lights = '<light id="a" type="ambient" intensity="1"/>' + KEY
+    actual = frame(doc(tmp_path, body, assets=assets, lights=lights))
+    # Independent reference: bake the selected/transformed coordinate into set 0.
+    import json
+    data = json.loads((tmp_path / "multi.gltf").read_text())
+    for node in (data["materials"][0], data["materials"][0]["pbrMetallicRoughness"]):
+        for value in node.values():
+            if isinstance(value, dict) and "index" in value:
+                value["texCoord"] = 0
+                value.pop("extensions", None)
+    a = data["accessors"][uv0]
+    import base64
+    raw = bytearray(base64.b64decode(data["buffers"][0]["uri"].split(",")[1]))
+    off = data["bufferViews"][a["bufferView"]].get("byteOffset", 0)
+    raw[off:off + 32] = np.array([[.625, .5]] * 4, "<f4").tobytes()
+    data["buffers"][0]["uri"] = "data:application/octet-stream;base64," + base64.b64encode(raw).decode()
+    ref = tmp_path / "reference.gltf"
+    ref.write_text(json.dumps(data))
+    expected = frame(doc(tmp_path, body, assets=assets.replace(path, str(ref)), lights=lights, name="ref.xml"))
+    assert np.any(actual[..., :3] > .05)
+    np.testing.assert_allclose(actual, expected, atol=1e-5)
+
+
+@pytest.mark.parametrize("strength", [0., .35, 1.])
+def test_gltf_occlusion_strength_scales_indirect_light(tmp_path, strength):
+    from test_3d_loaders import Builder
+    import pygltflib as gt
+    b = Builder()
+    pos = b.add([[-40, -30, 0], [40, -30, 0], [40, 30, 0], [-40, 30, 0]], "VEC3")
+    uv = b.add([[.5, .5]] * 4, "VEC2")
+    idx = b.add([0, 1, 2, 0, 2, 3], "SCALAR", gt.UNSIGNED_SHORT)
+    tex = b.image_png(np.array([[[64, 255, 255, 255]]], np.uint8))
+    mat = gt.Material(pbrMetallicRoughness=gt.PbrMetallicRoughness(metallicFactor=0, roughnessFactor=1))
+    b.g.materials = [mat]
+    b.g.meshes = [gt.Mesh(primitives=[gt.Primitive(indices=idx, material=0,
+        attributes=gt.Attributes(POSITION=pos, TEXCOORD_0=uv))])]
+    b.g.nodes, b.g.scenes = [gt.Node(mesh=0)], [gt.Scene(nodes=[0])]
+    body = '<object3D id="o" primitive="mesh" mesh="m"/>'
+    lights = '<light id="a" type="ambient" intensity="1"/>'
+    def render(name):
+        path = b.save(tmp_path / f"{name}.gltf")
+        return frame(doc(tmp_path, body, assets=f'<mesh id="m" src="{path}" format="gltf"/>',
+                         lights=lights, name=f"{name}.xml"))
+    reference = render("plain")
+    mat.occlusionTexture = gt.OcclusionTextureInfo(index=tex, strength=strength)
+    actual = render("occluded")
+    assert reference[45, 80, :3].min() > .1
+    np.testing.assert_allclose(actual[..., :3], reference[..., :3] * (1 - strength + strength * 64 / 255),
+                               atol=1e-5)
+    np.testing.assert_array_equal(actual[..., 3], reference[..., 3])
+
+
 # ---------------------------------------------------------------- geometry / projection
 def test_object_projects_to_the_expected_pixel(tmp_path):
     r = doc(tmp_path, '<camera id="c" z="1000" fov="60"/>'

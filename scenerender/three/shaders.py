@@ -3,12 +3,26 @@
 MAXL = 16
 MAXS = 8
 
+MAP_SAMPLE = """
+vec4 mapSample(sampler2D image, vec2 uv, ivec2 mirror) {
+    // Reflection stays in the fragment stage. Explicit gradients avoid a
+    // spurious change in mip level where a derivative quad straddles a fold.
+    vec2 tile = mod(uv, 2.0);
+    vec2 reflected = 1.0 - abs(tile - 1.0);
+    vec2 direction = mix(vec2(1.0), mix(vec2(-1.0), vec2(1.0), lessThan(tile, vec2(1.0))), bvec2(mirror));
+    vec2 sampleUV = mix(uv, reflected, bvec2(mirror));
+    return textureGrad(image, sampleUV, dFdx(uv) * direction, dFdy(uv) * direction);
+}
+"""
+
 MAIN_VS = """
 #version 410
 in vec3 in_pos; in vec3 in_nrm; in vec2 in_uv; in vec4 in_tan; in vec4 in_col;
+in vec2 in_nrmuv; in vec2 in_mruv; in vec2 in_occuv; in vec2 in_emisuv;
 in vec4 in_m0; in vec4 in_m1; in vec4 in_m2; in vec4 in_m3;
 uniform mat4 u_view; uniform mat4 u_proj; uniform vec2 u_uvScale;
 out vec3 v_wpos; out vec3 v_nrm; out vec2 v_uv; out vec4 v_tan; out vec4 v_col; out float v_vdepth;
+out vec2 v_nrmuv; out vec2 v_mruv; out vec2 v_occuv; out vec2 v_emisuv;
 void main() {
     mat4 M = mat4(in_m0, in_m1, in_m2, in_m3);
     vec4 wp = M * vec4(in_pos, 1.0);
@@ -18,6 +32,8 @@ void main() {
     vec3 t = M3 * in_tan.xyz;
     v_tan = vec4(length(t) > 1e-12 ? normalize(t) : vec3(1, 0, 0), in_tan.w * sign(determinant(M3)));
     v_uv = in_uv * u_uvScale;
+    v_nrmuv = in_nrmuv * u_uvScale; v_mruv = in_mruv * u_uvScale;
+    v_occuv = in_occuv * u_uvScale; v_emisuv = in_emisuv * u_uvScale;
     v_col = in_col;
     vec4 vp = u_view * wp;
     v_vdepth = -vp.z;
@@ -31,6 +47,7 @@ MAIN_FS = """
 #define MAXS @MAXS@
 #define PI 3.14159265358979
 in vec3 v_wpos; in vec3 v_nrm; in vec2 v_uv; in vec4 v_tan; in vec4 v_col; in float v_vdepth;
+in vec2 v_nrmuv; in vec2 v_mruv; in vec2 v_occuv; in vec2 v_emisuv;
 layout(location = 0) out vec4 o_color;
 layout(location = 1) out vec4 o_depth;
 
@@ -43,7 +60,9 @@ uniform vec3 u_attCol; uniform float u_attDist; uniform vec3 u_sheenCol; uniform
 uniform float u_spec; uniform vec3 u_specCol; uniform float u_irid; uniform float u_iridIor; uniform float u_iridThick;
 uniform float u_aniso; uniform float u_anisoRot; uniform float u_disp; uniform float u_nScale; uniform float u_modelScale;
 uniform sampler2D t_base; uniform sampler2D t_nrm; uniform sampler2D t_mr; uniform sampler2D t_occ; uniform sampler2D t_emis;
+uniform ivec2 u_baseMirror; uniform ivec2 u_nrmMirror; uniform ivec2 u_mrMirror; uniform ivec2 u_occMirror; uniform ivec2 u_emisMirror;
 uniform int u_hasBase; uniform int u_hasNrm; uniform int u_hasMR; uniform int u_hasOcc; uniform int u_hasEmis;
+uniform float u_occStrength;
 uniform int u_receiveShadow;
 // lights
 uniform int u_nl;
@@ -64,6 +83,7 @@ uniform int u_hasOpaque; uniform sampler2D t_opaque; uniform mat4 u_viewProj; un
 
 const mat3 XYZ_TO_REC709 = mat3(3.2404542, -0.9692660, 0.0556434, -1.5371385, 1.8760108, -0.2040259,
                                 -0.4985314, 0.0415560, 1.0572252);
+@MAP_SAMPLE@
 float sq(float x) { return x * x; }
 vec3 sq(vec3 x) { return x * x; }
 float max3(vec3 v) { return max(v.x, max(v.y, v.z)); }
@@ -341,7 +361,7 @@ vec3 srgbDecode(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.
 
 void main() {
     vec4 base = u_base * v_col;
-    if (u_hasBase == 1) base *= texture(t_base, v_uv);
+    if (u_hasBase == 1) base *= mapSample(t_base, v_uv, u_baseMirror);
     float alpha = base.a;
     if (u_alphaMode == 1) { if (alpha < u_cutoff) discard; alpha = 1.0; }
     else if (u_alphaMode == 0) alpha = 1.0;
@@ -350,7 +370,7 @@ void main() {
     vec3 V = u_ortho > 0.5 ? -u_camFwd : normalize(u_eye - v_wpos);
     vec3 T = v_tan.xyz;
     if (dot(T, T) < 1e-8) {
-        vec3 dp1 = dFdx(v_wpos); vec3 dp2 = dFdy(v_wpos); vec2 du1 = dFdx(v_uv); vec2 du2 = dFdy(v_uv);
+        vec3 dp1 = dFdx(v_wpos); vec3 dp2 = dFdy(v_wpos); vec2 du1 = dFdx(v_nrmuv); vec2 du2 = dFdy(v_nrmuv);
         T = dp1 * du2.y - dp2 * du1.y;
         if (dot(T, T) < 1e-12) T = abs(Ng.y) < 0.99 ? cross(vec3(0, 1, 0), Ng) : vec3(1, 0, 0);
     }
@@ -359,16 +379,16 @@ void main() {
     if (u_doubleSided == 1 && !gl_FrontFacing) B = -B;
     vec3 N = Ng;
     if (u_hasNrm == 1) {
-        vec3 tn = texture(t_nrm, v_uv).xyz * 2.0 - 1.0;
+        vec3 tn = mapSample(t_nrm, v_nrmuv, u_nrmMirror).xyz * 2.0 - 1.0;
         tn.xy *= u_nScale;
         N = normalize(mat3(T, B, Ng) * tn);
     }
     float rough = u_rough; float metal = u_metal;
-    if (u_hasMR == 1) { vec4 mr = texture(t_mr, v_uv); rough *= mr.g; metal *= mr.b; }
+    if (u_hasMR == 1) { vec4 mr = mapSample(t_mr, v_mruv, u_mrMirror); rough *= mr.g; metal *= mr.b; }
     rough = clamp(rough, 0.03, 1.0);
     vec3 emis = u_emis;
-    if (u_hasEmis == 1) emis *= texture(t_emis, v_uv).rgb;
-    float ao = u_hasOcc == 1 ? texture(t_occ, v_uv).r : 1.0;
+    if (u_hasEmis == 1) emis *= mapSample(t_emis, v_emisuv, u_emisMirror).rgb;
+    float ao = u_hasOcc == 1 ? mix(1.0, mapSample(t_occ, v_occuv, u_occMirror).r, u_occStrength) : 1.0;
     if (u_unlit == 1) {
         vec3 c = base.rgb * u_exposure;
         o_color = vec4(c * alpha, alpha);
@@ -481,7 +501,7 @@ void main() {
     o_color = vec4(col * a, a);
     o_depth = vec4(v_vdepth * a, 0.0, 0.0, a);
 }
-""".replace("@MAXL@", str(MAXL)).replace("@MAXS@", str(MAXS))
+""".replace("@MAXL@", str(MAXL)).replace("@MAXS@", str(MAXS)).replace("@MAP_SAMPLE@", MAP_SAMPLE)
 
 DEPTH_VS = """
 #version 410
@@ -503,16 +523,18 @@ DEPTH_FS = """
 in vec3 v_wpos; in vec2 v_uv;
 uniform int u_mode; uniform vec3 u_lp; uniform vec3 u_ldir;
 uniform int u_alphaMode; uniform float u_cutoff; uniform float u_alpha; uniform int u_hasBase; uniform sampler2D t_base;
+uniform ivec2 u_baseMirror;
 out vec4 o;
+@MAP_SAMPLE@
 void main() {
     if (u_alphaMode == 1) {
-        float a = u_alpha * (u_hasBase == 1 ? texture(t_base, v_uv).a : 1.0);
+        float a = u_alpha * (u_hasBase == 1 ? mapSample(t_base, v_uv, u_baseMirror).a : 1.0);
         if (a < u_cutoff) discard;
     }
     float m = u_mode == 1 ? dot(v_wpos - u_lp, u_ldir) : length(v_wpos - u_lp);
     o = vec4(m, 0.0, 0.0, 1.0);
 }
-"""
+""".replace("@MAP_SAMPLE@", MAP_SAMPLE)
 
 BG_VS = """
 #version 410

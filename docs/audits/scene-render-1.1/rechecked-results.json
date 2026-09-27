@@ -1,0 +1,588 @@
+{
+  "inventory": {
+    "node": {
+      "schema_count": 13,
+      "registered_count": 13,
+      "schema_names": [
+        "group",
+        "sequence",
+        "layer",
+        "shape",
+        "object3D",
+        "camera",
+        "particleEmitter",
+        "instance",
+        "include",
+        "repeat",
+        "adjustment",
+        "transition",
+        "skeleton"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "asset": {
+      "schema_count": 15,
+      "registered_count": 15,
+      "schema_names": [
+        "image",
+        "video",
+        "imageSequence",
+        "audio",
+        "text",
+        "vector",
+        "mesh",
+        "lottie",
+        "font",
+        "generator",
+        "chart",
+        "audiogram",
+        "code",
+        "formula",
+        "generated"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "blend": {
+      "schema_count": 35,
+      "registered_count": 35,
+      "schema_names": [
+        "normal",
+        "dissolve",
+        "add",
+        "plus-lighter",
+        "multiply",
+        "screen",
+        "overlay",
+        "difference",
+        "exclusion",
+        "subtract",
+        "divide",
+        "darken",
+        "lighten",
+        "darker-color",
+        "lighter-color",
+        "color-dodge",
+        "color-burn",
+        "linear-dodge",
+        "linear-burn",
+        "soft-light",
+        "hard-light",
+        "linear-light",
+        "vivid-light",
+        "pin-light",
+        "hard-mix",
+        "hue",
+        "saturation",
+        "color",
+        "luminosity",
+        "stencil-alpha",
+        "stencil-luma",
+        "silhouette-alpha",
+        "silhouette-luma",
+        "alpha-add",
+        "behind"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "effect": {
+      "schema_count": 80,
+      "registered_count": 80,
+      "schema_names": [
+        "glow",
+        "bloom",
+        "blur",
+        "color-grade",
+        "vignette",
+        "lens-flare",
+        "drop-shadow",
+        "lighting",
+        "directional-blur",
+        "radial-blur",
+        "zoom-blur",
+        "lens-blur",
+        "pixel-motion-blur",
+        "tilt-shift",
+        "lift-gamma-gain",
+        "cdl",
+        "lut",
+        "curves",
+        "levels",
+        "white-balance",
+        "exposure",
+        "hue-saturation",
+        "tonemap",
+        "tint",
+        "tritone",
+        "gradient-map",
+        "grayscale",
+        "sepia",
+        "invert",
+        "posterize",
+        "threshold",
+        "color-overlay",
+        "gradient-overlay",
+        "selective-color",
+        "film-grain",
+        "noise",
+        "chromatic-aberration",
+        "sharpen",
+        "unsharp-mask",
+        "halation",
+        "light-leak",
+        "light-sweep",
+        "glitch",
+        "rgb-split",
+        "scanlines",
+        "vhs",
+        "halftone",
+        "pixelate",
+        "mosaic",
+        "emboss",
+        "bevel",
+        "inner-shadow",
+        "inner-glow",
+        "long-shadow",
+        "stroke",
+        "outline",
+        "echo",
+        "posterize-time",
+        "letterbox",
+        "mirror",
+        "kaleidoscope",
+        "tile",
+        "displacement-map",
+        "turbulent-displace",
+        "wave-warp",
+        "ripple",
+        "twirl",
+        "spherize",
+        "bulge",
+        "lens-distortion",
+        "heat-haze",
+        "chroma-key",
+        "luma-key",
+        "difference-key",
+        "spill-suppress",
+        "matte-choke",
+        "fill",
+        "fractal-noise",
+        "god-rays",
+        "shader"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "transition": {
+      "schema_count": 35,
+      "registered_count": 35,
+      "schema_names": [
+        "cut",
+        "crossfade",
+        "additive-dissolve",
+        "dip-to-color",
+        "wipe",
+        "slide",
+        "push",
+        "cover",
+        "reveal",
+        "zoom-in",
+        "zoom-out",
+        "spin",
+        "whip-pan",
+        "circle-open",
+        "circle-close",
+        "iris",
+        "clock-wipe",
+        "radial-wipe",
+        "barn-door",
+        "blinds",
+        "luma",
+        "blur",
+        "glitch",
+        "pixelize",
+        "flip",
+        "cube",
+        "page-curl",
+        "film-roll",
+        "stripe",
+        "squash",
+        "shuffle",
+        "carousel",
+        "light-leak",
+        "morph",
+        "shader"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "shapeModifier": {
+      "schema_count": 9,
+      "registered_count": 9,
+      "schema_names": [
+        "repeater",
+        "offset-path",
+        "pucker-bloat",
+        "zig-zag",
+        "twist",
+        "round-corners",
+        "wiggle-path",
+        "merge",
+        "trim"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "deform": {
+      "schema_count": 14,
+      "registered_count": 14,
+      "schema_names": [
+        "bend",
+        "twist",
+        "wave",
+        "squash",
+        "stretch",
+        "mesh-warp",
+        "puppet",
+        "skin",
+        "bulge",
+        "pinch",
+        "spherize",
+        "ripple",
+        "turbulence",
+        "corner-pin"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "textAnimator": {
+      "schema_count": 24,
+      "registered_count": 31,
+      "schema_names": [
+        "typewriter",
+        "fade-in",
+        "fade-out",
+        "word-by-word",
+        "letter-by-letter",
+        "line-by-line",
+        "slide-up",
+        "slide-down",
+        "slide-left",
+        "slide-right",
+        "pop",
+        "scale-in",
+        "blur-in",
+        "wave",
+        "bounce",
+        "spin",
+        "ascend",
+        "shift",
+        "scramble",
+        "counter",
+        "karaoke",
+        "highlight",
+        "tracking-in",
+        "mask-reveal"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "audioEffect": {
+      "schema_count": 16,
+      "registered_count": 16,
+      "schema_names": [
+        "eq",
+        "highpass",
+        "lowpass",
+        "compressor",
+        "limiter",
+        "gate",
+        "de-esser",
+        "reverb",
+        "delay",
+        "chorus",
+        "pitch-shift",
+        "noise-reduction",
+        "stereo-width",
+        "gain",
+        "distortion",
+        "telephone"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "caption": {
+      "schema_count": 13,
+      "registered_count": 13,
+      "schema_names": [
+        "classic",
+        "boxed-line",
+        "boxed-word",
+        "one-word",
+        "karaoke",
+        "highlight",
+        "pop",
+        "fade",
+        "bounce",
+        "slide",
+        "typewriter",
+        "enlarge",
+        "none"
+      ],
+      "missing": [],
+      "non_full": {}
+    },
+    "codec": {
+      "schema_count": 15,
+      "registered_count": 15,
+      "schema_names": [
+        "h264",
+        "h265",
+        "ffv1",
+        "av1",
+        "vp9",
+        "prores",
+        "dnxhr",
+        "gif",
+        "apng",
+        "webp",
+        "png-sequence",
+        "jpeg-sequence",
+        "exr-sequence",
+        "tiff-sequence",
+        "audio-only"
+      ],
+      "missing": [],
+      "non_full": {
+        "gif": {
+          "level": "partial",
+          "note": "GIF format limits: <= 256 colours per frame (global or per-frame palettes chosen from the frames' colour spread) and 1-bit transparency (alpha ordered-dithered with an 8x8 Bayer matrix)"
+        }
+      }
+    },
+    "declarations": {
+      "element": 131,
+      "attribute": 1151,
+      "complexType": 116,
+      "simpleType": 167
+    },
+    "cross_cutting_registry": {
+      "registered_count": 182,
+      "non_full": {}
+    },
+    "schema_sha256": "3d0ecb499bc682ab69405a7f57dccfe1a659abbc3dbcb5a33897a17e28b3c603",
+    "base_commit": "3510103590da132390da9687b74760ae6bdc76ac",
+    "python": "3.12.3"
+  },
+  "visibility_animation": {
+    "evaluated_visible": false,
+    "painted_pixels": 0
+  },
+  "instance_visibility_override": {
+    "painted_pixels": 0
+  },
+  "repeat_current_item": {
+    "first_row_left": 10,
+    "second_row_left": 40,
+    "expected": [
+      10,
+      40
+    ]
+  },
+  "repeat_opacity": {
+    "alpha": [
+      128,
+      64
+    ],
+    "expected_approx": [
+      128,
+      64
+    ]
+  },
+  "repeat_references": {
+    "copied_parent_ids": [
+      "p#0",
+      "p#1"
+    ],
+    "original_parent_exists": false,
+    "rendered_x": 20,
+    "expected_x": 20
+  },
+  "include_relative_paths": {
+    "resolved_asset": "/tmp/scene-render-schema-audit/sub/red.png",
+    "resolved_exists": true,
+    "correct_asset_exists": true,
+    "painted_pixels": 400
+  },
+  "include_property_references": {
+    "link_source": "inc/a.x",
+    "expression": "prop('a.x')",
+    "rendered_x": [
+      30,
+      30,
+      30
+    ],
+    "expected": [
+      30,
+      30,
+      30
+    ]
+  },
+  "include_tokens": {
+    "tokens": {
+      "accent": "#0000ff",
+      "inc/accent": "#ff0000"
+    },
+    "parent_rgb": [
+      0,
+      0,
+      255
+    ],
+    "expected_parent_rgb": [
+      0,
+      0,
+      255
+    ]
+  },
+  "include_cycle": {
+    "error": "SceneError",
+    "message": "include cycle: /tmp/scene-render-schema-audit/cycle.xml -> /tmp/scene-render-schema-audit/cycle.xml"
+  },
+  "conic_user_units": {
+    "user_painted_pixels": 10000,
+    "equivalent_object_painted_pixels": 10000
+  },
+  "conic_midpoint": {
+    "changed_channels": 29763,
+    "values": [
+      ".1",
+      ".9"
+    ]
+  },
+  "gradient_dither": {
+    "changed_channels": 7461,
+    "values": [
+      "true",
+      "false"
+    ]
+  },
+  "radial_animation_without_base": {
+    "evaluated_fx": 0.2,
+    "changed_channels_when_redundant_base_added": 0
+  },
+  "condition_truthiness": {
+    "expression_language_truthiness": true,
+    "painted_pixels": 400
+  },
+  "adaptive_motion_blur": {
+    "changed_channels": 0,
+    "adaptive_painted_pixels": 840,
+    "full_painted_pixels": 840
+  },
+  "animated_z": {
+    "evaluated_z": 2.0,
+    "rgb": [
+      255,
+      0,
+      0
+    ],
+    "expected_rgb": [
+      255,
+      0,
+      0
+    ]
+  },
+  "animated_shape": {
+    "evaluated_shape": "ellipse",
+    "corner_alpha": 0,
+    "expected_corner_alpha": 0
+  },
+  "sequence_media_clock": {
+    "sequence_rgb": [
+      0,
+      0,
+      255
+    ],
+    "equivalent_direct_rgb": [
+      0,
+      0,
+      255
+    ]
+  },
+  "sequence_time_stretch": {
+    "video_window": [
+      0.0,
+      2.0
+    ],
+    "next_child_window": [
+      2.0,
+      3.0
+    ],
+    "expected_video_window": [
+      0,
+      2
+    ]
+  },
+  "instance_scoped_reference": {
+    "scoped_id_indexed": false,
+    "consumer_x": 30,
+    "expected_x": 30
+  },
+  "group_stretch": {
+    "changed_channels": 4800,
+    "painted_pixels": 1600
+  },
+  "include_sha256": {
+    "incorrect_hash_accepted": false,
+    "rejection": "include inc: sha256 mismatch for /tmp/scene-render-schema-audit/sub/hash.xml"
+  },
+  "include_strict": {
+    "invalid_child_rejected_directly": true,
+    "strict_parent_still_draws_invalid_child": false,
+    "rejection": "schema validation failed:\n  3: Element 'shape', attribute 'unexpected': The attribute 'unexpected' is not allowed."
+  },
+  "version_gate": {
+    "declared_version": "1.0",
+    "new_1_1_node_rendered": true,
+    "referenced_schematron_exists": true
+  },
+  "validated_fixtures": [
+    "visibility.xml",
+    "instance_visibility.xml",
+    "repeat_param.xml",
+    "repeat_opacity.xml",
+    "repeat_parent.xml",
+    "sub/relative.xml",
+    "include_relative.xml",
+    "sub/links.xml",
+    "include_links.xml",
+    "sub/tokens.xml",
+    "include_tokens.xml",
+    "cycle.xml",
+    "conic_user.xml",
+    "conic_object.xml",
+    "conicGradient_midpoint_a.xml",
+    "conicGradient_midpoint_b.xml",
+    "linearGradient_dither_a.xml",
+    "linearGradient_dither_b.xml",
+    "radial_no_base.xml",
+    "radial_base.xml",
+    "condition.xml",
+    "blur_adaptive.xml",
+    "blur_full.xml",
+    "animated_z.xml",
+    "animated_shape.xml",
+    "sequence_media.xml",
+    "sequence_media_control.xml",
+    "sequence_stretch.xml",
+    "instance_scoped_reference.xml",
+    "group_stretch.xml",
+    "group_start.xml",
+    "sub/hash.xml",
+    "include_hash.xml",
+    "include_strict.xml",
+    "version_gate.xml"
+  ]
+}

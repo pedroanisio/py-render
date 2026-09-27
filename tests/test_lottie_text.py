@@ -49,6 +49,32 @@ def centre(a):
     return np.array([(a * (x + .5)).sum(), (a * (y + .5)).sum()]) / a.sum()
 
 
+@pytest.mark.parametrize("text_path", [False, True])
+def test_embedded_glyph_outlines_advances_and_text_animators(tmp_path, text_path):
+    d = animation("AA")
+    d["fonts"]["list"][0].update(fFamily="Unavailable Embedded Font", ascent=80)
+    doc = d["layers"][0]["t"]["d"]["k"][0]["s"]
+    doc["s"] = 50
+    d["chars"] = [{"ch": "A", "fFamily": "Unavailable Embedded Font", "style": "Regular", "w": 100,
+                   "data": {"shapes": [{"ty": "gr", "it": [
+                       {"ty": "sh", "ks": L._static(shape([[0, -80], [60, -80], [60, 0], [0, 0]], True))}, L._tr()]}]}}]
+    d["layers"][0]["ks"]["p"] = L._static([20, 90, 0])
+    if text_path:
+        d["layers"][0]["ks"]["p"] = L._static([0, 0, 0])
+        with_path(d, ((20, 90), (180, 90)))
+    px = pixels(renderer(tmp_path, d))
+    assert px[60:85, 23:47].min() > .9        # embedded rectangular A, no font substitution
+    assert px[60:85, 73:97].min() > .9        # advance = 100 * 50/100
+    assert px[:, 51:69].max() == 0
+    assert px.sum() == pytest.approx(2400, abs=3)
+    animated = copy.deepcopy(d)
+    animated["layers"][0]["t"]["a"] = [{"s": {"r": 1, "b": 1, "sh": 1, "s": L._static(0),
+                                                   "e": L._static(100), "a": L._static(100)},
+                                              "a": {"p": L._static([0, 15, 0])}}]
+    moved = pixels(renderer(tmp_path, animated))
+    np.testing.assert_allclose(centre(moved) - centre(px), [0, 15], atol=.1)
+
+
 def test_text_path_renders_at_mask_baseline_and_rotates(tmp_path):
     horizontal = pixels(renderer(tmp_path, with_path(animation())))
     assert 20 < centre(horizontal)[0] < 65 and 55 < centre(horizontal)[1] < 80

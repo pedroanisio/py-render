@@ -80,6 +80,58 @@ class Builder:
 TRI_POS = [[0, 0, 0], [1, 0, 0], [0, 2, 0]]
 
 
+@pytest.mark.parametrize("size,ctype", [(2, gl.UNSIGNED_BYTE), (3, gl.UNSIGNED_BYTE),
+                                         (3, gl.UNSIGNED_SHORT)])
+@pytest.mark.parametrize("sparse", [False, True])
+def test_gltf_padded_matrix_accessors(tmp_path, size, ctype, sparse):
+    from scenerender.three.loaders import _Gltf
+    b = Builder()
+    dt = np.dtype("u1" if ctype == gl.UNSIGNED_BYTE else "<u2")
+    values = np.arange(1, 2 * size * size + 1, dtype=dt).reshape(2, size, size)
+
+    def padded(matrices):
+        data = bytearray()
+        for mat in matrices:
+            for col in mat:
+                data += col.tobytes()
+                data += b"\xff" * (-len(data) % 4)
+        # The last column is permitted to omit its padding.
+        padding = -size * dt.itemsize % 4
+        return bytes(data[:-padding] if padding else data)
+
+    a = gl.Accessor(componentType=ctype, count=2, type=f"MAT{size}")
+    if sparse:
+        a.sparse = gl.Sparse(count=1,
+                            indices=gl.AccessorSparseIndices(bufferView=b._view(b"\x01"),
+                                                            componentType=gl.UNSIGNED_BYTE),
+                            values=gl.AccessorSparseValues(bufferView=b._view(padded(values[1:]))))
+        expected = values.reshape(2, -1).copy()
+        expected[0] = 0
+    else:
+        a.bufferView = b._view(padded(values))
+        expected = values.reshape(2, -1)
+    b.g.accessors = [a]
+    np.testing.assert_array_equal(_Gltf(b.save(tmp_path / "mat.gltf")).accessor(0), expected)
+
+
+@pytest.mark.parametrize("glb", [False, True])
+def test_gltf_all_joint_sets_affect_pose(tmp_path, glb):
+    b = Builder()
+    attrs = {"POSITION": b.add(TRI_POS, "VEC3")}
+    for i in range(2):
+        attrs[f"JOINTS_{i}"] = b.add([list(range(i * 4, i * 4 + 4))] * 3,
+                                     "VEC4", gl.UNSIGNED_SHORT)
+        attrs[f"WEIGHTS_{i}"] = b.add([[.125] * 4] * 3, "VEC4")
+    b.g.meshes = [gl.Mesh(primitives=[gl.Primitive(attributes=gl.Attributes(**attrs))])]
+    b.g.nodes = [gl.Node(mesh=0, skin=0)] + [gl.Node(translation=[float(i), 0, 0]) for i in range(8)]
+    b.g.skins = [gl.Skin(joints=list(range(1, 9)))]
+    b.g.scenes = [gl.Scene(nodes=list(range(9)))]
+    model = load_model(b.save(tmp_path / ("all.glb" if glb else "all.gltf"), glb=glb))
+    assert model.meshes[0][0].weights.shape == (3, 8)
+    expected = np.asarray(TRI_POS) + [3.5, 0, 0]
+    np.testing.assert_allclose(model.pose(None, 0)[0].positions, expected)
+
+
 def skinned_gltf(tmp_path) -> str:
     b = Builder()
     pos = b.add(TRI_POS, "VEC3")
@@ -207,7 +259,7 @@ def test_variants_materials_textures_glb(tmp_path):
     p = it.material.params
     assert p["baseColor"] == (1, 0, 0, 1) and p["alphaMode"] == "mask" and p["alphaCutoff"] == pytest.approx(0.3)
     assert p["emissiveStrength"] == 4.0 and p["unlit"] and p["doubleSided"]
-    assert p["anisotropyRotation"] == pytest.approx(90.0) and p["uvTransform"]["scale"] == (2, 2)
+    assert p["anisotropyRotation"] == pytest.approx(90.0) and p["mapUV"]["baseColorMap"]["scale"] == (2, 2)
     bc = it.material.textures["baseColorMap"]
     assert bc.shape == (1, 2, 4) and bc.dtype == np.float32
     np.testing.assert_allclose(bc[0, 0, 1], srgb_to_linear(np.array(128 / 255)), atol=1e-6)
@@ -231,9 +283,51 @@ def test_sparse_accessor_and_strip(tmp_path):
     b.g.scenes = [gl.Scene(nodes=[0])]
     m = load_model(b.save(tmp_path / "sparse.gltf"))
     prim = m.meshes[0]
-    assert len(prim) == 1                                                  # lines skipped
-    np.testing.assert_allclose(prim[0].positions[3], [5, 5, 5])
-    np.testing.assert_array_equal(prim[0].indices, [[0, 1, 2], [2, 1, 3]])
+    assert len(prim) == 2
+    assert prim[1].mode == gl.LINES
+    np.testing.assert_array_equal(prim[1].indices, [0, 1, 2, 3])
+    np.testing.assert_allclose(prim[0].positions[prim[0].indices],
+                               [[[0, 0, 0], [1, 0, 0], [0, 1, 0]], [[0, 1, 0], [1, 0, 0], [5, 5, 5]]])
+
+
+def test_gltf_flat_normals_and_default_material_follow_morph(tmp_path):
+    b = Builder()
+    pos = b.add([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], "VEC3")
+    tangent = b.add([[1, 0, 0, 1]] * 4, "VEC4")
+    uv = b.add([[0, 0], [1, 0], [0, 1], [1, 1]], "VEC2")
+    idx = b.add([0, 1, 2, 0, 3, 1], "SCALAR", gl.UNSIGNED_SHORT)
+    delta = b.add([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 0, 0]], "VEC3")
+    b.g.meshes = [gl.Mesh(primitives=[gl.Primitive(indices=idx,
+        attributes=gl.Attributes(POSITION=pos, TEXCOORD_0=uv, TANGENT=tangent), targets=[{"POSITION": delta}])])]
+    b.g.nodes, b.g.scenes = [gl.Node(mesh=0)], [gl.Scene(nodes=[0])]
+    model = load_model(b.save(tmp_path / "flat.gltf"))
+    for weight in (0., 1.):
+        item = model.pose(None, 0, morph_override=[weight])[0]
+        faces = item.positions[item.indices]
+        normals = np.cross(faces[:, 1] - faces[:, 0], faces[:, 2] - faces[:, 0])
+        normals /= np.linalg.norm(normals, axis=1)[:, None]
+        np.testing.assert_allclose(item.normals[item.indices], np.repeat(normals[:, None], 3, axis=1), atol=1e-6)
+        assert not np.allclose(normals[0], normals[1])
+        assert item.tangents is None
+        assert item.material.params["baseColor"] == (1, 1, 1, 1)
+        assert item.material.params["metallic"] == item.material.params["roughness"] == 1
+        np.testing.assert_array_equal(item.uvs, [[0, 0], [1, 0], [0, 1], [0, 0], [1, 1], [1, 0]])
+
+
+def test_gltf_partial_normal_and_tangent_morph_targets(tmp_path):
+    b = Builder()
+    pos = b.add(TRI_POS, "VEC3")
+    nrm = b.add([[0, 0, 1]] * 3, "VEC3")
+    tan = b.add([[1, 0, 0, -1]] * 3, "VEC4")
+    dn = b.add([[0, 1, 0]] * 3, "VEC3")
+    dt = b.add([[0, 0, -1]] * 3, "VEC3")
+    b.g.meshes = [gl.Mesh(primitives=[gl.Primitive(attributes=gl.Attributes(POSITION=pos, NORMAL=nrm, TANGENT=tan),
+                                                 targets=[{"NORMAL": dn}, {"TANGENT": dt}])])]
+    b.g.nodes, b.g.scenes = [gl.Node(mesh=0)], [gl.Scene(nodes=[0])]
+    model = load_model(b.save(tmp_path / "normal-tangent.gltf"))
+    item = model.pose(None, 0, morph_override=[1, .5])[0]
+    np.testing.assert_allclose(item.normals, [[0, 1 / np.sqrt(2), 1 / np.sqrt(2)]] * 3, atol=1e-6)
+    np.testing.assert_allclose(item.tangents, [[1 / np.sqrt(1.25), 0, -.5 / np.sqrt(1.25), -1]] * 3, atol=1e-6)
 
 
 def test_model_cache(tmp_path):
@@ -423,6 +517,84 @@ def test_usd_skel(tmp_path):
     np.testing.assert_allclose(moved.positions[:2], TRI_POS[:2], atol=1e-6)
 
 
+def test_usd_native_transform_sampling_preserves_shear_and_rotation_ops(tmp_path):
+    from pxr import Gf, Usd, UsdGeom
+    path = str(tmp_path / "shear.usda")
+    stage = Usd.Stage.CreateNew(path)
+    stage.SetTimeCodesPerSecond(24)
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+    mesh = UsdGeom.Mesh.Define(stage, "/Tri")
+    mesh.CreatePointsAttr(TRI_POS)
+    mesh.CreateFaceVertexCountsAttr([3])
+    mesh.CreateFaceVertexIndicesAttr([0, 1, 2])
+    shear = mesh.AddTransformOp()
+    for t, v in ((0, .2), (24, .8)):
+        m = Gf.Matrix4d(1)
+        m[1, 0] = v
+        shear.Set(m, t)
+    rotate = mesh.AddRotateZOp()
+    rotate.Set(0, 0)
+    rotate.Set(270, 24)        # Native op interpolation traverses 270°, not the shortest quaternion arc.
+    stage.GetRootLayer().Save()
+    model = load_model(path)
+    clip = model.clip("default")
+    for t in (.75, .25, .5, .75):
+        matrix = np.asarray(mesh.GetLocalTransformation(Usd.TimeCode(t * 24)))
+        expected = np.c_[TRI_POS, np.ones(3)] @ matrix
+        posed = model.pose(clip, t)[0]
+        np.testing.assert_allclose(posed.positions, expected[:, :3], atol=1e-6)
+        assert not posed.static
+
+
+@pytest.mark.parametrize("face_varying", [False, True])
+def test_usd_blend_shapes_with_inbetweens_normals_and_weight_order(tmp_path, face_varying):
+    from pxr import Sdf, Usd, UsdGeom, UsdSkel
+    path = str(tmp_path / "blends.usda")
+    stage = Usd.Stage.CreateNew(path)
+    stage.SetTimeCodesPerSecond(24)
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+    mesh = UsdGeom.Mesh.Define(stage, "/M")
+    points = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]])
+    mesh.CreatePointsAttr(points.tolist())
+    mesh.CreateFaceVertexCountsAttr([3, 3])
+    mesh.CreateFaceVertexIndicesAttr([0, 1, 2, 0, 2, 3])
+    mesh.CreateNormalsAttr([[0, 0, 1]] * 4)
+    mesh.SetNormalsInterpolation("vertex")
+    if face_varying:
+        uv = UsdGeom.PrimvarsAPI(mesh).CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, "faceVarying")
+        uv.Set([[0, 0]] * 6)
+    binding = UsdSkel.BindingAPI.Apply(mesh.GetPrim())
+    binding.CreateBlendShapesAttr(["smile"])
+    binding.CreateBlendShapeTargetsRel().SetTargets(["/Smile"])
+    shape = UsdSkel.BlendShape.Define(stage, "/Smile")
+    shape.CreatePointIndicesAttr([1])
+    shape.CreateOffsetsAttr([[0, 2, 0]])
+    shape.CreateNormalOffsetsAttr([[0, 1, 0]])
+    between = shape.CreateInbetween("half")
+    between.SetWeight(.5)
+    between.SetOffsets([[1, 1, 0]])
+    between.SetNormalOffsets([[1, 0, 0]])
+    animation = UsdSkel.Animation.Define(stage, "/Anim")
+    animation.CreateBlendShapesAttr(["unused", "smile"])
+    animation.CreateBlendShapeWeightsAttr().Set([1, 0], 0)
+    animation.GetBlendShapeWeightsAttr().Set([0, 1], 24)
+    binding.CreateAnimationSourceRel().SetTargets(["/Anim"])
+    stage.GetRootLayer().Save()
+    model = load_model(path)
+    base = model.pose(None, 0)[0]
+    np.testing.assert_allclose(base.positions, points[[0, 1, 2, 0, 2, 3]] if face_varying else points)
+    for weight, delta, normal in ((.25, [.5, .5, 0], [.5, 0, 1]),
+                                  (.75, [.5, 1.5, 0], [.5, .5, 1]),
+                                  (1., [0, 2, 0], [0, 1, 1])):
+        actual = model.pose(model.clip("default"), weight)[0]
+        expected = base.positions.copy()
+        expected[1] += delta
+        np.testing.assert_allclose(actual.positions, expected, atol=1e-6)
+        np.testing.assert_allclose(actual.normals[1], np.array(normal) / np.linalg.norm(normal), atol=1e-6)
+        override = model.pose(model.clip("default"), .9, [weight])[0]
+        np.testing.assert_allclose(override.positions, expected, atol=1e-6)
+
+
 # ------------------------------------------------------------------ FBX
 FBX = """; FBX 7.4.0 project file
 FBXHeaderExtension:  {
@@ -585,6 +757,42 @@ def test_exr_and_npy(tmp_path):
     np.testing.assert_allclose(load_hdr_image(str(tmp_path / "a.npy")), img, rtol=1e-6)
     Image.fromarray(np.full((2, 2, 3), 128, np.uint8)).save(tmp_path / "g.png")
     np.testing.assert_allclose(load_hdr_image(str(tmp_path / "g.png")), srgb_to_linear(np.full((2, 2, 3), 128 / 255)), atol=1e-6)
+
+
+def test_hdr_old_runs_and_axis_order():
+    from scenerender.three.loaders import _read_rgbe
+    header = b"#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n"
+    # 1 literal + a 256 repeat (zero low byte), then a new literal and 1 repeat.
+    row = bytes([128, 64, 32, 129, 1, 1, 1, 0, 1, 1, 1, 1,
+                 64, 128, 32, 130, 1, 1, 1, 1])
+    expected = np.array([[1, .5, .25]] * 257 + [[1, 2, .5]] * 2, np.float32)
+    got = _read_rgbe(header + b"-Y 2 +X 259\n" + row * 2)
+    np.testing.assert_array_equal(got, np.stack([expected, expected]))
+    # Slow X, reversed both directions: decoding is independent of orientation.
+    got = _read_rgbe(header + b"-X 2 +Y 259\n" + row * 2)
+    np.testing.assert_array_equal(got, np.stack([expected[::-1], expected[::-1]], 1))
+
+
+@pytest.mark.parametrize("payload", [
+    bytes([1, 1, 1, 7]),                         # no preceding literal
+    bytes([128, 0, 0, 129, 1, 1, 1, 8]),         # old run overflows row
+    bytes([128, 0, 0]),                         # truncated literal
+    bytes([2, 2, 0, 8, 137, 128]),               # new run overflows row
+    bytes([2, 2, 0, 8, 0]),                     # empty new run
+    bytes([2, 2, 0, 8, 8, 128]),                # truncated new literal
+])
+def test_hdr_invalid_runs(payload):
+    from scenerender.three.loaders import _read_rgbe
+    with pytest.raises(ValueError):
+        _read_rgbe(b"#?RADIANCE\n\n-Y 1 +X 8\n" + payload)
+
+
+def test_hdr_xyze_converts_to_linear_srgb():
+    from scenerender.three.loaders import _read_rgbe
+    # D65 neutral XYZ, quantized to the shared exponent representation.
+    got = _read_rgbe(b"#?RADIANCE\nFORMAT=32-bit_rle_xyze\n\n-Y 1 +X 1\n"
+                     + bytes([122, 128, 139, 129]))
+    np.testing.assert_allclose(got, np.ones((1, 1, 3)), atol=.015)
 
 
 # ------------------------------------------------------------------ IES

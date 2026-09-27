@@ -330,7 +330,14 @@ def _validate_param(doc: Document, p, value: str, source: str | None) -> None:
 
 
 def _load_data(doc: Document, d) -> list:
-    text = open(doc.resolve_path(d.get("src")), encoding="utf-8").read() if d.get("src") else (d.text or "")
+    if d.get("src"):
+        with open(doc.resolve_path(d.get("src")), "rb") as stream:
+            raw = stream.read()
+    else:
+        raw = (d.text or "").encode("utf-8")
+    if d.get("sha256") and hashlib.sha256(raw).hexdigest() != d.get("sha256"):
+        raise SceneError(f"data {d.get('id')!r}: content does not match sha256")
+    text = raw.decode("utf-8")
     fmt = d.get("format", "json")
     if fmt == "json":
         rows = json.loads(text or "[]")
@@ -719,12 +726,12 @@ def natural_duration(doc: Document, el) -> float:
 
 
 def _schedule_sequences(doc: Document) -> None:
+    """Prepare the inspection snapshot and junctions; runtime timing is evaluated."""
     # Inner sequences first so a nested sequence has a known duration.
     for seq in reversed(list(doc.root.iter("sequence"))):
         cursor, _ = doc.window(seq)
         gap = parse_float(seq.get("timeGap"), 0.0)
         kids = [c for c in doc.nodes(seq) if ln(c) != "transition"]
-        explicit = {(t.get("from"), t.get("to")) for t in seq if ln(t) == "transition"}
         prev = None
         for c in kids:
             dur = natural_duration(doc, c)
@@ -733,8 +740,12 @@ def _schedule_sequences(doc: Document) -> None:
             # The child's subtree runs on a clock that reads 0 at its scheduled start.
             doc.clock_shift[c] = start
             cursor = start + dur + gap
-            if prev is not None and seq.get("transition") and (prev.get("id"), c.get("id")) not in explicit:
-                etree.SubElement(seq, "transition", type=seq.get("transition"), duration=seq.get("transitionDuration", "0.5"),
-                                 **{"from": prev.get("id", ""), "to": c.get("id", "")})
+            if prev is not None:
+                # Keep every junction addressable at runtime: an animation or an
+                # instance override may introduce a transition absent from the XML.
+                etree.SubElement(seq, "transition", type=seq.get("transition", "cut"),
+                                 duration=seq.get("transitionDuration", "0.5"),
+                                 **{"from": prev.get("id", ""), "to": c.get("id", ""),
+                                    INTERNAL + "sequenceTransition": "true"})
             prev = c
         doc.windows[seq] = (doc.window(seq)[0], cursor - gap if kids else doc.window(seq)[0])

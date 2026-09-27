@@ -286,30 +286,26 @@ def value_noise(x, y, seed):
     return (a*(1-fy) + b*fy).astype(np.float32)
 
 
-def source_buf(rc, e, ctx, node=None):
+def source_buf(rc, e, ctx, node=None, *, source=None):
     """Render a second input in its own parent frame; guard recursive references."""
-    sid = rc.ev.str(e, "source", ctx)
-    src = rc.doc.ids.get(sid)
+    sid = rc.ev.str(e, "source", ctx) if source is None else source
+    src, source_ctx = rc.ev.reference(sid or "", e, ctx)
     if src is None:
         if sid:
             warn_once("effect-source", sid, "source node not found")
         return None
     active = rc.cache.setdefault("effect-source-active", set())
-    if src is node or sid in active:
+    key = (src, source_ctx.scope)
+    if (src is node and source_ctx.scope == ctx.scope) or key in active:
         warn_once("effect-source", sid, "recursive source reference skipped")
         return None
-    active.add(sid)
+    active.add(key)
     try:
-        parent = src.getparent()
-        root = parent is None or parent.tag in ("composition", "symbol", "symbols", "scene")
-        pm = rc.root_matrix if root else rc.world_matrix(parent, ctx)
-        box = (rc.doc.width, rc.doc.height)
-        if not root:
-            box = rc.node_size(parent, ctx, box)
-        out = rc.render_node(src, ctx, pm, box, force=True)
+        loc = rc.node_location(src, source_ctx)
+        out = loc.rc.render_node(src, loc.ctx, loc.matrix, loc.box, loc.layout, force=True)
         return None if out is None else result(out.buf, out.buf.px * out.opacity)
     finally:
-        active.remove(sid)
+        active.remove(key)
 
 
 def gradient_colors(rc, e, ctx, u, node=None):

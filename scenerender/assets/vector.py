@@ -242,15 +242,15 @@ def render_svg_subset(rc, cr: cairo.Context, path: str, w: float, h: float) -> b
                       "path/rect/circle/ellipse/line/poly*/g, solid fill/stroke only")
 def render_vector(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None, force_subset: bool = False):
     from ..nodes.core import draw_paths
-    w, h = float(asset.get("width")), float(asset.get("height"))
-    kind = asset.get("shape")
     ev = rc.ev
+    w, h = ev.num(asset, "width", ctx), ev.num(asset, "height", ctx)
+    kind = ev.str(asset, "shape", ctx)
     if kind == "svg":
-        if not asset.get("src"):
+        if not ev.str(asset, "src", ctx):
             warn_once("vector", asset.get("id"), 'shape="svg" without @src')
             return None
         from .video import provenance_src
-        path = provenance_src(rc, asset)
+        path = provenance_src(rc, asset, ctx)
         c = rc.canvas_for(M, w, h, 2)
         if c is None:
             return None
@@ -265,7 +265,7 @@ def render_vector(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None, force_
     if not cmds:
         return None
     x0, y0, x1, y1 = geometry.bounds(cmds)
-    sw = ev.num(asset, "strokeWidth", ctx, 0.0) * (2 if asset.get("strokePosition") == "outside" else 1)
+    sw = ev.num(asset, "strokeWidth", ctx, 0.0) * (2 if ev.str(asset, "strokePosition", ctx) == "outside" else 1)
     pad = sw * max(2.0, ev.num(asset, "miterLimit", ctx, 4.0) / 2) + 2
     from ..raster import Canvas, intersect, transformed_rect
     r = transformed_rect(M, min(0, x0) - pad, min(0, y0) - pad, max(w, x1) + pad, max(h, y1) + pad, 1)
@@ -284,5 +284,4 @@ def render_vector(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None, force_
 
 @ASSET_SIZES.register("vector")
 def vector_size(rc, asset, ctx):
-    return float(asset.get("width")), float(asset.get("height"))
-
+    return rc.ev.num(asset, "width", ctx), rc.ev.num(asset, "height", ctx)

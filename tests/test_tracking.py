@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import sys
@@ -85,9 +86,57 @@ def test_mask_points_and_path(doc):
     assert tr.kind == "mask" and xy(tr.sample(":2", 2.0)) == (130, 60)
     assert mask_path(doc, find_track(doc, "td-planar"), None, 0)[0] == ("M", 100, 100)
     with pytest.raises(tracking.TrackError):
-        tracking.parse_json('{"tracks": {"m": [{"t": 0, "path": "M 0 0 C 1 1 2 2 3 3"}]}}')
+        tracking.parse_json('{"tracks": {"m": [{"t": 0, "path": "M 0 0 C 1 1 2 2 3"}]}}')
     with pytest.raises(tracking.TrackError):                     # vertex count must be fixed
         tracking.parse_json('{"tracks": {"m": [{"t": 0, "points": [[0,0],[1,1]]}, {"t": 1, "points": [[0,0]]}]}}')
+
+
+def test_curved_mask_subpaths_interpolate_and_render(tmp_path):
+    import cairo
+    from scenerender.geometry import emit
+    from scenerender.raster import Canvas
+    data = {"tracks": {"roto": {"keys": [
+        {"t": 0, "path": "M 10 40 C 10 0 70 0 70 40 C 70 80 10 80 10 40 Z M 30 30 v20 h20 v-20 Z"},
+        {"t": 2, "path": "M 30 40 C 30 0 90 0 90 40 C 90 80 30 80 30 40 Z M 50 30 v20 h20 v-20 Z"},
+    ]}}}
+    (tmp_path / "roto.json").write_text(json.dumps(data))
+    path = tmp_path / "track.xml"
+    path.write_text('<scene version="1.1"><project width="100" height="100" fps="10" duration="3"/>'
+                    '<tracking><trackData id="t" src="roto.json" kind="mask" timeOffset=".25"/></tracking>'
+                    '<composition/></scene>')
+    doc = document.load(str(path), strict=True)
+    td = find_track(doc, "t")
+    actual = mask_path(doc, td, None, 1.25)
+    expected = [("M", 20, 40), ("C", 20, 0, 80, 0, 80, 40), ("C", 80, 80, 20, 80, 20, 40), ("Z",),
+                ("M", 40, 30), ("L", 40, 50), ("L", 60, 50), ("L", 60, 30), ("Z",)]
+    assert actual == expected
+    canvas = Canvas((0, 0, 100, 100))
+    canvas.cr.set_fill_rule(cairo.FILL_RULE_WINDING)
+    emit(canvas.cr, actual)
+    canvas.cr.set_source_rgba(1, 1, 1, 1)
+    canvas.cr.fill()
+    alpha = canvas.to_buf(False).px[..., 3]
+    assert alpha[40, 25] == 1 and alpha[40, 50] == 0
+    assert alpha[15, 50] == 1 and alpha[2, 50] == 0
+    tr = load_track(doc, td)
+    assert xy(tr.sample(":1", 1.25)) == (80, 40)
+    assert mask_path(doc, td, None, -10)[0] == ("M", 10, 40)
+    assert mask_path(doc, td, None, 10)[0] == ("M", 30, 40)
+
+
+@pytest.mark.parametrize("path", ["m +10 10 q 10 -10 20 0 t 20 0 z", "M 10 10 C 10 0 20 0 20 10 S 30 20 30 10 z",
+                                  "M 10 10 a 10 10 0 0 1 20 0 Z"])
+def test_tracking_svg_curves_keep_beziers(path):
+    ch = tracking.parse_json(json.dumps({"keys": [{"t": 0, "path": path}]}))["track"]
+    commands = ch.sample(0)["path"]
+    assert commands[0] == ("M", 10, 10) and commands[-1] == ("Z",)
+    assert any(c[0] == "C" for c in commands)
+
+
+@pytest.mark.parametrize("path", ["", "0 0", "M 0", "M 0 0 Z 1", "M 0 0 Q", "M 0 0 X 1 2"])
+def test_malformed_tracking_paths_rejected(path):
+    with pytest.raises(tracking.TrackError):
+        tracking.parse_json(json.dumps({"keys": [{"t": 0, "path": path}]}))
 
 
 def test_face_landmarks(doc):

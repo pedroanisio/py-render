@@ -44,8 +44,8 @@ from .materials import Material
 
 log = logging.getLogger("scenerender")
 
-VFMT = "3f 3f 2f 4f 4f"
-VATTR = ("in_pos", "in_nrm", "in_uv", "in_tan", "in_col")
+VFMT = "3f 3f 2f 4f 4f 2f 2f 2f 2f"
+VATTR = ("in_pos", "in_nrm", "in_uv", "in_tan", "in_col", "in_nrmuv", "in_mruv", "in_occuv", "in_emisuv")
 IFMT = "4f 4f 4f 4f/i"
 IATTR = ("in_m0", "in_m1", "in_m2", "in_m3")
 MSAA = 4
@@ -103,6 +103,33 @@ def _tex(ctx, arr: np.ndarray, mip: bool = True, nearest: bool = False, repeat: 
         t.filter = (moderngl.LINEAR, moderngl.LINEAR)
     t.repeat_x = t.repeat_y = repeat
     return t
+
+
+def _material_texture(ctx, material: Material, key: str, cache: dict):
+    """Cache image uploads with their sampler, including independently wrapped axes."""
+    arr = material.maps[key]
+    sampler = material.p.get("mapSamplers", {}).get(key)
+    ck = (id(arr), tuple(sorted(sampler.items())) if sampler else ())
+    hit = cache.get(ck)
+    if hit is None or hit[0] is not arr:
+        if sampler:
+            minimum, maximum = sampler.get("minFilter", 9987), sampler.get("magFilter", 9729)
+            tex = _tex(ctx, arr, mip=minimum >= 9984)
+            tex.filter = (minimum, maximum)
+            tex.anisotropy = 1.0
+            # Mirrored coordinates are folded in mapSample; clamping at the
+            # folded edge gives the same filter footprint as mirrored repeat.
+            tex.repeat_x = sampler.get("wrapS", 10497) == 10497
+            tex.repeat_y = sampler.get("wrapT", 10497) == 10497
+        else:
+            tex = _tex(ctx, arr)
+        hit = cache[ck] = (arr, tex)
+    return hit[1]
+
+
+def _mirror_axes(material, key):
+    sampler = material.p.get("mapSamplers", {}).get(key, {})
+    return tuple(int(sampler.get(axis) == 33648) for axis in ("wrapS", "wrapT"))
 
 
 def brdf_lut(n: int = 32, samples: int = 256) -> np.ndarray:
@@ -181,6 +208,7 @@ class GPUItem:
     count: int
     tangents: bool
     vaos: dict = field(default_factory=dict)
+    mode: int = 4
 
     def release(self):
         for v in self.vaos.values():
@@ -189,18 +217,22 @@ class GPUItem:
         self.ibo.release()
 
 
-def upload(ctx, positions, normals, uvs, tangents, colors, indices) -> GPUItem:
+def upload(ctx, positions, normals, uvs, tangents, colors, indices, map_uvs=None, mode=4) -> GPUItem:
     n = len(positions)
     uv = uvs if uvs is not None else np.zeros((n, 2), np.float32)
     tan = tangents if tangents is not None else np.zeros((n, 4), np.float32)
     col = colors if colors is not None else np.ones((n, 4), np.float32)
     if col.shape[1] == 3:
         col = np.c_[col, np.ones(n, np.float32)]
+    maps = map_uvs or {}
     data = np.concatenate([np.asarray(positions, np.float32), np.asarray(normals, np.float32),
-                           np.asarray(uv, np.float32), np.asarray(tan, np.float32), np.asarray(col, np.float32)], 1)
+                           np.asarray(maps.get("baseColorMap", uv), np.float32),
+                           np.asarray(tan, np.float32), np.asarray(col, np.float32)] +
+                          [np.asarray(maps.get(k, uv), np.float32) for k in
+                           ("normalMap", "metallicRoughnessMap", "occlusionMap", "emissiveMap")], 1)
     idx = np.ascontiguousarray(np.asarray(indices).reshape(-1), np.uint32)
     return GPUItem(ctx.buffer(np.ascontiguousarray(data, np.float32).tobytes()), ctx.buffer(idx.tobytes()), len(idx),
-                   tangents is not None)
+                   tangents is not None, mode=mode)
 
 
 def item_vao(ctx, item: GPUItem, prog, inst) -> object:
@@ -351,6 +383,7 @@ def _material_uniforms(r: Res, prog, m: Material, tex_cache: dict, unit0: int = 
     _set(prog, "u_anisoRot", math.radians(float(p["anisotropyRotation"])))
     _set(prog, "u_disp", float(p["dispersion"]))
     _set(prog, "u_nScale", float(p["normalScale"]))
+    _set(prog, "u_occStrength", float(p.get("occlusionStrength", 1.0)))
     _set(prog, "u_uvScale", (float(p["uvScaleX"]), float(p["uvScaleY"])))
     unit = unit0
     for name, key, flag in (("t_base", "baseColorMap", "u_hasBase"), ("t_nrm", "normalMap", "u_hasNrm"),
@@ -359,15 +392,11 @@ def _material_uniforms(r: Res, prog, m: Material, tex_cache: dict, unit0: int = 
         arr = m.maps.get(key)
         t = r.white
         if arr is not None:
-            ck = id(arr)
-            hit = tex_cache.get(ck)
-            if hit is None or hit[0] is not arr:
-                hit = (arr, _tex(ctx, arr))
-                tex_cache[ck] = hit
-            t = hit[1]
+            t = _material_texture(ctx, m, key, tex_cache)
         t.use(unit)
         _set(prog, name, unit)
         _set(prog, flag, int(arr is not None))
+        _set(prog, "u_" + name[2:] + "Mirror", _mirror_axes(m, key))
         unit += 1
     return unit
 
@@ -524,16 +553,16 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
         ds = bool(m.p["doubleSided"])
         if m.blend or m.transmissive:
             ctx.depth_mask = m.transmissive and not m.blend
-            if ds and not m.transmissive:
+            if ds and not m.transmissive and item.mode == 4:
                 ctx.enable(moderngl.CULL_FACE)
                 ctx.cull_face = "front"
-                vao.render(moderngl.TRIANGLES, instances=k)
+                vao.render(item.mode, instances=k)
                 ctx.cull_face = "back"
-                vao.render(moderngl.TRIANGLES, instances=k)
+                vao.render(item.mode, instances=k)
             else:
                 ctx.enable(moderngl.CULL_FACE)
                 ctx.cull_face = "back"
-                vao.render(moderngl.TRIANGLES, instances=k)
+                vao.render(item.mode, instances=k)
             ctx.depth_mask = True
         else:
             if ds:
@@ -541,7 +570,7 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
             else:
                 ctx.enable(moderngl.CULL_FACE)
                 ctx.cull_face = "back"
-            vao.render(moderngl.TRIANGLES, instances=k)
+            vao.render(item.mode, instances=k)
     if obj.splats is not None:
         draw_splats(r, fr, obj, V, P)
 
@@ -561,21 +590,18 @@ def draw_depth(r: Res, obj: ObjDraw, VP: np.ndarray, mode: int, lp=(0, 0, 0), ld
         _set(prog, "u_uvScale", (float(m.p["uvScaleX"]), float(m.p["uvScaleY"])))
         arr = m.maps.get("baseColorMap")
         if arr is not None and tex_cache is not None and m.p["alphaMode"] == "mask":
-            hit = tex_cache.get(id(arr))
-            if hit is None or hit[0] is not arr:
-                hit = (arr, _tex(ctx, arr))
-                tex_cache[id(arr)] = hit
-            hit[1].use(0)
+            _material_texture(ctx, m, "baseColorMap", tex_cache).use(0)
             _set(prog, "u_hasBase", 1)
         else:
             _set(prog, "u_hasBase", 0)
         _set(prog, "t_base", 0)
+        _set(prog, "u_baseMirror", _mirror_axes(m, "baseColorMap"))
         if m.p["doubleSided"] or mode != 0:
             ctx.disable(moderngl.CULL_FACE)
         else:
             ctx.enable(moderngl.CULL_FACE)
             ctx.cull_face = "back"
-        item_vao(ctx, item, prog, obj.inst_buf).render(moderngl.TRIANGLES, instances=len(obj.instances))
+        item_vao(ctx, item, prog, obj.inst_buf).render(item.mode, instances=len(obj.instances))
 
 
 def draw_splats(r: Res, fr: Frame3D, obj: ObjDraw, V, P) -> None:

@@ -312,10 +312,21 @@ def blend_matrix(A: np.ndarray, B: np.ndarray, u: float) -> np.ndarray:
 
 
 # ------------------------------------------------------------------ world helpers
+def frame_matrix(rc):
+    return rc.root_matrix if rc.scene_matrix is None else rc.scene_matrix
+
+
+def frame_size(rc):
+    if rc.scene_context is None:
+        return float(rc.doc.width), float(rc.doc.height)
+    root, ctx = rc.scene_context
+    return rc.ev.num(root, "width", ctx, rc.doc.width), rc.ev.num(root, "height", ctx, rc.doc.height)
+
+
 def frame_to_world(rc, q_doc: np.ndarray, zdepth) -> np.ndarray:
     """Document-pixel frame points (..., 2) at zDepth -> world (..., 3)."""
     q = np.asarray(q_doc, np.float64)
-    W, H = rc.doc.width, rc.doc.height
+    W, H = frame_size(rc)
     return np.stack([q[..., 0] - W / 2, H / 2 - q[..., 1], np.broadcast_to(-np.asarray(zdepth, np.float64), q.shape[:-1])], -1)
 
 
@@ -337,6 +348,10 @@ def node_clock(rc, el, t: float, base: Ctx | None = None) -> Ctx | None:
     while p is not None and isinstance(p.tag, str) and ln(p) not in ("composition", "symbol", "scene", "lights"):
         chain.append(p)
         p = p.getparent()
+    if base is None and rc.scene_context is not None:
+        root, current = rc.scene_context
+        if root in el.iterancestors():
+            base = current
     ctx = base or Ctx(t=t, comp_t=t)
     for g in reversed(chain):
         if not rc.active(g, ctx):
@@ -359,7 +374,7 @@ def _local3d(rc, el, ctx: Ctx) -> np.ndarray:
 
 def world3d(rc, el, ctx: Ctx, local_only: bool = False, _depth: int = 0) -> np.ndarray:
     """4x4 world matrix of an object3D / camera / light, or the 3D frame of a 2D node."""
-    key = ("world3d", el, ctx.comp_t, ctx.t, ctx.vars, local_only)
+    key = ("world3d", el, ctx, local_only)
     hit = rc.frame_cache.get(key)
     if hit is not None:
         return hit
@@ -368,14 +383,14 @@ def world3d(rc, el, ctx: Ctx, local_only: bool = False, _depth: int = 0) -> np.n
         rc.frame_cache[key] = M
         return M
     M = _local3d(rc, el, ctx)
-    if el.get("target") and ln(el) == "camera":
-        tgt = rc.doc.ids.get(el.get("target"))
+    if rc.ev.str(el, "target", ctx) and ln(el) == "camera":
+        tgt = rc.doc.ids.get(rc.ev.str(el, "target", ctx))
         if tgt is not None and tgt is not el:
             tp = element_world_pos(rc, tgt, ctx.comp_t)
             if tp is not None and np.linalg.norm(tp - M[:3, 3]) > 1e-9:
                 roll = rc.ev.num(el, "roll", ctx, 0.0)
                 M[:3, :3] = look_rotation(tp - M[:3, 3]) @ rz(roll)
-    pid = el.get("parent")
+    pid = rc.ev.str(el, "parent", ctx)
     if pid and not local_only and _depth < 32:
         par = rc.doc.ids.get(pid)
         if par is not None and par is not el:
@@ -392,7 +407,7 @@ def world3d(rc, el, ctx: Ctx, local_only: bool = False, _depth: int = 0) -> np.n
 def _frame_of_2d(rc, el, ctx: Ctx) -> np.ndarray:
     """A 2D node as a 3D frame: position at its zDepth, roll from its rotation, mean scale."""
     try:
-        Mw = np.linalg.inv(rc.root_matrix) @ rc.world_matrix(el, ctx)
+        Mw = np.linalg.inv(frame_matrix(rc)) @ rc.world_matrix(el, ctx)
     except Exception:  # noqa: BLE001 — unresolvable 2D target: identity
         return np.eye(4)
     p = frame_to_world(rc, Mw[:2, 2], rc.ev.num(el, "zDepth", ctx, 0.0))
@@ -413,12 +428,12 @@ def element_world_pos(rc, el, t: float) -> np.ndarray | None:
 
 def apply_constraint3d(rc, c, el, M: np.ndarray, ctx: Ctx, depth: int = 0) -> np.ndarray:
     ev = rc.ev
-    typ = c.get("type")
+    typ = ev.str(c, "type", ctx)
     infl = ev.num(c, "influence", ctx, 1.0)
     if infl <= 0:
         return M
-    tgt = rc.doc.ids.get(c.get("target")) if c.get("target") else None
-    local = c.get("space", "world") == "local"
+    tgt = rc.doc.ids.get(ev.str(c, "target", ctx))
+    local = ev.str(c, "space", ctx, "world") == "local"
     T = None
     if tgt is not None and tgt is not el and depth < 32:
         tc = (node_clock(rc, tgt, ctx.comp_t) if is3d_tag(tgt) else ctx) or ctx
@@ -448,19 +463,20 @@ def apply_constraint3d(rc, c, el, M: np.ndarray, ctx: Ctx, depth: int = 0) -> np
         g = T[:3, 3]
         d = float(np.linalg.norm(t - g))
         lo = ev.num(c, "minDistance", ctx, 0.0)
-        hi = ev.num(c, "maxDistance", ctx, float("inf")) if c.get("maxDistance") else float("inf")
+        hi = ev.num(c, "maxDistance", ctx, float("inf"))
         nd = min(max(d, lo), hi)
         if d > 1e-9 and nd != d:
             out = M.copy()
             out[:3, 3] = g + (t - g) * nd / d
-    elif typ == "follow-path" and c.get("path"):
+    elif typ == "follow-path" and ev.str(c, "path", ctx):
         from .geometry import PathSampler
-        key = ("fp", c)
-        smp = rc.cache.get(key) or PathSampler(c.get("path"))
+        path = ev.str(c, "path", ctx)
+        key = ("fp", path)
+        smp = rc.cache.get(key) or PathSampler(path)
         rc.cache[key] = smp
         x, y, ang = smp.at(ev.num(c, "progress", ctx, 0.0))
         p = frame_to_world(rc, np.array([x, y]), 0.0) + off
-        if parse_bool(c.get("autoOrient")):
+        if ev.bool(c, "autoOrient", ctx):
             R = rz(-(ang + orot))
         out = trs(p, R, s)
     elif typ in ("ik", "track"):
@@ -482,9 +498,9 @@ def _constraint_via_2d(rc, c, el, M: np.ndarray, ctx: Ctx) -> np.ndarray | None:
     if C[2] <= cam.near and not cam.ortho:
         return None
     s = cam.project_cam(C)
-    A = rc.root_matrix @ np.array([[1, 0, s[0]], [0, 1, s[1]], [0, 0, 1]])
+    A = frame_matrix(rc) @ np.array([[1, 0, s[0]], [0, 1, s[1]], [0, 0, 1]])
     B = apply_constraint(rc, c, el, A, ctx)
-    q = (np.linalg.inv(rc.root_matrix) @ B)[:2, 2]
+    q = (np.linalg.inv(frame_matrix(rc)) @ B)[:2, 2]
     if np.allclose(q, s):
         return None
     if cam.ortho:
@@ -505,10 +521,10 @@ def _window_ok(rc, el, t: float) -> bool:
 
 
 def cameras(rc) -> list:
-    key = ("cameras",)
+    comp = rc.scene_context[0] if rc.scene_context is not None else rc.doc.section("composition")
+    key = ("cameras", comp)
     hit = rc.cache.get(key)
     if hit is None:
-        comp = rc.doc.section("composition")
         hit = [e for e in comp.iter() if isinstance(e.tag, str) and ln(e) == "camera"] if comp is not None else []
         rc.cache[key] = hit
     return hit
@@ -556,8 +572,9 @@ def _shake(rc, cam_el, t: float):
 
 def build_camera(rc, el, t: float, W: float | None = None, H: float | None = None) -> Camera:
     """Evaluate a camera element (or the default camera for el=None) at composition time t."""
-    W = float(rc.doc.width) if W is None else W
-    H = float(rc.doc.height) if H is None else H
+    fw, fh = frame_size(rc)
+    W = fw if W is None else W
+    H = fh if H is None else H
     if el is None:
         f = default_fpx(W)
         return Camera(np.array([0.0, 0.0, f]), np.array([1.0, 0, 0]), np.array([0, 1.0, 0]), np.array([0, 0, -1.0]),
@@ -575,8 +592,7 @@ def build_camera(rc, el, t: float, W: float | None = None, H: float | None = Non
     eye = eye + right * sx + up * sy
     sw, sh = ev.num(el, "sensorWidth", c, 36.0), ev.num(el, "sensorHeight", c, 24.0)
     width_fit = W / H >= sw / sh
-    if el.get("focalLength") or any(ln(a) != "shake" and a.get("property") == "focalLength" for a in el
-                                    if isinstance(a.tag, str)):
+    if ev.explicit(el, "focalLength", c):
         fl = ev.num(el, "focalLength", c, 50.0)
         fpx = fl * (W / sw if width_fit else H / sh)
     else:
@@ -585,13 +601,13 @@ def build_camera(rc, el, t: float, W: float | None = None, H: float | None = Non
         fl = fpx * (sw / W if width_fit else sh / H)
     fpx *= 1 + sz
     ortho = ev.str(el, "projection", c, "perspective") == "orthographic"
-    oh = ev.num(el, "orthoHeight", c, H) if el.get("orthoHeight") else H
+    oh = ev.num(el, "orthoHeight", c, H)
     focus = ev.num(el, "focusDistance", c, 1000.0)
-    ft = rc.doc.ids.get(el.get("focusTarget")) if el.get("focusTarget") else None
+    ft = rc.doc.ids.get(ev.str(el, "focusTarget", c))
     fp = element_world_pos(rc, ft, t) if ft is not None else None
     if fp is not None:
         focus = max(1e-3, float((fp - eye) @ fwd))
-    shutter = ev.num(el, "shutterAngle", c, 180.0) if el.get("shutterAngle") is not None else None
+    shutter = ev.num(el, "shutterAngle", c, 180.0) if ev.explicit(el, "shutterAngle", c) else None
     return Camera(eye, right, up, fwd, fpx, ortho, H / oh * (1 + sz), W, H, max(1e-4, ev.num(el, "near", c, 0.1)), el,
                   focus, ev.num(el, "fStop", c, 2.8), ev.bool(el, "depthOfField", c, False),
                   ev.num(el, "far", c, 10000.0), fl, (W / sw if width_fit else H / sh) * (1 + sz),
@@ -604,7 +620,7 @@ def camera_at(rc, t: float) -> Camera:
     ov = rc.cache.get("camera_override")
     if ov is not None:
         return ov
-    key = ("camera-at", t)
+    key = ("camera-at", t, rc.scene_context)
     hit = rc.frame_cache.get(key)
     if hit is None:
         hit = build_camera(rc, active_camera(rc, t), t)
@@ -622,9 +638,10 @@ def _rot_axis(axis: np.ndarray, deg: float, v: np.ndarray) -> np.ndarray:
 def shutter_angle(rc, t: float, default: float) -> float:
     """Shutter angle for motion blur at t: the active camera's shutterAngle, else `default`."""
     el = active_camera(rc, t)
-    if el is not None and el.get("shutterAngle") is not None:
+    if el is not None:
         c = node_clock(rc, el, t) or _ctx(t)
-        return rc.ev.num(el, "shutterAngle", c, default)
+        if rc.ev.explicit(el, "shutterAngle", c):
+            return rc.ev.num(el, "shutterAngle", c, default)
     return default
 
 
@@ -698,11 +715,11 @@ def plane_affine(rc, el, M: np.ndarray, ctx: Ctx, size=None) -> np.ndarray:
     """3x3 G with world point P = G @ (u, v, 1) for el's local coordinates (u, v); M is el's frame
     matrix (frame px). Includes zDepth, rotationX/Y and collapsed ancestors' 3D transforms."""
     if size is None:
-        size = rc.node_size(el, ctx, (rc.doc.width, rc.doc.height))
-    Md = np.linalg.inv(rc.root_matrix) @ M                    # local -> document frame px
+        size = rc.node_size(el, ctx, frame_size(rc))
+    Md = np.linalg.inv(frame_matrix(rc)) @ M                    # local -> document frame px
     zd = rc.ev.num(el, "zDepth", ctx, 0.0)
     # world = S . Md . (u,v,1) + (-W/2, H/2, -zd) as an affine in (u, v, 1)
-    W, H = rc.doc.width, rc.doc.height
+    W, H = frame_size(rc)
     G = np.zeros((3, 3))
     G[0] = Md[0]
     G[1] = -Md[1]
@@ -715,7 +732,7 @@ def plane_affine(rc, el, M: np.ndarray, ctx: Ctx, size=None) -> np.ndarray:
         gc = ctx
         gM = rc.world_matrix(g, gc)
         gs = rc.node_size(g, gc, (W, H))
-        Rg, zg, pg = _node_3d(rc, g, np.linalg.inv(rc.root_matrix) @ gM, gc, gs)
+        Rg, zg, pg = _node_3d(rc, g, np.linalg.inv(frame_matrix(rc)) @ gM, gc, gs)
         G = G.copy()
         G[2, 2] -= zg                                         # child depth is relative to the group plane
         pg = pg.copy()
@@ -732,7 +749,7 @@ def _rotate_about(G: np.ndarray, R: np.ndarray, pivot: np.ndarray) -> np.ndarray
 def node_plane_world(rc, el, M: np.ndarray, ctx: Ctx, size=None):
     """World positions of el's local box corners (TL, TR, BR, BL), plus the local corners used."""
     if size is None:
-        size = rc.node_size(el, ctx, (rc.doc.width, rc.doc.height))
+        size = rc.node_size(el, ctx, frame_size(rc))
     w, h = size
     if w <= 0 or h <= 0:
         w = h = 100.0
@@ -749,7 +766,7 @@ def project_quad(rc, el, M: np.ndarray, ctx: Ctx, size=None):
     s, ok = cam.project(Pw)
     if not np.all(ok):
         return None
-    q = np.c_[s, np.ones(4)] @ rc.root_matrix.T
+    q = np.c_[s, np.ones(4)] @ frame_matrix(rc).T
     return q[:, :2]
 
 
@@ -779,7 +796,7 @@ def plane_homography(rc, el, M: np.ndarray, ctx: Ctx, cam: Camera | None = None,
         Hd[2] = [0, 0, 1]
     else:
         Hd = K @ Gc
-    Hm = rc.root_matrix @ Hd
+    Hm = frame_matrix(rc) @ Hd
     return Hm, Gc
 
 
@@ -794,7 +811,7 @@ def camera_hook(rc, el, M: np.ndarray, ctx: Ctx) -> np.ndarray | None:
     if rc.cache.get("pass360") == "flat":
         return None
     cam = camera_at(rc, ctx.comp_t)
-    size = rc.node_size(el, ctx, (rc.doc.width, rc.doc.height))
+    size = rc.node_size(el, ctx, frame_size(rc))
     Hm, Gc = plane_homography(rc, el, M, ctx, cam, size)
     w, h = size
     if w <= 0 or h <= 0:
@@ -811,7 +828,7 @@ def camera_hook(rc, el, M: np.ndarray, ctx: Ctx) -> np.ndarray | None:
         Hm = Hm / Hm[2, 2]
     elif Hm[2, 2] < -1e-12:
         Hm = Hm / -Hm[2, 2]          # keep w > 0 for points in front of the eye
-    rc.frame_cache[("plane3d", el, ctx.comp_t)] = (Hm, Gc, size)
+    rc.frame_cache[("plane3d", el, ctx)] = (Hm, Gc, size)
     return Hm
 
 
@@ -856,7 +873,7 @@ def depth_of_field(rc, el, buf: Buf, ctx: Ctx, M: np.ndarray) -> Buf:
     cam = camera_at(rc, ctx.comp_t)
     if not cam.dof or cam.ortho:
         return buf
-    info = rc.frame_cache.get(("plane3d", el, ctx.comp_t))
+    info = rc.frame_cache.get(("plane3d", el, ctx))
     if info is None:
         return buf
     Hm, Gc, _ = info
@@ -886,7 +903,7 @@ def depth_of_field(rc, el, buf: Buf, ctx: Ctx, M: np.ndarray) -> Buf:
 
 
 def _root_scale(rc) -> float:
-    return math.sqrt(abs(np.linalg.det(rc.root_matrix[:2, :2])))
+    return math.sqrt(abs(np.linalg.det(frame_matrix(rc)[:2, :2])))
 
 
 def lens_distort(rc, buf: Buf, cam: Camera) -> Buf:
@@ -895,7 +912,7 @@ def lens_distort(rc, buf: Buf, cam: Camera) -> Buf:
     k = cam.lens_k
     if abs(k) < 1e-9:
         return buf
-    R = rc.root_matrix
+    R = frame_matrix(rc)
     fr = rc.frame_rect
     cx, cy = R[0, 0] * cam.ppx + R[0, 2], R[1, 1] * cam.ppy + R[1, 2]
     half_diag = math.hypot(R[0, 0] * cam.W, R[1, 1] * cam.H) / 2

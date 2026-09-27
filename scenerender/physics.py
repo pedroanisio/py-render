@@ -296,12 +296,12 @@ def path_geom(rc, d: str) -> PathGeom:
 # ====================================================================== force fields
 def field_active(rc, f, t: float) -> bool:
     from .evaluator import Ctx
-    c = Ctx(t=t, comp_t=t)
-    s = rc.ev.num(f, "start", c, 0.0)
-    return t >= s and (f.get("end") is None or t < rc.ev.num(f, "end", c, 0.0))
+    c = rc.ev.node_ctx(f, Ctx(t=t, comp_t=t))
+    s, e = rc.ev.window(f, c)
+    return t >= s and (e is None or t < e)
 
 
-def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float):
+def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float, *, affects: str | None = None):
     """Acceleration of force field f at composition time t on points X, Y (document px, +y down) with
     velocities VX, VY (the consumer's units, screen orientation +y down). Returns (AX, AY) in the
     consumer's units (m/s^2 for bodies, px/s^2 for particles), screen orientation."""
@@ -311,11 +311,13 @@ def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float):
     if not field_active(rc, f, t):
         return zero, zero
     ev = rc.ev
-    c = Ctx(t=t, comp_t=t)
-    typ = f.get("type")
+    c = ev.node_ctx(f, Ctx(t=t, comp_t=t))
+    if affects is not None and ev.str(f, "affects", c, "all") not in ("all", affects):
+        return zero, zero
+    typ = ev.str(f, "type", c)
     strength = ev.num(f, "strength", c, 0.0)
     cx, cy = ev.num(f, "x", c, 0.0), ev.num(f, "y", c, 0.0)
-    radius = ev.num(f, "radius", c, 0.0) if f.get("radius") is not None or _animated(f, "radius") else 0.0
+    radius = ev.num(f, "radius", c, 0.0)
     falloff = ev.num(f, "falloff", c, 0.0)
 
     def fall(d_px):
@@ -332,7 +334,7 @@ def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float):
         k = fall(d) if radius > 0 else 1.0
         if typ == "directional":
             return zero + fx * k, zero + fy * k
-        g = 1.0 + 0.25 * fbm(ev.seed_for(f, "gust"), t * 0.7 + zero, Y / (4 * ppm), 0.0)
+        g = 1.0 + 0.25 * fbm(ev.seed_for(f, "gust", c), t * 0.7 + zero, Y / (4 * ppm), 0.0)
         wx, wy = fx * g, fy * g
         if strength > 0:
             return strength * (wx - VX) * k, strength * (wy - VY) * k
@@ -345,16 +347,17 @@ def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float):
         return np.where(d > 1e-9, -dy / ds, 0.0) * k, np.where(d > 1e-9, dx / ds, 0.0) * k
     if typ == "turbulence":
         sc = max(1e-6, ev.num(f, "scale", c, 1.0)) * ppm
-        seed = ev.seed_for(f, "turb")
+        seed = ev.seed_for(f, "turb", c)
         k = strength * 3.0 * (fall(d) if radius > 0 else 1.0)
         return fbm(seed, X / sc, Y / sc, t * 0.5) * k, fbm(seed + 1, X / sc, Y / sc, t * 0.5) * k
     if typ == "drag":
         k = strength * (fall(d) if radius > 0 else 1.0)
         return -np.asarray(VX) * k + zero, -np.asarray(VY) * k + zero
     if typ == "attractor-path":
-        if not f.get("path"):
+        path = ev.str(f, "path", c)
+        if not path:
             return zero, zero
-        pg = path_geom(rc, f.get("path"))
+        pg = path_geom(rc, path)
         qx, qy, tx, ty, dist = pg.closest(X, Y)
         qx, qy, tx, ty, dist = (v.reshape(X.shape) for v in (qx, qy, tx, ty, dist))
         k = fall(dist)
@@ -362,10 +365,6 @@ def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float):
         along = ev.num(f, "forceX", c, 0.0)
         return ((qx - X) / dd * (dist > 1e-9) * strength + tx * along) * k, ((qy - Y) / dd * (dist > 1e-9) * strength + ty * along) * k
     return zero, zero
-
-
-def _animated(el, name) -> bool:
-    return any(ln(a) in ("animate", "expression", "link") and a.get("property") == name for a in el)
 
 
 # ====================================================================== geometry helpers
@@ -887,11 +886,13 @@ class PhysicsSim:
     def __init__(self, rc):
         self.rc = rc
         self.doc = rc.doc
+        self.scene_context = rc.scene_context
+        self.root = self.scene_context[0] if self.scene_context is not None else self.doc.section("composition")
         ph = self.doc.section("physics")
         self.ph = ph
         ev = rc.ev
         from .evaluator import Ctx
-        c0 = Ctx(t=0.0, comp_t=0.0)
+        c0 = self._ctx(0.0)
         self.dt = max(1e-4, float(ph.get("fixedStep", 1 / 120)) if ph is not None else 1 / 120)
         self.ppm = float(ph.get("pixelsPerMeter", 100)) if ph is not None else 100.0
         self.gx = ev.num(ph, "gravityX", c0, 0.0) if ph is not None else 0.0
@@ -899,11 +900,9 @@ class PhysicsSim:
         self.iters = int(ev.num(ph, "solverIterations", c0, 8)) if ph is not None else 8
         self.start = ev.num(ph, "start", c0, 0.0) if ph is not None else 0.0
         self.bounds = ph.get("bounds", "none") if ph is not None else "none"
-        self.fields = [f for f in (ph if ph is not None else []) if ln(f) == "forceField"
-                       and f.get("affects", "all") in ("all", "bodies")]
+        self.fields = [f for f in (ph if ph is not None else []) if ln(f) == "forceField"]
         self.body_els, self.soft_els = [], []
-        comp = self.doc.section("composition")
-        for el in comp.iter():
+        for el in self.root.iter():
             if not isinstance(el.tag, str):
                 continue
             rb = next((c for c in el if ln(c) == "rigidBody"), None)
@@ -915,7 +914,9 @@ class PhysicsSim:
         self.index = {el: i for i, (el, _) in enumerate(self.body_els)}
         self.soft_index = {el: i for i, (el, _) in enumerate(self.soft_els)}
         self.busy = False
-        W_, H_ = self.doc.width / self.ppm, self.doc.height / self.ppm
+        self.width = ev.num(self.root, "width", c0, self.doc.width)
+        self.height = ev.num(self.root, "height", c0, self.doc.height)
+        W_, H_ = self.width / self.ppm, self.height / self.ppm
         self.planes = []
         if self.bounds in ("floor", "frame"):
             self.planes.append((np.array([0.0, 1.0]), -H_))
@@ -929,7 +930,10 @@ class PhysicsSim:
     # ------------------------------------------------------------ node poses (keyframed)
     def _ctx(self, t):
         from .evaluator import Ctx
-        return Ctx(t=t, comp_t=t)
+        if self.scene_context is not None:
+            base = self.scene_context[1]
+            return self.rc.ev.context_at_local(self.root, base, t)
+        return Ctx(t=t, comp_t=t, frame=round(t * float(self.doc.fps)))
 
     def world_doc(self, el, t) -> np.ndarray:
         """Node-local -> composition document pixels at time t (keyframes only, no caches)."""
@@ -943,7 +947,7 @@ class PhysicsSim:
         chain.reverse()
         ctx = self._ctx(t)
         M = np.eye(3)
-        box = (float(self.doc.width), float(self.doc.height))
+        box = (self.width, self.height)
         for node in chain:
             nctx = rc.enter_node(node, ctx)
             prev, self.busy = self.busy, True
@@ -958,7 +962,7 @@ class PhysicsSim:
     def _size(self, el, t):
         rc = self.rc
         parent = el.getparent()
-        box = (float(self.doc.width), float(self.doc.height))
+        box = (self.width, self.height)
         if parent is not None and ln(parent) in ("group", "sequence"):
             box = rc.node_size(parent, rc.node_ctx(parent, self._ctx(t)), box)
         return rc.node_size(el, rc.node_ctx(el, self._ctx(t)), box)
@@ -1301,7 +1305,7 @@ class PhysicsSim:
         if self.fields and len(pos_m):
             X, Y = pos_m[:, 0] * self.ppm, -pos_m[:, 1] * self.ppm
             for f in self.fields:
-                ax, ay = field_accel(self.rc, f, t, X, Y, vel_m[:, 0], -vel_m[:, 1], self.ppm)
+                ax, ay = field_accel(self.rc, f, self._ctx(t).comp_t, X, Y, vel_m[:, 0], -vel_m[:, 1], self.ppm, affects="bodies")
                 acc[:, 0] += ax
                 acc[:, 1] -= ay
         return acc
@@ -1854,13 +1858,18 @@ class PhysicsSim:
     def fingerprint(self) -> str:
         from lxml import etree
         h = hashlib.sha256(f"scenerender-physics-{CACHE_VERSION}".encode())
-        if self.ph is not None:
-            ph = copy.deepcopy(self.ph)
+        # Ancestor clocks and prop()/link inputs outside a body affect replay.
+        # Hash the prepared scene, excluding the cache's own location/hash.
+        root = copy.deepcopy(self.doc.root)
+        for ph in root.iter("physics"):
             for k in ("cache", "cacheSha256"):
                 ph.attrib.pop(k, None)
-            h.update(etree.tostring(ph, method="c14n"))
-        for el, _ in self.body_els + self.soft_els:
-            h.update(etree.tostring(el, method="c14n"))
+        h.update(etree.tostring(root, method="c14n"))
+        if self.scene_context is not None:
+            # Identical symbol XML can produce different geometry and forces in
+            # two instances. A cache from one must never be used by the other.
+            h.update(repr((self.scene_context[0].get("id"), self.scene_context[1].scope,
+                           self.scene_context[1].vars, self.rc.ev.history_origin(*self.scene_context))).encode())
         h.update(repr((self.doc.width, self.doc.height, self.doc.duration)).encode())
         return h.hexdigest()
 
@@ -1933,15 +1942,24 @@ class PhysicsSim:
 
 
 def get_sim(rc) -> PhysicsSim | None:
-    key = ("physics-sim",)
-    if key not in rc.cache:
-        rc.cache[key] = None            # re-entrant calls while building see "no simulation"
-        rc.cache[key] = PhysicsSim(rc) if rc.doc.section("physics") is not None or _has_bodies(rc) else None
-    return rc.cache[key]
+    from collections import OrderedDict
+    from .evaluator import Ctx
+    key = (("physics-sim", rc.scene_context[0],
+            Ctx(0, 0, scope=rc.scene_context[1].scope, vars=rc.scene_context[1].vars))
+           if rc.scene_context is not None else ("physics-sim",))
+    histories = rc.cache.setdefault(key, OrderedDict())
+    branch = rc.ev.history_origin(*rc.scene_context) if rc.scene_context is not None else None
+    if branch not in histories:
+        histories[branch] = None        # re-entrant calls while building see "no simulation"
+        histories[branch] = PhysicsSim(rc) if rc.doc.section("physics") is not None or _has_bodies(rc) else None
+        while len(histories) > 8:
+            histories.popitem(last=False)
+    histories.move_to_end(branch)
+    return histories[branch]
 
 
 def _has_bodies(rc) -> bool:
-    comp = rc.doc.section("composition")
+    comp = rc.scene_context[0] if rc.scene_context is not None else rc.doc.root
     return comp is not None and any(ln(e) in ("rigidBody", "softBody") for e in comp.iter() if isinstance(e.tag, str))
 
 
@@ -1984,6 +2002,7 @@ def body_transform(rc, el, t: float, ctx=None):
     sim = get_sim(rc)
     if sim is None or sim.busy or el not in sim.index:
         return None
+    t = scene_time(rc, ctx) if ctx is not None else t
     b = body_state(rc, el, t)
     if b is None:
         return None
@@ -2004,6 +2023,11 @@ def body_transform(rc, el, t: float, ctx=None):
     rot = theta - pang
     off = _rot(math.radians(rot)) @ np.array([(w / 2 - ax) * sx, (h / 2 - ay) * sy])
     return float(CL[0] - off[0]), float(CL[1] - off[1]), float(rot)
+
+
+def scene_time(rc, ctx):
+    """Simulation clock of the composition or current symbol entrance."""
+    return rc.scene_context[1].t if rc.scene_context is not None else ctx.comp_t
 
 
 def install(rc) -> None:

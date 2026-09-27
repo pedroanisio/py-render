@@ -13,12 +13,15 @@ Pinned decisions
       emissiveMap are sRGB-decoded to linear, data maps (normal, metallicRoughness, occlusion) are not.
     * Node.matrix uses the math layout of animation.py (column vectors).
   glTF / GLB (pygltflib)
-    * All accessors (byteStride, sparse, normalized ints -> floats) and buffers (GLB blob, data URIs,
-      external files). Only TEXCOORD_0 / COLOR_0 / JOINTS_0 / WEIGHTS_0 are read; textures that use
-      texCoord > 0 are still bound (to UV set 0). Matrix-typed accessors with column padding (byte /
-      short MAT2/MAT3) are not supported (unused by the core attributes).
-    * TRIANGLE_STRIP/FAN are converted to triangle lists; POINTS/LINES* primitives are skipped with a
-      warning. Missing indices = 0..n-1. Skin weights are renormalised to sum 1.
+    * Accessors include byteStride, sparse, normalized integers and padded matrix columns;
+      buffers may be GLB blobs, data URIs or external files. All TEXCOORD_n and JOINTS_n/WEIGHTS_n
+      sets are retained; COLOR_0 drives vertex colour. Each material map selects its UV set and
+      applies its own KHR_texture_transform before interpolation.
+      Per-map samplers retain both axis wrap modes and the minification/magnification filters.
+    * TRIANGLE_STRIP/FAN are converted to triangle lists; POINTS/LINES/LINE_LOOP/LINE_STRIP retain
+      their topology through rendering. Missing indices = 0..n-1. Skin weights are renormalised.
+      Missing normals use flat shading (also after morphing); normal and tangent morph deltas
+      preserve absent-target attributes and tangent handedness.
     * mesh.weights is copied to node.weights when the node has none. Channels without a target node
       (KHR_animation_pointer) are ignored. Clip name = animation.name or its index as a string.
     * Material factors default per glTF (metallic = roughness = 1); extension params are only set when
@@ -49,20 +52,21 @@ Pinned decisions
       roughness / metallic merged into metallicRoughnessMap (G = roughness, B = metallic, missing
       one = 1); the matching factor param is then 1. Texture scale/bias and UsdTransform2d are ignored.
       Packaged USDZ textures ("pkg.usdz[inner]") are read from the zip.
-    * Time-sampled xformOps -> clip "default": every authored time code of the prim's ops is sampled,
-      the local matrix decomposed to TRS (shear dropped) into LINEAR channels; time = (code - start
-      code) / timeCodesPerSecond. Animated nodes store TRS instead of a matrix.
+    * Time-sampled xformOps -> clip "default": native USD transform evaluation at each requested
+      time preserves shear, transform order and each op's interpolation; time = (code - start
+      code) / timeCodesPerSecond.
     * UsdSkel: each bound Skeleton becomes joint Nodes (under the skeleton's Node) with rest
       transforms; inverse_bind = inverse(bindTransform) @ geomBindTransform; jointIndices/Weights are
-      reduced to the 4 largest influences (renormalised). A bound SkelAnimation adds LINEAR TRS
+      retained and renormalised. A bound SkelAnimation adds LINEAR TRS
       channels for its joints to clip "default" (attributes with a single value override the rest
-      pose instead). Blend shapes are not read.
+      pose instead). Blend shapes include sparse point/normal offsets and inbetweens. Animation
+      weights are mapped by name; object3D morphWeights overrides are resolved through inbetweens.
   FBX (ufbx)
     * Loaded with target_axes = right-handed Y-up, space conversion on the root, geometry and inherit
       modes resolved through helper nodes, file units kept, normals generated when missing.
     * One Node per ufbx node (TRS = local_transform); meshes are fan-triangulated per material part
-      and de-duplicated per face corner. Skin clusters -> Skin (inverse_bind = geometry_to_bone, top
-      4 weights). Blend shape channels -> morph targets (default weight = channel weight).
+      and de-duplicated per face corner. Skin clusters -> Skin (inverse_bind = geometry_to_bone,
+      all weights retained). Blend shape channels -> morph targets (default weight = channel weight).
     * Materials from ufbx's PBR mapping (base colour x base factor, metalness, roughness, emission
       colour x factor, opacity); FBX colours are taken as linear. Textures: embedded content, else the
       absolute / relative file name if it exists (warning otherwise); base colour / emission / normal
@@ -72,7 +76,7 @@ Pinned decisions
   Images
     * decode_image: PIL formats (8-bit /255, 16-bit /65535), .hdr/.exr/.npy (float, linear; srgb flag
       ignored). HDR bytes are recognised by magic.
-    * Radiance .hdr: new-style RLE and flat scanlines (old-style RLE is not supported), any of the 8
+    * Radiance .hdr: new-style and old-style RLE and flat scanlines, any of the 8
       axis orientations, value = mantissa * 2^(exponent - 136) (no +0.5 dither), EXPOSURE ignored.
     * load_hdr_image returns (h, w, 3) linear float32, cached by (abspath, mtime).
   IES (LM-63-1986/1991/1995/2002)
@@ -170,16 +174,14 @@ def _decompose(m: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return m[:3, 3].copy(), _mat_to_quat(r), s
 
 
-def _top4(idx: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """(n, k) influences -> the 4 largest (padded with zeros), weights renormalised."""
+def _skin_weights(idx: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Preserve all influences and normalize each vertex's weights."""
     n, k = w.shape
     if k < 4:
         idx = np.concatenate([idx, np.zeros((n, 4 - k), idx.dtype)], 1)
         w = np.concatenate([w, np.zeros((n, 4 - k), w.dtype)], 1)
-    order = np.argsort(-w, axis=1, kind="stable")[:, :4]
-    idx, w = np.take_along_axis(idx, order, 1), np.take_along_axis(w, order, 1)
     s = w.sum(1, keepdims=True)
-    return idx.astype(np.uint16), np.where(s > 0, w / np.where(s > 0, s, 1), w).astype(np.float32)
+    return idx.astype(np.uint32), np.where(s > 0, w / np.where(s > 0, s, 1), w).astype(np.float32)
 
 
 def _fan(counts: np.ndarray) -> np.ndarray:
@@ -269,16 +271,23 @@ def _read_rgbe(data: bytes) -> np.ndarray:
             fmt = line[7:]
     if fmt not in (b"32-bit_rle_rgbe", b"32-bit_rle_xyze"):
         raise ValueError(f"unsupported Radiance format {fmt!r}")
-    if fmt == b"32-bit_rle_xyze":
-        log.warning("Radiance XYZE file read as RGB without conversion")
     end = data.index(b"\n", pos)
     a1, n1, a2, n2 = data[pos:end].split()
     pos = end + 1
     n1, n2 = int(n1), int(n2)
+    if n1 <= 0 or n2 <= 0 or {a1[1:], a2[1:]} != {b"X", b"Y"} or any(
+            a not in (b"+X", b"-X", b"+Y", b"-Y") for a in (a1, a2)):
+        raise ValueError("invalid Radiance resolution")
     buf = np.frombuffer(data, dtype=np.uint8)
     out = np.empty((n1, n2, 4), np.uint8)
+
+    def require(count):
+        if pos + count > len(buf):
+            raise ValueError("truncated RGBE scanline")
+
     for y in range(n1):
-        if 8 <= n2 < 32768 and buf[pos] == 2 and buf[pos + 1] == 2 and not buf[pos + 2] & 0x80:
+        require(4)
+        if buf[pos] == 2 and buf[pos + 1] == 2 and not buf[pos + 2] & 0x80:
             if (int(buf[pos + 2]) << 8 | int(buf[pos + 3])) != n2:
                 raise ValueError("RGBE scanline width mismatch")
             pos += 4
@@ -286,21 +295,47 @@ def _read_rgbe(data: bytes) -> np.ndarray:
                 x = 0
                 row = out[y, :, c]
                 while x < n2:
+                    require(1)
                     cnt = int(buf[pos])
+                    length = cnt - 128 if cnt > 128 else cnt
+                    if length == 0 or x + length > n2:
+                        raise ValueError("invalid RGBE run length")
                     if cnt > 128:
+                        require(2)
                         cnt -= 128
                         row[x:x + cnt] = buf[pos + 1]
                         pos += 2
                     else:
+                        require(1 + cnt)
                         row[x:x + cnt] = buf[pos + 1:pos + 1 + cnt]
                         pos += 1 + cnt
                     x += cnt
         else:
-            out[y] = buf[pos:pos + 4 * n2].reshape(n2, 4)
-            pos += 4 * n2
+            # Old Radiance RLE uses (1,1,1,count) pixels. Consecutive
+            # markers provide little-endian bytes of the repeat count.
+            # Reference: LBNL-ETA/Radiance src/common/color.c, oldreadcolrs.
+            x, shift = 0, 0
+            while x < n2:
+                require(4)
+                pixel = buf[pos:pos + 4]
+                pos += 4
+                if np.all(pixel[:3] == 1):
+                    count = int(pixel[3]) << shift
+                    if x == 0 or x + count > n2 or shift > 24:
+                        raise ValueError("invalid old RGBE run length")
+                    out[y, x:x + count] = out[y, x - 1]
+                    x += count
+                    shift += 8
+                else:
+                    out[y, x] = pixel
+                    x += 1
+                    shift = 0
     e = out[..., 3].astype(np.int32)
     f = np.where(e > 0, np.ldexp(1.0, e - 136), 0.0).astype(np.float32)
     img = out[..., :3].astype(np.float32) * f[..., None]
+    if fmt == b"32-bit_rle_xyze":
+        from ..color import matrix
+        img = (img @ matrix("xyz", "srgb").T).astype(np.float32)
     # a1 is the slow axis: "-Y +X" (standard) = rows top to bottom, columns left to right.
     if a1[1:2] == b"X":
         img = img.transpose(1, 0, 2)
@@ -432,9 +467,16 @@ class _Gltf:
             self._buffers[i] = self.g.binary_blob() if not b.uri else self.uri_bytes(b.uri)
         return self._buffers[i]
 
-    def view(self, bv_index: int, offset: int, dtype, count: int, nc: int) -> np.ndarray:
+    def view(self, bv_index: int, offset: int, dtype, count: int, nc: int,
+             matrix_size: int = 0) -> np.ndarray:
         bv = self.g.bufferViews[bv_index]
         dt = np.dtype(dtype).newbyteorder("<")
+        if matrix_size:
+            column_stride = (matrix_size * dt.itemsize + 3) // 4 * 4
+            stride = bv.byteStride or matrix_size * column_stride
+            return np.ndarray((count, matrix_size, matrix_size), dtype=dt,
+                              buffer=self.buffer(bv.buffer), offset=(bv.byteOffset or 0) + offset,
+                              strides=(stride, column_stride, dt.itemsize)).reshape(count, nc).copy()
         stride = bv.byteStride or dt.itemsize * nc
         return np.ndarray((count, nc), dtype=dt, buffer=self.buffer(bv.buffer),
                           offset=(bv.byteOffset or 0) + offset, strides=(stride, dt.itemsize)).copy()
@@ -442,13 +484,14 @@ class _Gltf:
     def accessor(self, i: int) -> np.ndarray:
         a = self.g.accessors[i]
         dt, nc = _COMP[a.componentType], _NCOMP[a.type]
+        matrix_size = int(a.type[-1]) if a.type.startswith("MAT") else 0
         arr = np.zeros((a.count, nc), dt) if a.bufferView is None else \
-            self.view(a.bufferView, a.byteOffset or 0, dt, a.count, nc)
+            self.view(a.bufferView, a.byteOffset or 0, dt, a.count, nc, matrix_size)
         if a.sparse is not None and a.sparse.count:
             s = a.sparse
             idx = self.view(s.indices.bufferView, s.indices.byteOffset or 0, _COMP[s.indices.componentType],
                             s.count, 1)[:, 0]
-            arr[idx] = self.view(s.values.bufferView, s.values.byteOffset or 0, dt, s.count, nc)
+            arr[idx] = self.view(s.values.bufferView, s.values.byteOffset or 0, dt, s.count, nc, matrix_size)
         if a.normalized and dt in _NORM:
             return np.maximum(arr.astype(np.float32) / _NORM[dt], -1.0)
         return arr
@@ -522,6 +565,8 @@ class _Gltf:
             p["anisotropyRotation"] = math.degrees(float(ext["KHR_materials_anisotropy"].get("anisotropyRotation", 0.0)))
         if m.normalTexture is not None:
             p["normalScale"] = float(m.normalTexture.scale if m.normalTexture.scale is not None else 1.0)
+        if m.occlusionTexture is not None:
+            p["occlusionStrength"] = float(m.occlusionTexture.strength if m.occlusionTexture.strength is not None else 1.0)
         slots = [("baseColorMap", pbr.baseColorTexture if pbr else None, True),
                  ("metallicRoughnessMap", pbr.metallicRoughnessTexture if pbr else None, False),
                  ("normalMap", m.normalTexture, False), ("occlusionMap", m.occlusionTexture, False),
@@ -531,11 +576,17 @@ class _Gltf:
                 img = self.image(info.index, srgb)
                 if img is not None:
                     tx[key] = img
-        tt = ((pbr.baseColorTexture.extensions or {}) if pbr and pbr.baseColorTexture else {}).get("KHR_texture_transform")
-        if tt is not None:
-            p["uvTransform"] = {"offset": tuple(tt.get("offset", [0.0, 0.0])),
-                                "rotation": float(tt.get("rotation", 0.0)),
-                                "scale": tuple(tt.get("scale", [1.0, 1.0]))}
+                tt = (info.extensions or {}).get("KHR_texture_transform", {})
+                p.setdefault("mapUV", {})[key] = dict(texCoord=tt.get("texCoord", info.texCoord or 0),
+                    offset=tuple(tt.get("offset", [0., 0.])), rotation=float(tt.get("rotation", 0.)),
+                    scale=tuple(tt.get("scale", [1., 1.])))
+                sampler_i = self.g.textures[info.index].sampler
+                sampler = self.g.samplers[sampler_i] if sampler_i is not None else None
+                p.setdefault("mapSamplers", {})[key] = dict(
+                    wrapS=sampler.wrapS or 10497 if sampler is not None else 10497,
+                    wrapT=sampler.wrapT or 10497 if sampler is not None else 10497,
+                    minFilter=sampler.minFilter or 9987 if sampler is not None else 9987,
+                    magFilter=sampler.magFilter or 9729 if sampler is not None else 9729)
         return MaterialSpec(params=p, textures=tx, name=m.name or "")
 
 
@@ -559,21 +610,18 @@ def _load_gltf(path: str) -> Model:
     variant_names = [v.get("name", str(i)) for i, v in
                      enumerate(root_ext.get("KHR_materials_variants", {}).get("variants", []))]
     meshes = []
-    for mesh in g.meshes or []:
+    for mi, mesh in enumerate(g.meshes or []):
         prims = []
-        for pr in mesh.primitives:
+        for pi, pr in enumerate(mesh.primitives):
             mode = 4 if pr.mode is None else pr.mode
-            if mode not in (4, 5, 6):
-                log.warning("glTF %s: skipping primitive with mode %d (points/lines)", path, mode)
-                continue
-            at = pr.attributes
+            at = L.raw["meshes"][mi]["primitives"][pi]["attributes"]
             pos_i = _attr(at, "POSITION")
             if pos_i is None:
                 continue
             pos = L.accessor(pos_i).astype(np.float32)
             idx = L.accessor(pr.indices)[:, 0].astype(np.uint32) if pr.indices is not None else \
                 np.arange(len(pos), dtype=np.uint32)
-            tris = idx.reshape(-1, 3) if mode == 4 else _strip_fan(idx, mode).astype(np.uint32)
+            tris = (idx.reshape(-1, 3) if mode == 4 else _strip_fan(idx, mode).astype(np.uint32)) if mode >= 4 else idx
 
             def get(name: str, dtype=np.float32):
                 i = _attr(at, name)
@@ -581,22 +629,47 @@ def _load_gltf(path: str) -> Model:
             cols = get("COLOR_0")
             if cols is not None and cols.shape[1] == 3:
                 cols = np.concatenate([cols, np.ones((len(cols), 1), np.float32)], 1)
-            weights = get("WEIGHTS_0")
-            if weights is not None:
-                s = weights.sum(1, keepdims=True)
-                weights = np.where(s > 0, weights / np.where(s > 0, s, 1), weights).astype(np.float32)
+            sets = sorted(int(name[7:]) for name in at if name.startswith("JOINTS_"))
+            joints = weights = None
+            if sets:
+                joints, weights = _skin_weights(
+                    np.concatenate([get(f"JOINTS_{i}", np.uint32) for i in sets], axis=1),
+                    np.concatenate([get(f"WEIGHTS_{i}") for i in sets], axis=1))
             prim = Primitive(positions=pos, indices=tris, normals=get("NORMAL"), uvs=get("TEXCOORD_0"),
-                             tangents=get("TANGENT"), colors=cols, joints=get("JOINTS_0", np.uint16),
+                             tangents=get("TANGENT"), colors=cols, joints=joints,
                              weights=weights,
-                             material=materials[pr.material] if pr.material is not None else None)
+                             material=materials[pr.material] if pr.material is not None else
+                             MaterialSpec(params={"baseColor": (1., 1., 1., 1.), "metallic": 1., "roughness": 1.}))
+            prim.uv_sets = {int(name[9:]): get(name) for name in at if name.startswith("TEXCOORD_")}
+            prim.mode = 4 if mode >= 4 else mode
+            if mode < 4 and prim.normals is None:
+                # glTF point/line primitives without normals are unlit.
+                from dataclasses import replace
+                base = prim.material or MaterialSpec(params={"metallic": 1., "roughness": 1.})
+                prim.material = replace(base, params=dict(base.params, unlit=True))
             for tgt in pr.targets or []:
-                tp, tn = _attr(tgt, "POSITION"), _attr(tgt, "NORMAL")
+                tp, tn, tt = _attr(tgt, "POSITION"), _attr(tgt, "NORMAL"), _attr(tgt, "TANGENT")
                 prim.morph_positions.append(L.accessor(tp).astype(np.float64) if tp is not None
                                             else np.zeros((len(pos), 3)))
-                if tn is not None:
-                    prim.morph_normals.append(L.accessor(tn).astype(np.float64))
-            if len(prim.morph_normals) != len(prim.morph_positions):
-                prim.morph_normals = []
+                prim.morph_normals.append(L.accessor(tn).astype(np.float64) if tn is not None
+                                          else np.zeros((len(pos), 3)))
+                prim.morph_tangents.append(L.accessor(tt).astype(np.float64) if tt is not None
+                                           else np.zeros((len(pos), 3)))
+            if prim.normals is None:
+                prim.tangents = None             # glTF requires ignoring tangents without normals
+                prim.morph_tangents = []
+                if prim.mode == 4:
+                    # Give every face its own vertices so normals are flat both
+                    # at rest and after morphing, without changing vertex data.
+                    flat = prim.indices.reshape(-1)
+                    for attr in ("positions", "uvs", "colors", "joints", "weights"):
+                        values = getattr(prim, attr)
+                        if values is not None:
+                            setattr(prim, attr, values[flat])
+                    prim.uv_sets = {k: v[flat] for k, v in prim.uv_sets.items()}
+                    prim.morph_positions = [v[flat] for v in prim.morph_positions]
+                    prim.morph_normals = []
+                    prim.indices = np.arange(len(flat), dtype=np.uint32).reshape(-1, 3)
             for mp in ((pr.extensions or {}).get("KHR_materials_variants") or {}).get("mappings", []):
                 for vi in mp.get("variants", []):
                     if vi < len(variant_names):
@@ -810,6 +883,7 @@ class _Usd:
         self.materials: dict[str, MaterialSpec | None] = {}
         self.skels: dict[str, tuple[list[str], list[int], np.ndarray]] = {}   # path -> (joints, nodes, ibm)
         self.skinned: list = []                                 # (prim, node index) bound to skeletons
+        self.blends: dict = {}
         self.reset_roots: list[int] = []                        # prims with resetXformStack
         roots: list[int] = []
         for child in self.stage.GetPseudoRoot().GetChildren():
@@ -847,15 +921,16 @@ class _Usd:
         times = sorted({t for op in xf.GetOrderedXformOps() for t in op.GetTimeSamples()})
         if times:
             ts = np.array([(t - self.start) / self.tps for t in times])
-            trs = [_decompose(_gf(xf.GetLocalTransformation(Usd.TimeCode(t)))) for t in times]
-            for k, path in enumerate(("translation", "rotation", "scale")):
-                self.channels.append(Channel(ni, path, ts, np.array([v[k] for v in trs])))
-            nd.translation, nd.rotation, nd.scale = _decompose(local)
+            matrices = np.array([_gf(xf.GetLocalTransformation(Usd.TimeCode(t))).ravel() for t in times])
+            self.channels.append(Channel(ni, "matrix", ts, matrices))
+            nd.matrix = local
+            nd.matrix_sampler = lambda t, xf=xf: _gf(xf.GetLocalTransformation(Usd.TimeCode(self.start + t * self.tps)))
         elif not np.allclose(local, np.eye(4)):
             nd.matrix = local
         if prim.IsA(UsdGeom.Mesh):
             nd.mesh = len(self.model.meshes)
             self.model.meshes.append(self.mesh(prim))
+            self.bind_blends(prim, ni)
             if UsdSkel.BindingAPI(prim).GetSkeleton():
                 self.skinned.append((prim, ni))
         elif prim.IsA(UsdSkel.Skeleton):
@@ -897,6 +972,7 @@ class _Usd:
         dc = primvar("displayColor")
         do = primvar("displayOpacity")
         joints = self.skin_influences(prim, len(pts))
+        morph_pos, morph_nrm = self.blend_shapes(prim, len(pts))
         attrs = {"n": normals, "uv": st, "c": dc if dc is not None and dc[1] != "constant" else None}
         unindex = any(a is not None and a[1] in ("faceVarying", "uniform") for a in attrs.values())
 
@@ -912,6 +988,9 @@ class _Usd:
         corner = tri_c if unindex else fvi[tri_c]
         if joints is not None and unindex:
             joints = (joints[0][fvi], joints[1][fvi])
+        if unindex:
+            morph_pos = [a[fvi] for a in morph_pos]
+            morph_nrm = [a[fvi] for a in morph_nrm]
         uvs = None if "uv" not in out else \
             np.stack([out["uv"][:, 0], 1.0 - out["uv"][:, 1]], 1).astype(np.float32)
         colors = None
@@ -937,8 +1016,74 @@ class _Usd:
                 positions=pos.astype(np.float32), indices=corner[sel].astype(np.uint32),
                 normals=_unit_f32(out["n"]) if "n" in out else None, uvs=uvs, colors=colors,
                 joints=None if joints is None else joints[0], weights=None if joints is None else joints[1],
+                morph_positions=morph_pos, morph_normals=morph_nrm,
                 material=mat if mat is not None else (mats[0] if mi else None)))
         return prims
+
+    def blend_shapes(self, prim, n_points):
+        from pxr import UsdSkel
+        binding = UsdSkel.BindingAPI(prim)
+        query = UsdSkel.BlendShapeQuery(binding)
+        if not query or not query.GetNumBlendShapes():
+            return [], []
+        self.blends[str(prim.GetPath())] = query
+        indices = query.ComputeBlendShapePointIndices()
+        positions, normals = [], []
+        for i, offsets in enumerate(query.ComputeSubShapePointOffsets()):
+            bi = query.GetBlendShapeIndex(i)
+            selection = np.asarray(indices[bi], np.int64)
+            if not len(selection):
+                selection = np.arange(n_points)
+            pos, nrm = np.zeros((n_points, 3)), np.zeros((n_points, 3))
+            if len(offsets):
+                pos[selection] = np.asarray(offsets)
+                inbetween = query.GetInbetween(i)
+                normal_offsets = inbetween.GetNormalOffsets() if inbetween else query.GetBlendShape(bi).GetNormalOffsetsAttr().Get()
+                if normal_offsets is not None and len(normal_offsets):
+                    nrm[selection] = np.asarray(normal_offsets)
+            positions.append(pos)
+            normals.append(nrm)
+        return positions, normals
+
+    def bind_blends(self, prim, ni):
+        from pxr import Usd, UsdSkel
+        query = self.blends.get(str(prim.GetPath()))
+        if query is None:
+            return
+        binding = UsdSkel.BindingAPI(prim)
+        names = list(binding.GetBlendShapesAttr().Get() or [])
+        nd = self.model.nodes[ni]
+        nd.weights = np.zeros(query.GetNumBlendShapes())
+
+        def map_weights(weights):
+            values = np.zeros(query.GetNumBlendShapes(), np.float32)
+            values[:min(len(weights), len(values))] = weights[:len(values)]
+            w, _, subindices = query.ComputeSubShapeWeights(values.tolist())
+            out = np.zeros(query.GetNumSubShapes())
+            out[np.asarray(subindices, np.int64)] = w
+            return out
+        nd.weight_mapper = map_weights
+        anim_prim = binding.GetInheritedAnimationSource()
+        if not anim_prim:
+            skel = binding.GetInheritedSkeleton()
+            anim_prim = UsdSkel.BindingAPI(skel).GetInheritedAnimationSource() if skel else None
+        if not anim_prim:
+            return
+        anim = UsdSkel.Animation(anim_prim)
+        attr = anim.GetBlendShapeWeightsAttr()
+        if not attr.HasValue():
+            return
+        order = list(anim.GetBlendShapesAttr().Get() or [])
+        times = attr.GetTimeSamples()
+        vals = []
+        for t in times or [None]:
+            value = attr.Get(Usd.TimeCode.Default() if t is None else Usd.TimeCode(t))
+            vals.append([value[order.index(n)] if n in order else 0. for n in names])
+        if len(times) > 1:
+            self.channels.append(Channel(ni, "weights", (np.asarray(times) - self.start) / self.tps,
+                                         np.asarray(vals, np.float64)))
+        else:
+            nd.weights = np.asarray(vals[0], np.float64)
 
     # --- materials
     def bound_material(self, prim) -> MaterialSpec | None:
@@ -1090,7 +1235,7 @@ class _Usd:
         w = np.asarray(jw.ComputeFlattened(), np.float64).reshape(-1, es)
         if ji.GetInterpolation() == "constant":
             idx, w = np.repeat(idx[:1], n_points, 0), np.repeat(w[:1], n_points, 0)
-        return _top4(idx, w)
+        return _skin_weights(idx, w)
 
     def bind_skin(self, prim, ni: int) -> None:
         from pxr import UsdSkel
@@ -1229,7 +1374,7 @@ def _fbx_mesh(mesh, mats: dict, base_dir: str) -> list[Primitive]:
             for n in range(min(sv.num_weights, k)):
                 w = sw[sv.weight_begin + n]
                 ji[vi, n], jw[vi, n] = w.cluster_index, w.weight
-        joints, weights = _top4(ji, jw)
+        joints, weights = _skin_weights(ji, jw)
     # blend shapes per point
     morphs = []
     for bd in mesh.blend_deformers:

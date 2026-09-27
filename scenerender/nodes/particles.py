@@ -126,9 +126,10 @@ class Params:
 
     def __init__(self, rc: RenderContext, el, ctx: Ctx):
         self.rc, self.el = rc, el
-        self.preset = PRESETS.get(el.get("preset") or "", {})
-        if el.get("preset") and not self.preset:
-            warn_once("particles", f"preset:{el.get('preset')}", "unknown preset")
+        preset = rc.ev.str(el, "preset", ctx)
+        self.preset = PRESETS.get(preset or "", {})
+        if preset and not self.preset:
+            warn_once("particles", f"preset:{preset}", "unknown preset")
         self.animated = set()
         for a in el:
             if ln(a) in ANIM_TAGS:
@@ -144,7 +145,8 @@ class Params:
         return self.el.get(name) is not None or name in self.animated or name in self.overrides
 
     def get(self, name: str, ctx: Ctx | None = None):
-        if name not in self.animated and name in self._const:
+        constant = name not in self.animated and "preset" not in self.animated
+        if constant and name in self._const:
             return self._const[name]
         ctx = ctx or self.ctx0
         ev = self.rc.ev
@@ -155,34 +157,30 @@ class Params:
                 v = ev.num(self.el, name, ctx, 0.0)
             else:
                 v = ev.str(self.el, name, ctx)
-        elif name in self.preset:
-            v = self.preset[name]
+        elif name in self.preset_at(ctx):
+            v = self.preset_at(ctx)[name]
         elif name in BOOL:
             v = ev.bool(self.el, name, ctx, False)
         elif name in NUM:
             v = ev.num(self.el, name, ctx, 0.0)
         else:
             v = ev.str(self.el, name, ctx)
-        if name not in self.animated:
+        if constant:
             self._const[name] = v
         return v
 
-    def look(self, key, default=None):
-        return self.preset.get(key, default)
+    def preset_at(self, ctx=None):
+        if "preset" not in self.animated:
+            return self.preset
+        return PRESETS.get(self.rc.ev.str(self.el, "preset", ctx or self.ctx0) or "", {})
+
+    def look(self, key, default=None, ctx=None):
+        return self.preset_at(ctx).get(key, default)
 
 
 # ====================================================================== simulation
 def _parent_box(rc: RenderContext, el, ctx: Ctx) -> tuple[float, float]:
-    parent = el.getparent()
-    box = (float(rc.doc.width), float(rc.doc.height))
-    if parent is None:
-        return box
-    tag = ln(parent)
-    if tag == "symbol" and parent.get("width"):
-        return float(parent.get("width")), float(parent.get("height"))
-    if tag in ("group", "sequence", "repeat", "instance"):
-        return rc.node_size(parent, rc.node_ctx(parent, ctx), box)
-    return box
+    return rc.node_location(el, ctx).box
 
 
 class Emitter:
@@ -190,7 +188,8 @@ class Emitter:
         self.rc, self.el = rc, el
         self.P = Params(rc, el, ctx)
         self.seed = rc.ev.seed_for(el, "particles")
-        s, e = rc.doc.window(el)
+        clock = rc.node_ctx(el, ctx)
+        s, e = clock.node_start, clock.node_end
         self.start, self.end = s, e
         self.preroll = max(0.0, self.P.get("preroll"))
         self.t0 = s - self.preroll
@@ -219,8 +218,7 @@ class Emitter:
 
     # ------------------------------------------------------------ helpers
     def ctx_at(self, t: float) -> Ctx:
-        c = self.ctx_base
-        return replace(c, t=t, comp_t=c.comp_t + (t - c.t))
+        return self.rc.ev.context_at_local(self.el, self.ctx_base, t)
 
     def L(self, t: float) -> np.ndarray:
         if self.static_L and self._L is not None:
@@ -241,11 +239,13 @@ class Emitter:
         allf = [f for f in ph if ln(f) == "forceField"]
         if ids:
             want = set(ids.split())
-            out = [f for f in allf if f.get("id") in want and f.get("affects", "all") != "bodies"]
+            out = [f for f in allf if f.get("id") in want]
             for m in want - {f.get("id") for f in out}:
-                warn_once("particles", f"forceField:{m}", "force field not found (or affects bodies only)")
-            return out
-        return [f for f in allf if f.get("affects", "all") in ("all", "particles")]
+                warn_once("particles", f"forceField:{m}", "force field not found")
+            # Keep all candidates: forceFields and affects can both change
+            # during simulation and are selected at the individual step.
+            return allf
+        return allf
 
     def _init(self) -> dict:
         z = np.zeros(0)
@@ -401,8 +401,12 @@ class Emitter:
             else:
                 X, Y, VX, VY = x, y, vx, vy
             FX, FY = np.zeros_like(x), np.zeros_like(x)
+            names = P.get("forceFields", c)
+            selected = set(names.split()) if names else None
             for f in self.fields:
-                fx, fy = field_accel(self.rc, f, c.comp_t, X, Y, VX, VY, self.ppm)
+                if selected is not None and f.get("id") not in selected:
+                    continue
+                fx, fy = field_accel(self.rc, f, c.comp_t, X, Y, VX, VY, self.ppm, affects="particles")
                 FX, FY = FX + fx, FY + fy
             if PD is not None:
                 Li = np.linalg.inv(PD[:2, :2])
@@ -609,11 +613,18 @@ class Emitter:
 
 
 def get_emitter(rc: RenderContext, el, ctx: Ctx) -> Emitter:
-    key = ("particles", el, ctx.scope.path)
-    em = rc.cache.get(key)
+    from collections import OrderedDict
+    key = ("particles", el, Ctx(0, 0, scope=ctx.scope, vars=ctx.vars,
+                               node_start=ctx.node_start, node_end=ctx.node_end))
+    histories = rc.cache.setdefault(key, OrderedDict())
+    branch = rc.ev.history_origin(el, ctx)
+    em = histories.get(branch)
     if em is None:
         em = Emitter(rc, el, ctx)
-        rc.cache[key] = em
+        histories[branch] = em
+        while len(histories) > 8:
+            histories.popitem(last=False)
+    histories.move_to_end(branch)
     return em
 
 
@@ -719,7 +730,7 @@ def render_particles(rc: RenderContext, el, ctx: Ctx, M, size):
     col0 = paint.paint_color_estimate(rc, P.get("color") or "#FFFFFFFF", ctx)
     col1 = paint.paint_color_estimate(rc, P.get("colorEnd"), ctx) if (P.explicit("colorEnd") or "colorEnd" in P.preset) else col0
     ck = _curve_table(P.get("colorCurve"))[idx]
-    palette = P.look("palette") if not P.explicit("color") else None
+    palette = P.look("palette", ctx=ctx) if not P.explicit("color") else None
     if palette:
         pal = np.array([parse_color(c)[:3] for c in palette])
         base = pal[(hash01(em.seed, p["pid"], 20) * len(pal)).astype(np.int64) % len(pal)]
@@ -731,10 +742,10 @@ def render_particles(rc: RenderContext, el, ctx: Ctx, M, size):
         rgb, alpha = cc[:, :3], cc[:, 3]
     o_end = P.get("opacityEnd") if (P.explicit("opacityEnd") or "opacityEnd" in P.preset) else 1.0
     alpha = alpha * (1 + (o_end - 1) * u)
-    fade_in = P.look("fade_in", 0.0)
+    fade_in = P.look("fade_in", 0.0, ctx)
     if fade_in:
         alpha = alpha * np.clip(u / fade_in, 0, 1)
-    if P.look("twinkle"):
+    if P.look("twinkle", ctx=ctx):
         ph = hash01(em.seed, p["pid"], 21) * 2 * math.pi
         alpha = alpha * (0.35 + 0.65 * (0.5 + 0.5 * np.sin(ph + p["age"] * 14.0)))
     shape = P.get("shape") or "disc"
@@ -760,9 +771,9 @@ def render_particles(rc: RenderContext, el, ctx: Ctx, M, size):
     visible = (fx + reach >= r[0]) & (fx - reach <= r[2]) & (fy + reach >= r[1]) & (fy - reach <= r[3]) & (alpha > 1e-3) & (sz > 0)
     order = np.nonzero(visible)[0]
     sprite = _sprite_surface(rc, P.get("sprite"), ctx) if shape == "sprite" and P.get("sprite") else None
-    soft = float(P.look("soft", 0.0))
-    ring = P.look("ring")
-    flutter = P.look("flutter")
+    soft = float(P.look("soft", 0.0, ctx))
+    ring = P.look("ring", ctx=ctx)
+    flutter = P.look("flutter", ctx=ctx)
     X, Y, VX, VY = p["x"], p["y"], p["vx"], p["vy"]
     HX, HY, FR = p.get("hx"), p.get("hy"), p.get("frac")
     ROT = p["rot"]

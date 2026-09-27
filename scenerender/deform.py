@@ -70,7 +70,7 @@ GRID = 4          # output pixels per inverse-map sample
 
 
 def _c(rc, m, ctx, name, default):
-    return rc.ev.num(m, name, ctx, default) if (m.get(name) is not None or _animated(m, name)) else default
+    return rc.ev.num(m, name, ctx, default) if rc.ev.explicit(m, name, ctx) else default
 
 
 def _animated(m, name) -> bool:
@@ -83,7 +83,7 @@ def _common(rc, m, ctx, w, h):
     cy = _c(rc, m, ctx, "centerY", h / 2)
     R = _c(rc, m, ctx, "radius", 0.0) or math.hypot(w, h) / 2
     return (ev.num(m, "amount", ctx, 0.0), ev.num(m, "frequency", ctx, 1.0), math.radians(ev.num(m, "phase", ctx, 0.0)),
-            (m.get("axis") or "y").strip().lower(), cx, cy, max(R, 1e-6))
+            (ev.str(m, "axis", ctx, "y")).strip().lower(), cx, cy, max(R, 1e-6))
 
 
 def _swap(fn):
@@ -255,7 +255,7 @@ def build_mesh_warp(rc, m, ctx, w, h, node):
     for p in m:
         if ln(p) != "point":
             continue
-        r, c = int(float(p.get("row", 0))), int(float(p.get("col", 0)))
+        r, c = int(rc.ev.num(p, "row", ctx)), int(rc.ev.num(p, "col", ctx))
         if 0 <= r < rows and 0 <= c < cols:
             D[r, c] = (ev.num(p, "x", ctx, 0.0), ev.num(p, "y", ctx, 0.0))
             any_ = any_ or bool(D[r, c].any())
@@ -441,7 +441,7 @@ def build_puppet(rc, m, ctx, w, h, node):
     for p in m:
         if ln(p) != "pin":
             continue
-        kind = p.get("kind", "position")
+        kind = rc.ev.str(p, "kind", ctx, "position")
         rest = np.array([ev.num(p, "restX", ctx, 0.0), ev.num(p, "restY", ctx, 0.0)])
         disp = np.array([ev.num(p, "x", ctx, 0.0), ev.num(p, "y", ctx, 0.0)])
         rot = ev.num(p, "rotation", ctx, 0.0) if kind == "bend" else 0.0
@@ -536,11 +536,7 @@ def _bone_local(rc, b, ctx, rest: bool):
 
 def skeleton_frame(rc, skel, ctx) -> np.ndarray:
     """Frame matrix of skeleton space: the space of the skeleton's parent node (composition px at the top)."""
-    from .constraints import ROOTS
-    p = skel.getparent()
-    if p is None or ln(p) in ROOTS:
-        return rc.root_matrix
-    return rc.world_matrix(p, ctx)
+    return rc.node_location(skel, ctx).matrix
 
 
 def _world_of(bones, by_id, local) -> dict:
@@ -685,7 +681,7 @@ def _file_weights(spec, P_node, P_skel, w, h) -> np.ndarray:
                     note="linear blend skinning on a mesh of the node box; skeleton/@weights JSON or bone-distance "
                          "weights; bones in the skeleton's parent space; IK two-bone/FABRIK")
 def build_skin(rc, m, ctx, w, h, node, M=None):
-    skel = rc.doc.ids.get(m.get("skeleton")) if m.get("skeleton") else None
+    skel = rc.doc.ids.get(rc.ev.str(m, "skeleton", ctx))
     if skel is None or M is None:
         if skel is None:
             warn_once("deform", f"skin:{m.get('skeleton')}", "skeleton not found")
@@ -745,7 +741,8 @@ def build_soft(rc, el, ctx, w, h, M):
     from .physics import soft_world
     if abs(M[2, 0]) + abs(M[2, 1]) > 1e-12:
         return None
-    res = soft_world(rc, el, ctx.comp_t)
+    from .physics import scene_time
+    res = soft_world(rc, el, scene_time(rc, ctx))
     if res is None:
         return None
     s, pw = res
@@ -786,7 +783,7 @@ def build_maps(rc, el, ctx, size, M):
     w, h = size
     maps = []
     for m in modifiers_of(el):
-        typ = m.get("type")
+        typ = rc.ev.str(m, "type", ctx)
         fn = DEFORMERS.get(typ)
         if fn is None:
             warn_once("deform", typ)

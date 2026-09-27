@@ -145,34 +145,9 @@ def radial_wipe(rc, tr, a, b, p, ctx):
 
 def matte_luma(rc, tr, ctx) -> np.ndarray | None:
     """Display-referred luma (0..1, times alpha) of the @matte node or image asset, full frame."""
-    from ..compositor import scale as scale_m
-    from ..document import ln
-    from ..registry import ASSETS
-    mid = tr.get("matte")
-    node = rc.doc.ids.get(mid) if mid else None
-    if node is None:
-        return None
-    parent = node.getparent()
-    top = parent is None or ln(parent) in ("composition", "symbol", "symbols", "scene")
-    if parent is not None and ln(parent) == "assets":
-        fn = ASSETS.get(ln(node))
-        if fn is None:
-            return None
-        aw, ah = rc.asset_size(node, ctx)
-        if not aw or not ah:
-            return None
-        buf = fn(rc, node, scale_m(rc.width / aw, rc.height / ah), ctx)
-        if buf is None:
-            return None
-        px = buf.region((0, 0, rc.width, rc.height))
-    else:
-        PM = rc.root_matrix if top else rc.world_matrix(parent, ctx)
-        box = (rc.doc.width, rc.doc.height) if top else rc.node_size(parent, ctx, (rc.doc.width, rc.doc.height))
-        o = rc.render_node(node, ctx, PM, box, force=True)
-        if o is None:
-            return np.zeros((rc.height, rc.width), np.float32)
-        px = o.buf.region((0, 0, rc.width, rc.height)) * o.opacity
-    return np.clip(luma_display(rc, px), 0.0, 1.0)
+    from . import matte_rgba
+    px = matte_rgba(rc, tr, ctx)
+    return None if px is None else np.clip(luma_display(rc, px), 0.0, 1.0)
 
 
 @TRANSITIONS.register("luma", level=FULL,

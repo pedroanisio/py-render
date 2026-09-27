@@ -1,5 +1,14 @@
 # scene-render 1.1 implementation audit
 
+This is the historical audit. See [CURRENT-INSPECTION.md](CURRENT-INSPECTION.md)
+for the follow-up on commit `3510103`, including repaired cases and newly
+reproduced failures.
+
+Subsequent repairs and current outstanding work are tracked in
+[SCHEMA-IMPLEMENTATION.md](../../SCHEMA-IMPLEMENTATION.md). The historical verdicts
+below and in the inspection are snapshots; the
+[implementation probe results](implementation-results.json) record the repaired cases.
+
 **Verdict: broad implementation coverage, but not complete conformance to
 `schema/scene-render-1.1.xsd`.** All 269 named alternatives in the 11 registry
 categories below are registered. Schema-valid documents nevertheless reproduce

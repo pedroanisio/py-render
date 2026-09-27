@@ -124,10 +124,9 @@ def evaluate(rc, t: float) -> list[LightState]:
 
 def _eval(rc, el, c: Ctx) -> LightState:
     ev = rc.ev
-    kind = el.get("type", "point")
+    kind = ev.str(el, "type", c, "point")
     col = np.array(srgb_to_linear(np.array(ev.color(el, "color", c, (1, 1, 1, 1))[:3], np.float32)), np.float64)
-    if el.get("colorTemperature") is not None or any(isinstance(a.tag, str) and a.get("property") == "colorTemperature"
-                                                      for a in el):
+    if ev.explicit(el, "colorTemperature", c):
         col = col * kelvin_rgb(ev.num(el, "colorTemperature", c, 6500.0))
     col = col * ev.num(el, "intensity", c, 1.0) * 2.0 ** ev.num(el, "exposure", c, 0.0)
     M = world3d(rc, el, c)
@@ -139,7 +138,7 @@ def _eval(rc, el, c: Ctx) -> LightState:
     elif kind in ("disk-area", "sphere-area"):
         r = ev.num(el, "radius", c, m / 2)
         L.size = (r, r)
-    L.range = ev.num(el, "range", c, 0.0) if el.get("range") is not None else 0.0
+    L.range = ev.num(el, "range", c, 0.0)
     L.falloff = ev.num(el, "falloff", c, 2.0)
     outer = min(179.0, max(0.5, ev.num(el, "spotAngle", c, 45.0)))
     inner = min(outer, max(0.0, ev.num(el, "innerConeAngle", c, 0.0)))
@@ -150,13 +149,15 @@ def _eval(rc, el, c: Ctx) -> LightState:
     L.map_size = int(min(8192, max(16, ev.num(el, "shadowMapSize", c, 2048))))
     L.diffuse = ev.bool(el, "affectsDiffuse", c, True)
     L.specular = ev.bool(el, "affectsSpecular", c, True)
-    if el.get("ies") and kind != "ambient" and kind != "dome":
-        L.ies = ies_table(rc, rc.doc.resolve_path(el.get("ies")))
+    ies = ev.str(el, "ies", c)
+    if ies and kind != "ambient" and kind != "dome":
+        L.ies = ies_table(rc, rc.doc.resolve_path(ies))
     if kind == "dome":
         L.visible = ev.bool(el, "environmentVisible", c, False)
         L.env_rot = R
-        if el.get("environment"):
-            img = environment_image(rc, rc.doc.resolve_path(el.get("environment")))
+        environment = ev.str(el, "environment", c)
+        if environment:
+            img = environment_image(rc, rc.doc.resolve_path(environment))
             if img is not None:
                 L.env = img
     L.key = (el.get("id"), kind, tuple(np.round(L.color, 6)), tuple(np.round(L.pos, 4)), tuple(np.round(L.fwd, 6)),

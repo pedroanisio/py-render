@@ -56,8 +56,8 @@ json (default @format). Schema::
            "scale": s | [sx, sy]   (factor) | "scaleX","scaleY",
            "corners": [[x,y] x4]   (TL,TR,BR,BL, px),
            "points": [[x,y], ...]  (mask vertices / face landmarks, px, same count in every key)
-           | "path": "M x y L x y ... Z"  (mask alternative: M/L/H/V/Z, absolute or relative,
-                                           one subpath, straight segments only)}
+           | "path": "M x y C ... Z"  (SVG path commands, absolute or relative, multiple
+                                      subpaths; matching command topology between keys)}
   Every field is optional per key; each property is interpolated over the keys that carry it.
   Pixels, +y down, rotation clockwise. Face tracks: landmarks in "points" (+ optional x/y/
   rotation/scale for the head pose); ``:<index>`` selects a landmark.
@@ -296,6 +296,7 @@ class Channel:
     times: np.ndarray
     data: dict[str, np.ndarray]                  # values at `times` (exact for curve-driven keys)
     curves: dict[str, Callable] = field(default_factory=dict)   # exact evaluators (Nuke/FBX curves)
+    path_codes: tuple[str, ...] = ()
 
     def fn(self, key: str) -> Callable:
         if key in self.curves:
@@ -317,14 +318,18 @@ class Channel:
             self.data.pop(k, None)
             self.curves.pop(k, None)
 
-    def sample(self, tt: float) -> dict[str, float | np.ndarray]:
-        out: dict[str, float | np.ndarray] = {}
+    def sample(self, tt: float) -> dict[str, object]:
+        out: dict[str, object] = {}
         for k, v in self.data.items():
             if k in self.curves:
                 a = self.curves[k](tt)
                 out[k] = float(a) if np.ndim(a) == 0 else np.array(a, dtype=float)
             else:
                 out[k] = _lerp(self.times, v, tt)
+        if self.path_codes:
+            coords = iter(out.pop("_path"))
+            out["path"] = [(code, *(float(next(coords)) for _ in range({"M": 2, "L": 2, "C": 6, "Z": 0}[code])))
+                           for code in self.path_codes]
         return out
 
 
@@ -358,7 +363,7 @@ class Track:
             return first, name
         return None, None
 
-    def sample(self, point: str | None, t: float) -> dict[str, float | np.ndarray] | None:
+    def sample(self, point: str | None, t: float) -> dict[str, object] | None:
         ch, sub = self.channel(point)
         if ch is None:
             return None
@@ -498,51 +503,45 @@ def _num(s) -> float | None:
 # ====================================================================== json
 _JSON_SCALARS = ("x", "y", "z", "rotation", "rx", "ry", "rz", "scaleX", "scaleY", "anchorX", "anchorY",
                  "fov", "focal", "zoom")
-_PATH_TOK = re.compile(r"[MLHVZmlhvz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+_PATH_TOK = re.compile(r"[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 
 
-def _path_points(d: str) -> list[list[float]]:
-    """Vertices of a single straight-segment path (M/L/H/V/Z, absolute or relative)."""
-    pts: list[list[float]] = []
-    cmd, x, y, nums = None, 0.0, 0.0, []
+def _mask_commands(d: str) -> list[tuple]:
+    """Normalize SVG paths without flattening their curves or connecting subpaths."""
+    from .geometry import parse_svg_path
     toks = _PATH_TOK.findall(d)
     if re.sub(r"[\s,]+", "", d) != "".join(toks):
-        raise TrackError(f"mask path {d[:40]!r}: only M/L/H/V/Z commands are supported")
+        raise TrackError(f"mask path {d[:40]!r}: invalid path data")
+    if not toks or toks[0] not in ("M", "m"):
+        raise TrackError("mask path must start with a move command")
+    # Validate counts before calling the shared geometry parser, which is also
+    # used for forgiving native shape input.
+    i = 0
+    counts = {"M": 2, "L": 2, "H": 1, "V": 1, "C": 6, "S": 4, "Q": 4, "T": 2, "A": 7, "Z": 0}
+    while i < len(toks):
+        code = toks[i].upper()
+        if code not in counts:
+            raise TrackError("mask path: numbers without a command")
+        j = i + 1
+        while j < len(toks) and toks[j] not in "MmLlHhVvCcSsQqTtAaZz":
+            j += 1
+        n, need = j - i - 1, counts[code]
+        if (need == 0 and n) or (need and (not n or n % need)):
+            raise TrackError(f"mask path: bad argument count for {code}")
+        i = j
+    commands = parse_svg_path(d)
+    out = []
+    for command in commands:
+        if command[0] == "M" and out and out[-1][0] != "Z":
+            out.append(("Z",))
+        out.append(command)
+    if out[-1][0] != "Z":
+        out.append(("Z",))
+    return out
 
-    def flush():
-        nonlocal x, y, cmd
-        need = {"M": 2, "L": 2, "H": 1, "V": 1}.get(cmd.upper(), 0) if cmd else 0
-        if need == 0:
-            if nums:
-                raise TrackError("mask path: numbers without a command")
-            return
-        if len(nums) % need:
-            raise TrackError(f"mask path: bad argument count for {cmd}")
-        rel = cmd.islower()
-        for i in range(0, len(nums), need):
-            a = nums[i:i + need]
-            c = cmd.upper()
-            if c in "ML":
-                x, y = (x + a[0], y + a[1]) if rel else (a[0], a[1])
-            elif c == "H":
-                x = x + a[0] if rel else a[0]
-            else:
-                y = y + a[0] if rel else a[0]
-            if c == "M" and pts and i == 0:
-                raise TrackError("mask path: only one subpath is supported")
-            pts.append([x, y])
-        nums.clear()
 
-    for tok in toks:
-        if tok.isalpha():
-            flush()
-            cmd = None if tok in "Zz" else tok
-        else:
-            nums.append(float(tok))
-    flush()
-    if not pts:
-        raise TrackError("mask path has no vertices")
-    return pts
+def _polygon_commands(points):
+    return [("M" if i == 0 else "L", float(x), float(y)) for i, (x, y) in enumerate(points)] + [("Z",)]
 
 
 def parse_json(data: str | bytes, ctx: Ctx | None = None) -> dict[str, Channel]:
@@ -564,6 +563,7 @@ def parse_json(data: str | bytes, ctx: Ctx | None = None) -> dict[str, Channel]:
     for name, spec in items:
         keys = spec.get("keys", []) if isinstance(spec, dict) else spec
         recs = []
+        path_codes = None
         for k in keys:
             if "t" in k or "time" in k:
                 t = float(k.get("t", k.get("time")))
@@ -584,10 +584,22 @@ def parse_json(data: str | bytes, ctx: Ctx | None = None) -> dict[str, Channel]:
                 vals["corners"] = c
             if k.get("points") is not None:
                 vals["points"] = np.asarray(k["points"], float).reshape(-1, 2)
+                commands = _polygon_commands(vals["points"])
             elif k.get("path") is not None:
-                vals["points"] = np.asarray(_path_points(k["path"]), float)
+                commands = _mask_commands(k["path"])
+                vals["points"] = np.asarray([c[-2:] for c in commands if c[0] != "Z"], float)
+            else:
+                commands = None
+            if commands is not None:
+                codes = tuple(c[0] for c in commands)
+                if path_codes is not None and path_codes != codes:
+                    raise TrackError(f"json track {name!r}: mask path topology changes between keys")
+                path_codes = codes
+                vals["_path"] = np.asarray([v for c in commands for v in c[1:]], float)
             recs.append((t, vals))
-        out[str(name)] = _channel(str(name), _records(recs))
+        channel = _channel(str(name), _records(recs))
+        channel.path_codes = path_codes or ()
+        out[str(name)] = channel
     return out
 
 
@@ -1607,7 +1619,7 @@ def _load(td, path: str, ctx: Ctx) -> Track | None:
 
 
 def mask_path(rc, td_el, point: str | None, t: float) -> list[tuple] | None:
-    """Mask/planar track as a closed polygon path at composition time t."""
+    """Mask/planar track as a closed path at composition time t, retaining curves and subpaths."""
     tr = load_track(rc, td_el)
     if tr is None:
         return None
@@ -1615,6 +1627,8 @@ def mask_path(rc, td_el, point: str | None, t: float) -> list[tuple] | None:
     if ch is None:
         return None
     v = ch.sample(t - tr.time_offset)
+    if "path" in v:
+        return v["path"]
     pts = v.get("points", v.get("corners"))
     if pts is None or len(pts) < 2:
         return None
@@ -1640,6 +1654,6 @@ for _f, (_lvl, _note) in _FMT_NOTES.items():
 for _k, _note in {"point": "x/y (+rotation/scale/anchor) per channel",
                   "planar": "corners TL,TR,BR,BL; :tl/:tr/:br/:bl/:center sub-points",
                   "camera": "x/y/z, rx/ry/rz, focal/fov/zoom (units as exported)",
-                  "mask": "fixed-vertex polygons (points / path) via mask_path",
+                  "mask": "polygons and SVG curves/subpaths with fixed topology via mask_path",
                   "face": "landmarks as points (+ pose x/y/rotation/scale); :<index> selects a landmark"}.items():
     FEATURES.declare(f"trackData:kind:{_k}", FULL, _note)

@@ -64,8 +64,9 @@ class Renderer:
             c = color_to_working(c, True)
         return c
 
-    def frame_linear(self, t: float, frame: int = 0) -> np.ndarray:
+    def frame_linear(self, t: float, frame: int | None = None) -> np.ndarray:
         """Premultiplied working-space frame (h, w, 4) float32, before background."""
+        frame = int(round(t * self.fps)) if frame is None else frame
         rc = self.rc
         p = self.doc.project
         if not rc.motion_blur:

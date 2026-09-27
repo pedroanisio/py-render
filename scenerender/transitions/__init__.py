@@ -50,6 +50,26 @@ def _fit(rc, buf: Buf) -> np.ndarray:
     return buf.region((0, 0, rc.width, rc.height))
 
 
+def matte_rgba(rc, tr, ctx) -> np.ndarray | None:
+    """Premultiplied full-frame matte, evaluated on its own node or asset clock."""
+    from ..compositor import scale as scale_m
+    from ..document import ln
+    from ..registry import ASSETS
+    node, target_ctx = rc.ev.reference(rc.ev.str(tr, "matte", ctx, ""), tr, ctx)
+    if node is None:
+        return None
+    parent = node.getparent()
+    if parent is not None and ln(parent) == "assets":
+        fn = ASSETS.get(ln(node))
+        aw, ah = rc.asset_size(node, target_ctx) if fn else (0, 0)
+        buf = fn(rc, node, scale_m(rc.width / aw, rc.height / ah), target_ctx,
+                 src_t=target_ctx.t) if aw and ah else None
+        return None if buf is None else buf.region(rc.frame_rect)
+    loc = rc.node_location(node, target_ctx)
+    o = loc.rc.render_node(node, loc.ctx, loc.matrix, loc.box, loc.layout, force=True)
+    return np.zeros((rc.height, rc.width, 4), np.float32) if o is None else o.buf.region(rc.frame_rect) * o.opacity
+
+
 def out(px: np.ndarray) -> Buf:
     return Buf(np.ascontiguousarray(px, dtype=np.float32), 0, 0)
 
@@ -135,13 +155,13 @@ def velocity(rc, tr, ctx) -> float:
     """d(eased progress)/dt in 1/s at the current time (0 when unknown)."""
     try:
         from .. import curves
-        w = rc.transition_window(tr)
+        w = rc.transition_window(tr, ctx)
         if w is None:
             return 0.0
         s0, s1, _ = w
         dur = max(1e-6, s1 - s0)
         u = (ctx.t - s0) / dur
-        f = curves.get(tr.get("curve", "ease-in-out"))
+        f = curves.get(rc.ev.str(tr, "curve", ctx, "ease-in-out"))
         h = 1e-3
         lo, hi = max(0.0, u - h), min(1.0, u + h)
         if hi <= lo:
@@ -430,7 +450,7 @@ def luma_display(rc, px: np.ndarray) -> np.ndarray:
 @TRANSITIONS.register("crossfade", "additive-dissolve", level=FULL)
 def crossfade(rc, tr, a, b, p, ctx):
     A, B = arrays(rc, a, b)
-    if tr.get("type") == "additive-dissolve":
+    if rc.transition_value(tr, "type", ctx) == "additive-dissolve":
         # Both pictures at full strength around the midpoint, summed like plus-lighter.
         return out(np.minimum(A * min(1.0, 2 * (1 - p)) + B * min(1.0, 2 * p), 1.0))
     return out(A * (1 - p) + B * p)

@@ -85,36 +85,31 @@ def _about(p, A) -> np.ndarray:
 
 
 def _parent_box(rc, el, ctx):
-    parent = el.getparent()
-    box = (float(rc.doc.width), float(rc.doc.height))
-    if parent is None or ln(parent) in ROOTS:
-        if parent is not None and ln(parent) == "symbol" and parent.get("width"):
-            return float(parent.get("width")), float(parent.get("height"))
-        return box
-    return rc.node_size(parent, rc.node_ctx(parent, ctx), box)
+    return rc.node_location(el, ctx).box
 
 
 def _anchor(rc, el, ctx) -> tuple[float, float]:
-    nctx = rc.node_ctx(el, ctx)
-    w, h = rc.node_size(el, nctx, _parent_box(rc, el, ctx))
+    loc = rc.node_location(el, ctx)
+    nctx = loc.rc.enter_node(el, loc.ctx)
+    w, h = loc.rc.node_size(el, nctx, loc.box, loc.layout)
     return rc.ev.length(el, "anchorX", nctx, w), rc.ev.length(el, "anchorY", nctx, h)
 
 
 def parent_frame(rc, el, ctx) -> np.ndarray:
     """Frame matrix of el's parent space (its @parent target, else its XML parent)."""
-    pid = el.get("parent")
-    if pid and pid in rc.doc.ids:
-        return rc.world_matrix(rc.doc.ids[pid], ctx)
-    p = el.getparent()
-    if p is None or ln(p) in ROOTS:
-        return rc.root_matrix
-    return rc.world_matrix(p, ctx)
+    pid = rc.ev.str(el, "parent", ctx)
+    if pid:
+        target, target_ctx = rc.ev.reference(pid, el, ctx)
+        if target is not None and (target is not el or target_ctx.scope != ctx.scope):
+            return rc.world_matrix(target, target_ctx)
+    return rc.node_location(el, ctx).matrix
 
 
 def local_matrix_of(rc, el, ctx) -> np.ndarray:
-    nctx = rc.node_ctx(el, ctx)
-    box = _parent_box(rc, el, ctx)
-    return rc.local_matrix(el, nctx, box, rc.node_size(el, nctx, box))
+    loc = rc.node_location(el, ctx)
+    nctx = loc.rc.enter_node(el, loc.ctx)
+    size = loc.rc.node_size(el, nctx, loc.box, loc.layout)
+    return loc.rc.local_matrix(el, nctx, loc.box, size, loc.layout)
 
 
 def target_point(rc, target, ctx, space: str, PM) -> np.ndarray:
@@ -128,18 +123,19 @@ def target_point(rc, target, ctx, space: str, PM) -> np.ndarray:
 
 # ------------------------------------------------------------------ apply
 def apply_constraint(rc, c, el, M, ctx):
-    typ = c.get("type")
     ev = rc.ev
+    typ = ev.str(c, "type", ctx)
     influence = ev.num(c, "influence", ctx, 1.0)
     if influence <= 0:
         return M
-    space = c.get("space") or "world"
-    target = rc.doc.ids.get(c.get("target")) if c.get("target") else None
-    if target is el:
+    space = ev.str(c, "space", ctx, "world")
+    target, target_ctx = ev.reference(ev.str(c, "target", ctx, ""), c, ctx)
+    if target is el and target_ctx.scope == ctx.scope:
         target = None
     ox, oy, orot = ev.num(c, "offsetX", ctx, 0.0), ev.num(c, "offsetY", ctx, 0.0), ev.num(c, "offsetRotation", ctx, 0.0)
     PM = parent_frame(rc, el, ctx) if space == "local" or typ in ("track", "follow-path", "distance") else None
-    SP = PM if space == "local" else rc.root_matrix           # data space -> frame
+    from .camera import frame_matrix
+    SP = PM if space == "local" else frame_matrix(rc)         # data space -> frame
     off = SP[:2, :2] @ np.array([ox, oy])
     a_loc = _anchor(rc, el, ctx)
     piv = _ap(M, a_loc)
@@ -147,11 +143,11 @@ def apply_constraint(rc, c, el, M, ctx):
     node_target = target is not None and ln(target) != "trackData"
     if typ == "parent" and node_target:
         if space == "local":
-            out = PM @ local_matrix_of(rc, target, ctx) @ np.linalg.inv(PM) @ M
+            out = PM @ local_matrix_of(rc, target, target_ctx) @ np.linalg.inv(PM) @ M
         else:
-            out = rc.world_matrix(target, ctx) @ np.linalg.inv(rc.root_matrix) @ M
+            out = rc.world_matrix(target, target_ctx) @ np.linalg.inv(frame_matrix(rc)) @ M
     elif typ == "look-at" and node_target:
-        g = target_point(rc, target, ctx, space, PM if PM is not None else parent_frame(rc, el, ctx)) + off
+        g = target_point(rc, target, target_ctx, space, PM if PM is not None else parent_frame(rc, el, ctx)) + off
         ang = math.degrees(math.atan2(g[1] - piv[1], g[0] - piv[0])) + orot
         out = _about(piv, _R(ang - _angle(M))) @ M
     elif typ in ("copy-position", "copy-rotation", "copy-scale", "copy-transform") and node_target:
@@ -159,43 +155,43 @@ def apply_constraint(rc, c, el, M, ctx):
         out = M
         if typ in ("copy-scale", "copy-transform"):
             if space == "local":
-                tc = rc.node_ctx(target, ctx)
+                tc = target_ctx
                 gsx = ev.num(target, "scaleX", tc, 1.0) * math.hypot(PMx[0, 0], PMx[1, 0])
                 gsy = ev.num(target, "scaleY", tc, 1.0) * math.hypot(PMx[0, 1], PMx[1, 1])
             else:
-                T = rc.world_matrix(target, ctx)
+                T = rc.world_matrix(target, target_ctx)
                 gsx, gsy = math.hypot(T[0, 0], T[1, 0]), math.hypot(T[0, 1], T[1, 1])
             sx, sy = math.hypot(out[0, 0], out[1, 0]), math.hypot(out[0, 1], out[1, 1])
             if sx > 1e-12 and sy > 1e-12:
                 out = out @ _about(a_loc, _S(gsx / sx, gsy / sy))
         if typ in ("copy-rotation", "copy-transform"):
             if space == "local":
-                grot = ev.num(target, "rotation", rc.node_ctx(target, ctx), 0.0) + _angle(PMx)
+                grot = ev.num(target, "rotation", target_ctx, 0.0) + _angle(PMx)
             else:
-                grot = _angle(rc.world_matrix(target, ctx))
+                grot = _angle(rc.world_matrix(target, target_ctx))
             out = _about(piv, _R(grot + orot - _angle(out))) @ out
         if typ in ("copy-position", "copy-transform"):
-            g = target_point(rc, target, ctx, space, PMx) + off
+            g = target_point(rc, target, target_ctx, space, PMx) + off
             p = _ap(out, a_loc)
             out = _T(*(g - p)) @ out
-    elif typ == "follow-path" and c.get("path"):
+    elif typ == "follow-path" and ev.str(c, "path", ctx):
         from .physics import path_geom
-        pg = path_geom(rc, c.get("path"))
+        pg = path_geom(rc, ev.str(c, "path", ctx))
         x, y, ang = (float(v) for v in pg.sample(ev.num(c, "progress", ctx, 0.0)))
         g = _ap(SP, (x, y)) + off
         out = _T(*(g - piv)) @ M
-        if parse_bool(c.get("autoOrient")):
+        if ev.bool(c, "autoOrient", ctx):
             d = SP[:2, :2] @ np.array([math.cos(math.radians(ang)), math.sin(math.radians(ang))])
             want = math.degrees(math.atan2(d[1], d[0]))
             out = _about(g, _R(want + orot - _angle(out))) @ out
         elif orot:
             out = _about(g, _R(orot)) @ out
     elif typ == "distance" and node_target:
-        g = target_point(rc, target, ctx, space, PM)
+        g = target_point(rc, target, target_ctx, space, PM)
         k = math.sqrt(abs(np.linalg.det(SP[:2, :2])))
         d = float(np.hypot(*(piv - g)))
-        lo = ev.num(c, "minDistance", ctx, 0.0) * k if c.get("minDistance") is not None else 0.0
-        hi = ev.num(c, "maxDistance", ctx, 0.0) * k if c.get("maxDistance") is not None else math.inf
+        lo = ev.num(c, "minDistance", ctx, 0.0) * k
+        hi = ev.num(c, "maxDistance", ctx, math.inf) * k
         nd = min(max(d, lo), hi)
         out = M
         if d > 1e-9 and nd != d:
@@ -212,14 +208,14 @@ def apply_constraint(rc, c, el, M, ctx):
 
 
 def _track(rc, c, el, M, ctx, SP, off, orot, a_loc, piv):
-    td = rc.doc.ids.get(c.get("target")) if c.get("target") else None
+    td = rc.doc.ids.get(rc.ev.str(c, "target", ctx))
     if td is None or ln(td) != "trackData":
         warn_once("transformConstraint", f"track:{c.get('target')}", "target is not a trackData")
         return None
     tr = tracking.load_track(rc, td)
     if tr is None:
         return None
-    point = c.get("point")
+    point = rc.ev.str(c, "point", ctx)
     data = tr.sample(point, ctx.comp_t)
     if data is None:
         warn_once("transformConstraint", f"track-point:{c.get('target')}:{point}", "tracking point not found")
@@ -360,7 +356,7 @@ def _own_constraints(rc, el, M, ctx):
 
 
 def _solve_chain(rc, c, chain, E, ctx) -> dict:
-    key = ("ik-sol", c, ctx.t, ctx.comp_t, ctx.scope)
+    key = ("ik-sol", c, ctx)
     hit = rc.frame_cache.get(key)
     if hit is not None:
         return hit

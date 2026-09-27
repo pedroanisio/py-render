@@ -17,6 +17,7 @@ Animation (glTF semantics, used for every format):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 
@@ -39,12 +40,15 @@ class Primitive:
     uvs: np.ndarray | None = None             # (n, 2) float32, glTF convention (v down from top of image)
     tangents: np.ndarray | None = None        # (n, 4) float32 (w = handedness)
     colors: np.ndarray | None = None          # (n, 4) float32 linear vertex colours
-    joints: np.ndarray | None = None          # (n, 4) int joint indices into the skin's joint list
-    weights: np.ndarray | None = None         # (n, 4) float32
+    joints: np.ndarray | None = None          # (n, k) int joint indices into the skin's joint list
+    weights: np.ndarray | None = None         # (n, k) float32, all influences retained
     morph_positions: list = field(default_factory=list)   # [(n, 3)] deltas
     morph_normals: list = field(default_factory=list)     # [(n, 3)] deltas (may be empty)
     material: MaterialSpec | None = None
     variants: dict = field(default_factory=dict)           # KHR_materials_variants: name -> MaterialSpec
+    uv_sets: dict = field(default_factory=dict)            # TEXCOORD_n -> (n, 2)
+    mode: int = 4                            # glTF/OpenGL topology; strips/fans are triangulated
+    morph_tangents: list = field(default_factory=list)    # [(n, 3)] tangent XYZ deltas
 
 
 @dataclass
@@ -58,6 +62,8 @@ class Node:
     mesh: int | None = None                   # index into Model.meshes
     skin: int | None = None                   # index into Model.skins
     weights: np.ndarray | None = None         # default morph weights for the mesh
+    matrix_sampler: Callable[[float], np.ndarray] | None = None  # native transform-op evaluation (USD)
+    weight_mapper: Callable[[np.ndarray], np.ndarray] | None = None  # USD inbetween weights
 
 
 @dataclass
@@ -104,6 +110,8 @@ class DrawItem:
     material: MaterialSpec | None
     key: tuple                                 # stable id for GPU buffer caching
     static: bool                               # geometry independent of time (cacheable)
+    uv_sets: dict = field(default_factory=dict)
+    mode: int = 4
 
 
 @dataclass

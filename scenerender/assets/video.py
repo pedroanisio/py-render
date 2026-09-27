@@ -193,21 +193,26 @@ def decoder(path: str, fps: Fraction, out_w: int, out_h: int, scaled: bool, stre
 
 
 # ---------------------------------------------------------------- provenance (assetProvenance attributes)
-def provenance_src(rc, asset) -> str:
+def provenance_src(rc, asset, ctx=None) -> str:
     """Resolved media path of an asset with assetProvenance attributes (video, lottie, vector svg).
 
     Pinned: a <representation> named by the representation preference wins; else, when the preference is
-    "proxy" and the asset has @proxy, the proxy file; else @src. @sha256 is the digest of @src: a file that
-    does not match warns once and is still used (lenient, like schema errors; the proxy and representations
-    are not checked against it). license / credit are metadata only.
+    "proxy" and the asset has @proxy, the proxy file; else @src. @sha256 checks the selected source's
+    own declaration (asset or representation). A mismatch warns once and the file is still used
+    (lenient, like schema errors). A proxy has no digest declaration. license / credit are metadata only.
     """
     pref = rc.cache.get("representation")
-    src = representation_src(rc, asset)
-    if src == asset.get("src") and pref == "proxy" and asset.get("proxy"):
-        return rc.doc.resolve_path(asset.get("proxy"))
+    get = (lambda key: rc.ev.str(asset, key, ctx)) if ctx is not None else asset.get
+    from . import selected_representation
+    rep = selected_representation(rc, asset, ctx)
+    src = representation_src(rc, asset, ctx)
+    if rep is None and pref == "proxy" and get("proxy"):
+        return rc.doc.resolve_path(get("proxy"))
     path = rc.doc.resolve_path(src)
-    want = (asset.get("sha256") or "").lower()
-    if want and src == asset.get("src"):
+    want = (get("sha256") or "").lower()
+    if rep is not None:
+        want = ((rc.ev.str(rep, "sha256", ctx) if ctx is not None else rep.get("sha256")) or "").lower()
+    if want:
         from . import file_sha256                        # memoised on path, size and mtime
         got = file_sha256(path)
         if got is not None and got != want:
@@ -299,14 +304,14 @@ def encode_transfer(x: np.ndarray, tf: str) -> np.ndarray:
     return np.asarray(color.encode(x, tf), np.float32)
 
 
-def color_params(rc, asset) -> tuple[str, str]:
+def color_params(rc, asset, ctx=None) -> tuple[str, str]:
     """(colorSpace, transfer) of the asset, taken from the chosen representation when it declares them."""
-    cs, tf = asset.get("colorSpace", "srgb"), asset.get("transfer", "auto")
-    pref = rc.cache.get("representation") if hasattr(rc, "cache") else None
-    if pref:
-        for r in asset:
-            if getattr(r, "tag", None) == "representation" and r.get("name") == pref:
-                cs, tf = r.get("colorSpace") or cs, r.get("transfer") or tf
+    from . import selected_representation
+    get = lambda el, key, default=None: rc.ev.str(el, key, ctx, default) if ctx is not None else el.get(key, default)
+    cs, tf = get(asset, "colorSpace", "srgb"), get(asset, "transfer", "auto")
+    rep = selected_representation(rc, asset, ctx) if hasattr(rc, "cache") else None
+    if rep is not None:
+        cs, tf = get(rep, "colorSpace") or cs, get(rep, "transfer") or tf
     return cs, tf
 
 
@@ -786,7 +791,7 @@ FEATURES.declare("layer:stabilize", FULL,
                  note="ffmpeg decode resampled to @fps; colorSpace/transfer decoded into the working space "
                       "(16-bit decode for deep sources); frame-mix and optical-flow blending; rotation, pixelAspect, alpha modes, representations; stabilize")
 def render_video(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
-    path = provenance_src(rc, asset)
+    path = provenance_src(rc, asset, ctx)
     aw, ah = display_size(asset)
     cs, tf = color_params(rc, asset)
     blend = rc.ev.str(layer, "frameBlend", ctx, "none") if layer is not None else "none"

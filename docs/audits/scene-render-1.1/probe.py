@@ -283,7 +283,11 @@ def include_strict():
     return {'invalid_child_rejected_directly':direct_rejected,'strict_parent_still_draws_invalid_child':bool(px[...,3].any())}
 
 def version_gate():
-    r,px=render('version_gate.xml',scene('<repeat id="r" count="1"><shape id="s" shape="rect" width="20" height="20"/></repeat>').replace('version="1.1"','version="1.0"'))
+    try:
+        r,px=render('version_gate.xml',scene('<repeat id="r" count="1"><shape id="s" shape="rect" width="20" height="20"/></repeat>').replace('version="1.1"','version="1.0"'))
+    except document.SceneError as exc:
+        return {'declared_version':'1.0', 'new_1_1_node_rendered':False, 'rejection':str(exc),
+                'referenced_schematron_exists':Path('schema/scene-render-1.1.sch').exists()}
     return {'declared_version':r.doc.root.get('version'),'new_1_1_node_rendered':bool(px[...,3].any()),
         'referenced_schematron_exists':Path('schema/scene-render-1.1.sch').exists()}
 

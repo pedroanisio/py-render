@@ -49,6 +49,7 @@ class Schema:
         self.root_type = self._anon_root(root)
         self._validator: etree.XMLSchema | None = None
         self._semantic_validator = None
+        self._legacy_schema = None
 
     # ------------------------------------------------------------ validation
     def validator(self) -> etree.XMLSchema:
@@ -61,16 +62,49 @@ class Schema:
         path = os.path.splitext(self.path)[0] + ".sch"
         if not os.path.isfile(path):
             return []  # Custom schemas need not supply the scene-render rules.
+        errors = self.version_errors(tree)
         if self._semantic_validator is None:
             from lxml.isoschematron import Schematron
             self._semantic_validator = Schematron(etree.parse(path), store_report=True)
         validator = self._semantic_validator
         if validator.validate(tree):
-            return []
+            return errors
         ns = {"svrl": "http://purl.oclc.org/dsdl/svrl"}
-        return [f"{failure.get('location')}: {failure.get('id')}: "
+        return errors + [f"{failure.get('location')}: {failure.get('id')}: "
                 + " ".join(failure.xpath("svrl:text/text()", namespaces=ns))
                 for failure in validator.validation_report.xpath("//svrl:failed-assert", namespaces=ns)]
+
+    def version_errors(self, tree) -> list[str]:
+        """Gate new element relationships using the original 1.0 contract.
+
+        Attribute validation stays with the 1.1 XSD: its introduction explicitly
+        permits new attributes on old elements in both versions.
+        """
+        root = tree.getroot() if hasattr(tree, "getroot") else tree
+        if root.get("version") != "1.0":
+            return []
+        path = os.path.join(os.path.dirname(self.path), "scene-v1.xsd")
+        if not os.path.isfile(path):
+            return []  # A custom schema may define a different version policy.
+        if self._legacy_schema is None:
+            self._legacy_schema = Schema(path)
+        legacy = self._legacy_schema
+        pending = [(root, legacy.root_type)]
+        errors = []
+        while pending:
+            el, type_name = pending.pop()
+            info = legacy.type(type_name)
+            for child in el:
+                if not isinstance(child.tag, str):
+                    continue
+                name = etree.QName(child).localname
+                typ = info.children.get(name)
+                if typ is None:
+                    errors.append(f"{child.getroottree().getpath(child)}: SR-VERSION-GATE: "
+                                  f"<{name}> requires version=\"1.1\"")
+                else:
+                    pending.append((child, typ))
+        return errors
 
     # ------------------------------------------------------------ type table
     def _anon_root(self, root) -> str:

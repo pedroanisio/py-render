@@ -2,8 +2,8 @@
 <schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt">
   <title>Scene-render 1.1 cross-field constraints</title>
   <!-- These rules implement the explicit cross-field contracts in the XSD.
-       The 1.0 version gate requires the authoritative 1.0 element inventory;
-       it is not inferred from the order or appearance of the 1.1 declarations. -->
+       schema.py also applies SR-VERSION-GATE using the original element/type
+       graph in the bundled scene-v1.xsd. See scene-v1.PROVENANCE.md. -->
   <pattern id="text-source">
     <rule context="scene/assets/text">
       <assert id="SR-TEXT-SOURCE" test="boolean(@text) != boolean(span)">Text content must come from exactly one of @text or span children (textAssetType).</assert>

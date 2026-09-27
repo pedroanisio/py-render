@@ -14,12 +14,12 @@ from .. import gl
 from ..camera import Camera, camera_at, node_clock, world3d
 from ..document import ln
 from ..evaluator import Ctx
-from ..raster import Buf, linear_to_srgb
+from ..raster import Buf, linear_to_srgb, warp_projective
 from ..registry import warn_once
 from . import geometry as G
 from . import renderer as R
 from .lights import evaluate as eval_lights
-from .materials import Material, default_material, from_spec, material_for, sample_map
+from .materials import Material, default_material, from_spec, material_for, sample_map, map_uvs
 
 PRIMS = ("sphere", "box", "plane", "cylinder", "cone", "torus", "capsule", "text", "extrude")
 _WEIGHTS = {100: "Thin", 200: "Ultra-Light", 300: "Light", 500: "Medium", 600: "Semi-Bold", 700: "Bold",
@@ -57,9 +57,9 @@ def _font_desc(rc, font: str | None) -> str:
 
 def primitive_geo(rc, el, ctx) -> tuple[tuple, G.Geo | None]:
     ev = rc.ev
-    prim = el.get("primitive")
+    prim = ev.str(el, "primitive", ctx)
     r = ev.num(el, "radius", ctx, 50.0)
-    has = lambda k: el.get(k) is not None or any(isinstance(a.tag, str) and a.get("property") == k for a in el)  # noqa: E731
+    has = lambda k: ev.explicit(el, k, ctx)  # noqa: E731
     w = ev.num(el, "width", ctx, 2 * r) if has("width") else 2 * r
     h = ev.num(el, "height", ctx, 2 * r) if has("height") else None
     seg = max(3, min(256, int(ev.num(el, "segments", ctx, 32))))
@@ -165,14 +165,14 @@ def _numlist(rc, el, prop, ctx) -> list | None:
 def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
     """[(GPUItem, Material, static)], splats, local bounds for a mesh object."""
     from .loaders import load_model
-    mid = el.get("mesh")
+    mid = rc.ev.str(el, "mesh", ctx)
     asset = rc.doc.ids.get(mid) if mid else None
     if asset is None:
         warn_once("object3D", el.get("id", "?"), "primitive=mesh without a valid @mesh asset")
         return [], None, None
-    path = rc.doc.resolve_path(asset.get("src"))
+    path = rc.doc.resolve_path(rc.ev.str(asset, "src", ctx))
     try:
-        model = load_model(path, asset.get("format"))
+        model = load_model(path, rc.ev.str(asset, "format", ctx))
     except Exception as e:  # noqa: BLE001
         warn_once("mesh", path, f"not loaded: {e}")
         return [], None, None
@@ -189,16 +189,17 @@ def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
     lo, hi = [], []
     for it in model.pose(clip, ct, morph, variant):
         m = obj_mat if obj_mat is not None else _spec_material(rc, it.material)
-        pos, nrm = _displace(it.positions, it.normals, it.uvs, it.indices, m)
+        uvs = map_uvs(it, m)
+        pos, nrm = _displace(it.positions, it.normals, uvs.get("displacementMap"), it.indices, m)
         tan = it.tangents
-        if tan is None and it.uvs is not None and "normalMap" in m.maps:
-            tan = G.compute_tangents(pos, nrm, it.uvs, np.asarray(it.indices).reshape(-1, 3))
+        if it.mode == 4 and "normalMap" in m.maps and "normalMap" in uvs and (tan is None or "normalMap" in m.p.get("mapUV", {})):
+            tan = G.compute_tangents(pos, nrm, uvs["normalMap"], np.asarray(it.indices).reshape(-1, 3))
         static = it.static and pos is it.positions
         if static:
-            item = _gpu(rc, ("mesh",) + tuple(it.key) + (path,), lambda: R.upload(ctx_gl, pos, nrm, it.uvs, tan,
-                                                                                   it.colors, it.indices))
+            item = _gpu(rc, ("mesh",) + tuple(it.key) + (path, m.key), lambda: R.upload(ctx_gl, pos, nrm, it.uvs, tan,
+                                                                                   it.colors, it.indices, uvs, it.mode))
         else:
-            item = R.upload(ctx_gl, pos, nrm, it.uvs, tan, it.colors, it.indices)
+            item = R.upload(ctx_gl, pos, nrm, it.uvs, tan, it.colors, it.indices, uvs, it.mode)
         out.append((item, m, static))
         if len(pos):
             lo.append(np.min(pos, 0))
@@ -261,7 +262,7 @@ def _splat_gpu(sp, M: np.ndarray) -> R.SplatGPU:
 
 def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
     ev = rc.ev
-    prim = el.get("primitive")
+    prim = ev.str(el, "primitive", ctx)
     obj_mat = material_for(rc, el, ctx)
     items, temp, splats, bounds = [], [], None, None
     if prim in PRIMS:
@@ -334,6 +335,9 @@ def overscan(cam: Camera) -> float:
 def _render_size(rc, cam: Camera):
     """(pw, ph, ssaa, ox, oy, frame scale, view rect) of the 3D render target."""
     Rm = rc.root_matrix
+    if rc.scene_matrix is not None:
+        density = max(float(np.linalg.svd(rc.scene_matrix[:2, :2], compute_uv=False).max()), 1e-6)
+        Rm = np.diag([density, density, 1.])
     sx, sy = abs(Rm[0, 0]), abs(Rm[1, 1])
     n = int(rc.doc.project.get("antialias3d", 1) or 1)
     n = max(1, min(4, n))
@@ -347,7 +351,7 @@ def _render_size(rc, cam: Camera):
 
 def world3d_at(rc, t: float, root, base: Ctx | None = None) -> R.World3D:
     """Camera-independent 3D state of objects under `root` at composition time t (cached per frame)."""
-    key = ("world3d", root, t, base.t if base is not None else None)
+    key = ("world3d", root, t, base)
     hit = rc.frame_cache.get(key)
     if hit is not None:
         return hit
@@ -401,7 +405,8 @@ def frame3d(rc, t: float, root, base: Ctx | None = None) -> R.Frame3D:
     cam = camera_at(rc, t)
     ck = (cam.eye.tobytes(), cam.fwd.tobytes(), cam.up.tobytes(), cam.fpx, cam.ortho, cam.k_ortho, cam.W, cam.H,
           cam.cx, cam.cy, cam.exposure, cam.dof, cam.focus)
-    key = ("frame3d", root, t, ck, base.t if base is not None else None, rc.root_matrix.tobytes())
+    key = ("frame3d", root, t, ck, base, rc.root_matrix.tobytes(),
+           None if rc.scene_matrix is None else rc.scene_matrix.tobytes())
     hit = rc.frame_cache.get(key)
     if hit is not None:
         return hit
@@ -465,6 +470,10 @@ def finish_layer(rc, fr: R.Frame3D, col: np.ndarray, dep: np.ndarray | None, at=
         y0 -= pad
         x0 -= pad
     buf = Buf(np.ascontiguousarray(px, np.float32), int(round(fr.ox)) + ax + x0, int(round(fr.oy)) + ay + y0)
+    if rc.scene_matrix is not None:
+        buf = warp_projective(buf, rc.scene_matrix @ np.diag([1 / fr.frame_scale, 1 / fr.frame_scale, 1.]), rc.frame_rect)
+        if buf is None:
+            return None
     if abs(cam.lens_k) > 1e-9:
         from ..camera import lens_distort
         buf = lens_distort(rc, buf, cam)
@@ -479,7 +488,8 @@ def finish_layer(rc, fr: R.Frame3D, col: np.ndarray, dep: np.ndarray | None, at=
 
 def render_node_layer(rc, el, ctx: Ctx) -> Buf | None:
     root = scene_root(el)
-    base = ctx if root is not None and ln(root) == "symbol" else None
+    base = ((rc.scene_context[1] if rc.scene_context is not None and rc.scene_context[0] is root else ctx)
+            if root is not None and ln(root) == "symbol" else None)
     fr = frame3d(rc, ctx.comp_t, root, base)
     obj = fr.objects.get(el)
     if obj is None:
@@ -532,8 +542,13 @@ def mesh_thumbnail(rc, asset, w: int, h: int, t: float) -> np.ndarray | None:
     rad = max(float(np.linalg.norm(hi - lo)) / 2, 1e-6)
     items, temp = [], []
     for it in model.pose(clip, ct):
-        g = R.upload(ctx_gl, it.positions, it.normals, it.uvs, it.tangents, it.colors, it.indices)
-        items.append((g, _spec_material(rc, it.material)))
+        mat = _spec_material(rc, it.material)
+        uvs = map_uvs(it, mat)
+        tan = it.tangents
+        if it.mode == 4 and "normalMap" in mat.maps and "normalMap" in uvs:
+            tan = G.compute_tangents(it.positions, it.normals, uvs["normalMap"], it.indices)
+        g = R.upload(ctx_gl, it.positions, it.normals, it.uvs, tan, it.colors, it.indices, uvs, it.mode)
+        items.append((g, mat))
         temp.append(g)
     inst = np.eye(4)[None]
     o = R.ObjDraw(asset, items, inst, False, False, True, c, rad, 1.0, temp=temp)

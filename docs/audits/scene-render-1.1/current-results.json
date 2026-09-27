@@ -1,0 +1,141 @@
+{
+  "base_commit": "3510103590da132390da9687b74760ae6bdc76ac",
+  "schema_sha256": "3d0ecb499bc682ab69405a7f57dccfe1a659abbc3dbcb5a33897a17e28b3c603",
+  "environment": {
+    "python": "3.12.3",
+    "pycairo": "1.25.1",
+    "cairo": "1.18.0",
+    "gl_available": true,
+    "gl_renderer": "llvmpipe (LLVM 20.1.2, 256 bits)"
+  },
+  "instance_window": {
+    "evaluated_start": 1.0,
+    "painted_pixels_at_half_second": 400,
+    "expected_painted_pixels": 0
+  },
+  "primitive_animation": {
+    "evaluated_primitive": "sphere",
+    "geometry_primitive": "box",
+    "changed_channels": 7923,
+    "actual_painted_pixels": 2300,
+    "control_painted_pixels": 1318
+  },
+  "material_animation": {
+    "evaluated_material": "blue",
+    "actual_center_rgb": [
+      255,
+      0,
+      0
+    ],
+    "control_center_rgb": [
+      0,
+      0,
+      255
+    ],
+    "changed_channels": 3200,
+    "actual_painted_pixels": 1600,
+    "control_painted_pixels": 1600
+  },
+  "camera_ortho_animation": {
+    "evaluated_ortho_height": 50.0,
+    "actual_projection_scale": 1.0,
+    "expected_projection_scale": 2,
+    "changed_channels": 4800,
+    "actual_painted_pixels": 400,
+    "control_painted_pixels": 1600
+  },
+  "instance_geometry_width": {
+    "changed_channels": 6400,
+    "actual_painted_pixels": 2000,
+    "control_painted_pixels": 400
+  },
+  "instance_3d_cache": {
+    "evaluated_positions": [
+      -20.0,
+      20.0
+    ],
+    "cached_world_positions": [
+      -20.0,
+      -20.0
+    ],
+    "actual_right_alpha": 0,
+    "control_right_alpha": 255,
+    "changed_channels": 400,
+    "actual_painted_pixels": 100,
+    "control_painted_pixels": 200
+  },
+  "particle_preset_override": {
+    "evaluated_preset": "snow",
+    "emitter_default_speed": 1200,
+    "expected_snow_default_speed": 60,
+    "changed_channels": 2507,
+    "actual_painted_pixels": 464,
+    "control_painted_pixels": 283
+  },
+  "audio_effect_enabled": {
+    "evaluated_enabled": false,
+    "rms_ratio_to_disabled_control": 0.10000000149011612,
+    "expected_ratio": 1
+  },
+  "constraint_target_animation": {
+    "evaluated_target": "b",
+    "actual_left": 10,
+    "control_left": 60,
+    "changed_channels": 800,
+    "actual_painted_pixels": 100,
+    "control_painted_pixels": 100
+  },
+  "deform_type_animation": {
+    "evaluated_type": "twist",
+    "changed_channels": 2984,
+    "actual_painted_pixels": 928,
+    "control_painted_pixels": 960
+  },
+  "physics_in_symbol": {
+    "discovered_symbol_bodies": 0,
+    "actual_top": 10,
+    "control_top": 22,
+    "changed_channels": 840,
+    "actual_painted_pixels": 100,
+    "control_painted_pixels": 110
+  },
+  "camera_in_symbol": {
+    "discovered_symbol_cameras": 0,
+    "changed_channels": 4800,
+    "actual_painted_pixels": 400,
+    "control_painted_pixels": 1600
+  },
+  "data_hash": {
+    "incorrect_hash_accepted": true,
+    "loaded_rows": [
+      10,
+      40
+    ]
+  },
+  "validated_fixtures": [
+    "instance_start.xml",
+    "primitive_animated.xml",
+    "primitive_static.xml",
+    "material_animated.xml",
+    "material_static.xml",
+    "camera_ortho_animated.xml",
+    "camera_ortho_static.xml",
+    "instance_width.xml",
+    "instance_width_static.xml",
+    "instance_3d_cache.xml",
+    "instance_3d_cache_control.xml",
+    "particle_preset_override.xml",
+    "particle_preset_static.xml",
+    "audio_effect_enabled.xml",
+    "audio_effect_disabled.xml",
+    "constraint_target_animated.xml",
+    "constraint_target_static.xml",
+    "deform_type_animated.xml",
+    "deform_type_static.xml",
+    "physics_in_symbol.xml",
+    "physics_direct.xml",
+    "camera_in_symbol.xml",
+    "camera_direct.xml",
+    "data_hash.xml"
+  ]
+}

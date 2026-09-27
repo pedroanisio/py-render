@@ -92,16 +92,14 @@ def _luma(px):
 
 
 def matte_coverage(rc, el, rect, ctx) -> np.ndarray:
-    node = rc.doc.ids.get(rc.ev.str(el, "matte", ctx))
+    node, target_ctx = rc.ev.reference(rc.ev.str(el, "matte", ctx, ""), el, ctx)
     h, w = rect[3] - rect[1], rect[2] - rect[0]
     mode = rc.ev.str(el, "matteMode", ctx, "alpha")
     inverted = mode.endswith("inverted")
     if node is None:
         return np.ones((h, w), np.float32)
-    parent = node.getparent()
-    PM = rc.world_matrix(parent, ctx) if parent is not None and ln(parent) not in ("composition", "symbol") else rc.root_matrix
-    box = rc.node_size(parent, ctx, (rc.doc.width, rc.doc.height)) if parent is not None and ln(parent) not in ("composition", "symbol") else (rc.doc.width, rc.doc.height)
-    out = rc.render_node(node, ctx, PM, box, force=False)
+    loc = rc.node_location(node, target_ctx)
+    out = loc.rc.render_node(node, loc.ctx, loc.matrix, loc.box, loc.layout, force=False)
     if out is None:
         cov = np.zeros((h, w), np.float32)
     else:

@@ -47,7 +47,7 @@ import numpy as np
 from .. import gl
 from ..effects import shader as eng
 from ..registry import FULL, TRANSITIONS, warn_once
-from . import arrays, direction, out, velocity
+from . import arrays, direction, matte_rgba, out, velocity
 
 CAT = "transition-shader"
 HARNESS = """{version}
@@ -75,27 +75,6 @@ def build(code: str) -> tuple[str, dict[str, str]]:
     if legacy:
         extra.append("vec4 _sr_fragColor;")
     return HARNESS.format(version=version, code=code, extra="\n".join(extra)), eng.comment_defaults(code)
-
-
-def matte_rgba(rc, tr, ctx) -> np.ndarray | None:
-    """Premultiplied working-space full frame of the @matte node or image asset."""
-    from ..compositor import scale as scale_m
-    from ..document import ln
-    from ..registry import ASSETS
-    node = rc.doc.ids.get(tr.get("matte") or "")
-    if node is None:
-        return None
-    parent = node.getparent()
-    if parent is not None and ln(parent) == "assets":
-        fn = ASSETS.get(ln(node))
-        aw, ah = rc.asset_size(node, ctx) if fn else (0, 0)
-        buf = fn(rc, node, scale_m(rc.width / aw, rc.height / ah), ctx) if aw and ah else None
-        return None if buf is None else buf.region((0, 0, rc.width, rc.height))
-    top = parent is None or ln(parent) in ("composition", "symbol", "symbols", "scene")
-    PM = rc.root_matrix if top else rc.world_matrix(parent, ctx)
-    box = (rc.doc.width, rc.doc.height) if top else rc.node_size(parent, ctx, (rc.doc.width, rc.doc.height))
-    o = rc.render_node(node, ctx, PM, box, force=True)
-    return np.zeros((rc.height, rc.width, 4), np.float32) if o is None else o.buf.region((0, 0, rc.width, rc.height)) * o.opacity
 
 
 def _bleed(A: np.ndarray, B: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

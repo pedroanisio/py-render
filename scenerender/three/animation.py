@@ -131,14 +131,17 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
     def world_of(i: int) -> np.ndarray:
         if world[i] is None:
             nd = nodes[i]
-            if nd.matrix is not None:
+            sampled = clip is not None and nd.matrix_sampler is not None
+            if sampled:
+                local = nd.matrix_sampler(t)
+            elif nd.matrix is not None:
                 local = np.asarray(nd.matrix, dtype=np.float64)
             else:
                 local = trs_matrix(anim.get((i, "translation"), nd.translation),
                                    anim.get((i, "rotation"), nd.rotation), anim.get((i, "scale"), nd.scale))
             p = parent[i]
             world[i] = local if p < 0 else world_of(p) @ local
-            dynamic[i] = (i in touched and nd.matrix is None) or (p >= 0 and dynamic[p])
+            dynamic[i] = sampled or (i in touched and nd.matrix is None) or (p >= 0 and dynamic[p])
         return world[i]
 
     reachable: list[int] = []
@@ -162,6 +165,8 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
         n_targets = max((len(p.morph_positions) for p in prims), default=0)
         morph_dyn = n_targets > 0 and (morph_override is not None or (i, "weights") in anim)
         src = morph_override if morph_override is not None else anim.get((i, "weights"), nd.weights)
+        if nd.weight_mapper is not None:
+            src = nd.weight_mapper(np.asarray(src if src is not None else [], np.float32))
         w = np.zeros(n_targets)
         if src is not None:
             src = np.asarray(src, dtype=np.float64).ravel()[:n_targets]
@@ -176,6 +181,7 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
         for pi, prim in enumerate(prims):
             pos = np.asarray(prim.positions, dtype=np.float64)
             nrm = None if prim.normals is None else np.asarray(prim.normals, dtype=np.float64)
+            tan = None if prim.tangents is None else np.asarray(prim.tangents, dtype=np.float64).copy()
             for k, wk in enumerate(w):
                 if wk == 0.0:
                     continue
@@ -183,9 +189,10 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
                     pos = pos + wk * prim.morph_positions[k]
                 if nrm is not None and k < len(prim.morph_normals):
                     nrm = nrm + wk * prim.morph_normals[k]
+                if tan is not None and k < len(prim.morph_tangents):
+                    tan[:, :3] += wk * prim.morph_tangents[k]
             if nrm is None:
-                nrm = smooth_normals(pos, prim.indices)
-            tan = None if prim.tangents is None else np.asarray(prim.tangents, dtype=np.float64)
+                nrm = smooth_normals(pos, prim.indices) if prim.mode == 4 else np.tile([0., 0., 1.], (len(pos), 1))
             if joint_mats is not None and prim.joints is not None and prim.weights is not None:
                 jw = np.asarray(prim.weights, dtype=np.float64)
                 ji = np.clip(np.asarray(prim.joints, dtype=np.int64), 0, len(joint_mats) - 1)
@@ -208,5 +215,5 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
                 positions=pos.astype(np.float32), normals=_unit(nrm).astype(np.float32),
                 indices=np.asarray(prim.indices, dtype=np.uint32), uvs=prim.uvs,
                 tangents=None if tan is None else tan.astype(np.float32), colors=prim.colors,
-                material=mat, key=(id(model), i, pi), static=not dyn))
+                material=mat, key=(id(model), i, pi), static=not dyn, uv_sets=prim.uv_sets, mode=prim.mode))
     return items

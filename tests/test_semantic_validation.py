@@ -53,3 +53,29 @@ def test_generated_cache_rejects_missing_and_changed_content(tmp_path):
     cache.unlink()
     with pytest.raises(SceneError, match="not found"):
         renderer.frame_rgba(.2)
+
+
+@pytest.mark.parametrize("content", [
+    '<composition><repeat id="r" count="2"/></composition>',
+    '<assets><imageSequence id="im" src="%d.png" first="0" last="2" fps="10" width="20" height="20"/></assets><composition/>',
+    '<composition><shape id="s" shape="rect" width="20" height="20"><expression property="x">1</expression></shape></composition>',
+    '<styles><token name="red" value="#ff0000"/></styles><composition/>',
+])
+def test_new_element_families_require_version_11(tmp_path, content):
+    path = tmp_path / 'version.xml'
+    xml = '<scene version="1.0"><project width="20" height="20" fps="10" duration="2"/>' + content + '</scene>'
+    path.write_text(xml)
+    default_schema().validator().assertValid(etree.parse(str(path)))
+    with pytest.raises(SceneError, match='SR-VERSION-GATE'):
+        load(str(path), strict=True)
+    path.write_text(xml.replace('version="1.0"', 'version="1.1"'))
+    assert not load(str(path), strict=True).validation_errors
+
+
+def test_legacy_elements_accept_new_attributes(tmp_path):
+    path = tmp_path / 'legacy.xml'
+    path.write_text('<scene version="1.0"><project width="20" height="20" fps="10" duration="2"/>'
+                    '<composition><shape id="s" shape="rect" width="10" height="10" '
+                    'alignX="center" strokePosition="inside"><animate property="x">'
+                    '<key time="0" value="1"/></animate></shape></composition></scene>')
+    assert not load(str(path), strict=True).validation_errors

@@ -34,12 +34,7 @@ def is_isolated(rc: RenderContext, el, ctx: Ctx) -> bool:
 
 
 def child_ctx(rc: RenderContext, el, ctx: Ctx) -> Ctx:
-    ts = rc.ev.num(el, "timeScale", ctx, 1.0)
-    off = rc.ev.num(el, "timeOffset", ctx, 0.0)
-    if ts == 1.0 and off == 0.0:
-        return ctx
-    s = rc.node_ctx(el, ctx).node_start
-    return replace(ctx, t=s + (ctx.t - s - off) * ts)
+    return rc.ev.child_ctx(el, ctx)
 
 
 def _repeat_vars(el, ctx: Ctx) -> Ctx:
@@ -310,13 +305,11 @@ def render_instance(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     if sym is None:
         warn_once("instance", el.get("id"), "symbol not found")
         return None
-    lt = instance_time(rc, el, ctx, sym)
-    if lt is None:
+    sctx = rc.ev.enter_instance(el, ctx, sym)
+    if sctx is None:
         return None
-    overrides = {(o.get("target"), o.get("property")): o.get("value") for o in el if ln(o) == "override"}
-    sctx = replace(ctx, t=lt, scope=ctx.scope.push(el.get("id", ""), overrides), clock_node=None)
-    sw = float(sym.get("width")) if sym.get("width") else float(rc.doc.width)
-    sh = float(sym.get("height")) if sym.get("height") else float(rc.doc.height)
+    sw = rc.ev.num(sym, "width", sctx, rc.doc.width)
+    sh = rc.ev.num(sym, "height", sctx, rc.doc.height)
     mode = rc.ev.str(el, "fit", ctx, "none")
     SM = M
     if mode != "none":
@@ -330,4 +323,12 @@ def render_instance(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
             if paint.set_source(rc, c.cr, bg, sw, sh, sctx):
                 c.cr.fill()
             dst = c.to_buf(rc.linear)
-    return rc.render_children(sym, dst, sctx, SM, (sw, sh), 1.0)
+    previous = rc.scene_context
+    previous_matrix = rc.scene_matrix
+    rc.scene_context = (sym, sctx)
+    rc.scene_matrix = SM
+    try:
+        return rc.render_children(sym, dst, sctx, SM, (sw, sh), 1.0)
+    finally:
+        rc.scene_context = previous
+        rc.scene_matrix = previous_matrix

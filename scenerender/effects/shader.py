@@ -21,9 +21,13 @@ in the file is kept, anything else is replaced; the legacy spellings `texture2D`
   2. ISF — the file starts with an ISF `/*{ JSON }*/` header. INPUTS become uniforms
      (float, bool, long, color, point2D, image, event) with their DEFAULT; the first
      image input (conventionally inputImage) is the effect input, the second the
-     @source node. IMPORTED images load relative to the shader file. PASSES run in
+     @source node. Named sampler params bind additional inputs to a node ID, image
+     asset ID or image file; this also supports Shadertoy iChannel2/3. IMPORTED images
+     load relative to the shader file. PASSES run in
      order with TARGET buffers (WIDTH/HEIGHT expressions over $WIDTH/$HEIGHT); PERSISTENT
-     buffers start empty on every frame because renders are stateless and seekable.
+     buffers preserve earlier frames. A seek replays prior composition frames with
+     their complete upstream effects, providing deterministic feedback. Bounded
+     checkpoints avoid replaying the entire prefix for consecutive output frames.
      Provided: isf_FragNormCoord, RENDERSIZE, TIME, TIMEDELTA, FRAMEINDEX, PASSINDEX,
      DATE, IMG_NORM_PIXEL, IMG_PIXEL, IMG_THIS_PIXEL, IMG_THIS_NORM_PIXEL, IMG_SIZE.
   3. scene-render effect — any other source: a plain `void main()`. These names are
@@ -405,22 +409,27 @@ def resolve_uniforms(rc, el, ctx, prog, *, builtins: dict, defaults: dict[str, s
     for name, u in uniforms(prog).items():
         if is_sampler(u):
             continue
-        vals = builtins.get(name)
-        if vals is None and name in params and name not in reserved:
-            raw = params[name]
-            info = rc.doc.type_info(el)
-            # Non-attribute names go through the evaluator so <animate property=NAME> and overrides apply.
-            vals = parse_raw(rc, raw if info and name in info.attrs else rc.ev.get(el, name, ctx, raw), space)
-            if vals is None:
-                warn_once("shader-uniform", name, f"cannot parse value {raw!r}; ignored")
-        if vals is None:
-            vals = attr_value(name, True)
-        if vals is None and name in defaults:
-            vals = parse_raw(rc, defaults[name], space)
-        if vals is None:
-            vals = attr_value(name, False)
+        vals = uniform_value(rc, el, ctx, name, params, builtins, defaults, space, attr_value, reserved)
         if vals is not None:
             write_uniform(u, vals)
+
+
+def uniform_value(rc, el, ctx, name, params, builtins, defaults, space, attr_value, reserved=()):
+    """Resolve inputs even when GLSL optimizes their uniforms out (ISF buffer sizes)."""
+    vals = builtins.get(name)
+    info = rc.doc.type_info(el)
+    native = info and name in info.attrs
+    if vals is None and name in params and name not in reserved:
+        raw = params[name]
+        vals = parse_raw(rc, raw if native else rc.ev.get(el, name, ctx, raw), space)
+        if vals is None:
+            warn_once("shader-uniform", name, f"cannot parse value {raw!r}; ignored")
+    if vals is None:
+        vals = attr_value(name, True)
+    if vals is None and (name in defaults or not native):
+        raw = defaults.get(name)
+        vals = parse_raw(rc, raw if native else rc.ev.get(el, name, ctx, raw), space)
+    return attr_value(name, False) if vals is None else vals
 
 
 def attribute_uniform(rc, el, ctx, name: str, space: str, only_explicit: bool) -> list[float] | None:
@@ -472,8 +481,9 @@ uniform vec4 DATE;
 #define vv_FragNormCoord _sr_uv
 #define IMG_NORM_PIXEL(i, c) texture(i, c)
 #define IMG_PIXEL(i, c) texture(i, (c) / vec2(textureSize(i, 0)))
-#define IMG_THIS_PIXEL(i) texture(i, _sr_uv)
+#define IMG_THIS_PIXEL(i) texture(i, gl_FragCoord.xy / vec2(textureSize(i, 0)))
 #define IMG_THIS_NORM_PIXEL(i) texture(i, _sr_uv)
+#define IMG_NORM_THIS_PIXEL(i) texture(i, _sr_uv)
 #define IMG_SIZE(i) vec2(textureSize(i, 0))
 """
 _ISF_TYPES = {"float": "float", "bool": "bool", "event": "bool", "long": "int", "color": "vec4",
@@ -587,6 +597,116 @@ def padding(rc, e, ctx) -> tuple[int, int, int, int]:
 
 # ------------------------------------------------------------------ the effect
 CAT = "effect-shader"
+PERSISTENT_CACHE_BYTES = 128 * 1024 * 1024
+
+
+def _isf_audio_inputs(rc, e, ctx, header, params):
+    """Deterministic centered 2048-sample PCM/FFT textures, one row per mix channel.
+
+    Waveforms use .5 as zero; spectra use Hann-windowed linear magnitudes with
+    a full-scale bin-centered sine at one. MAX reduces the sample/bin count;
+    a one-column waveform carries RMS volume instead of a canceling mean.
+    """
+    from ..audio import mixer_for
+    result = {}
+    for entry in header.get("INPUTS", []):
+        name, kind = entry.get("NAME"), entry.get("TYPE")
+        if not name or kind not in ("audio", "audioFFT"):
+            continue
+        mixer = mixer_for(rc)
+        source = rc.ev.str(e, name, ctx, params.get(name, "master"))
+        source = rc.doc.resolve_id(e, source)
+        key = ("shader-audio-signal", source)
+        if key not in rc.cache:
+            rc.cache[key] = mixer.signal(source)
+        signal = rc.cache[key]
+        count = 2048
+        segment = np.zeros((count, signal.shape[1] if signal is not None else mixer.nch), np.float32)
+        begin = round(ctx.comp_t * mixer.sr) - count // 2
+        if signal is not None:
+            lo, hi = max(0, begin), min(len(signal), begin + count)
+            if hi > lo:
+                segment[lo - begin:hi - begin] = signal[lo:hi]
+        if kind == "audioFFT":
+            window = np.hanning(count)
+            values = np.abs(np.fft.rfft(segment * window[:, None], axis=0)) * (2. / window.sum())
+            values[[0, -1]] *= .5
+        else:
+            values = segment
+        width = max(1, min(len(values), int(entry.get("MAX", len(values)))))
+        if width < len(values):
+            edges = np.linspace(0, len(values), width + 1).astype(int)
+            if kind == "audioFFT":
+                values = np.stack([values[a:b].max(axis=0) for a, b in zip(edges[:-1], edges[1:])])
+            elif width == 1:
+                values = np.sqrt(np.mean(values * values, axis=0, keepdims=True))
+            else:
+                values = np.stack([values[a:b].mean(axis=0) for a, b in zip(edges[:-1], edges[1:])])
+        if kind == "audio":
+            values = .5 + .5 * values
+        # draw() flips image rows for GL; channel zero belongs at texture y=0.
+        values = np.clip(values.T[::-1], 0, 1).astype(np.float32)
+        result[name] = np.concatenate([np.repeat(values[..., None], 3, axis=2), np.ones((*values.shape, 1), np.float32)], axis=2)
+    return result
+
+
+def _store_feedback(checkpoints, frame, states):
+    snapshot = dict(states)
+    size = sum(px.nbytes for targets in snapshot.values() for px in targets.values())
+    checkpoints.pop(frame, None)
+    checkpoints[frame] = (snapshot, size)
+    # Keep frame zero and the most recent complete snapshot, even when one
+    # frame exceeds the budget. Discarding a checkpoint only increases replay.
+    while len(checkpoints) > 2 and (sum(v[1] for v in checkpoints.values()) > PERSISTENT_CACHE_BYTES
+                                    or len(checkpoints) > 33):
+        del checkpoints[next(k for k in checkpoints if k not in (0, frame))]
+
+
+def _persistent_inputs(rc, ctx):
+    """Replay earlier composition frames to reconstruct ISF feedback on a seek.
+
+    Replay renders the complete upstream scene, including animated inputs and
+    earlier effects. All feedback reads within a frame share the same snapshot,
+    so repeated evaluations and motion-blur samples cannot advance the history.
+    """
+    states = rc.cache.setdefault("isf-persistent-states", {})
+    if rc.cache.get("isf-replaying"):
+        return rc.frame_cache.setdefault("isf-persistent-inputs", dict(states))
+    fps = float(rc.doc.fps)
+    count = max(0, int(math.ceil(ctx.comp_t * fps - 1e-8)))
+    key = ("isf-persistent-inputs", count)
+    if key not in rc.frame_cache:
+        checkpoints = rc.cache.setdefault("isf-checkpoints", {0: ({}, 0)})
+        first = max(k for k in checkpoints if k <= count)
+        saved_frame, saved_scene = rc.frame_cache, rc.scene_context
+        saved_matrix = rc.scene_matrix
+        saved_skip, saved_blur = rc._skip_effects, rc._node_mb
+        active = rc.cache.get("effect-source-active")
+        states.clear()
+        states.update(checkpoints[first][0])
+        rc.cache["isf-replaying"] = True
+        rc.cache["effect-source-active"] = set()
+        rc._skip_effects = set()
+        rc.scene_context = None
+        rc.scene_matrix = None
+        try:
+            interval = max(1, round(fps))
+            for frame in range(first, count):
+                rc.render_frame(frame / fps, frame)
+                if (frame + 1) % interval == 0:
+                    _store_feedback(checkpoints, frame + 1, states)
+            _store_feedback(checkpoints, count, states)
+            saved_frame[key] = dict(states)
+        finally:
+            rc.frame_cache, rc.scene_context = saved_frame, saved_scene
+            rc.scene_matrix = saved_matrix
+            rc._skip_effects, rc._node_mb = saved_skip, saved_blur
+            rc.cache.pop("isf-replaying", None)
+            if active is None:
+                rc.cache.pop("effect-source-active", None)
+            else:
+                rc.cache["effect-source-active"] = active
+    return rc.frame_cache[key]
 
 
 @EFFECTS.register("shader", level=FULL,
@@ -615,6 +735,10 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
     prog = program(frag, CAT, label)
     if prog is None:
         return None
+    passes = header.get("PASSES") or [{}]
+    persistent = {p["TARGET"] for p in passes if p.get("PERSISTENT") and p.get("TARGET")}
+    history_key = (e, node, ctx.scope, repr(ctx.vars), code)
+    previous = _persistent_inputs(rc, ctx).get(history_key, {}) if persistent else {}
     space = _space(rc, rc.ev.str(e, "space", ctx, None))
     t, r, b, l = padding(rc, e, ctx)
     work = Buf(buf.region((buf.x0 - l, buf.y0 - t, buf.x0 + buf.w + r, buf.y0 + buf.h + b)),
@@ -622,7 +746,7 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
     w, h = work.w, work.h
     inp = to_shader(rc, work.px, space)
     src = None
-    if e.get("source"):
+    if rc.ev.str(e, "source", ctx):
         sb = source_buf(rc, e, ctx, node)
         if sb is not None:
             src = to_shader(rc, sb.region(work.rect), space)
@@ -637,16 +761,48 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
          "resolution": (w, h), "frameResolution": (rc.width, rc.height),
          "tileOffset": (work.x0, rc.height - work.y0 - h), "time": now,
          "localTime": float(ctx.t - ctx.node_start), "timeDelta": 1 / fps, "fps": fps, "frame": ctx.frame,
-         "TIME": now, "TIMEDELTA": 1 / fps, "FRAMEINDEX": ctx.frame, "DATE": (0, 0, 0, now)}
+         "TIME": now, "TIMEDELTA": 0. if now == 0 else 1 / fps, "FRAMEINDEX": ctx.frame, "DATE": (0, 0, 0, now)}
     defaults = {"iMouse": "0", "iSampleRate": "48000", **defaults}
     samplers = {"iChannel0": inp, "inputTexture": inp, "iChannel1": src, "sourceTexture": src}
     images = [i["NAME"] for i in header.get("INPUTS", []) if i.get("TYPE") == "image" and i.get("NAME")]
+    audio_names = {i["NAME"] for i in header.get("INPUTS", []) if i.get("TYPE") in ("audio", "audioFFT") and i.get("NAME")}
     for name, px in zip(images, (inp, src)):
         samplers[name] = px
-    if len(images) > 2:
-        warn_once(CAT, f"{label}:images", "ISF image inputs beyond the second are transparent")
+    params = param_els(e)
+    for name in set(images) | {n for n, u in uniforms(prog[0]).items() if is_sampler(u)}:
+        if name not in params or name in audio_names:
+            continue
+        value = rc.ev.str(e, name, ctx, params[name])
+        sid = rc.doc.resolve_id(e, value)
+        source, _ = rc.ev.reference(sid, e, ctx)
+        if source is not None and source.getparent().tag != "assets":
+            sb = source_buf(rc, e, ctx, node, source=sid)
+            if sb is not None:
+                samplers[name] = to_shader(rc, sb.region(work.rect), space)
+        elif source is not None:
+            from ..assets import buffer_for_asset
+            sb = buffer_for_asset(rc, source, ctx)
+            if sb is not None:
+                samplers[name] = to_shader(rc, sb.px, space)
+        else:
+            from ..three.loaders import decode_image
+            if value:
+                path = rc.doc.resolve_path(value)
+                try:
+                    img = decode_image(path, srgb=rc.linear)
+                except (OSError, ValueError):
+                    warn_once(CAT, f"{label}:{name}", f"sampler image {value!r} is not readable")
+                    continue
+                if img is not None:
+                    samplers[name] = to_shader(rc, premul(img[..., :3], img[..., 3:4]), space)
     if header:
         samplers.update(_imported(rc, header, base, space))
+        samplers.update(_isf_audio_inputs(rc, e, ctx, header, params))
+    samplers.update(previous)
+    B["iChannelResolution"] = tuple(component for i in range(4)
+        for component in ((samplers[f"iChannel{i}"].shape[1], samplers[f"iChannel{i}"].shape[0], 1)
+                          if samplers.get(f"iChannel{i}") is not None else (1, 1, 1)))
+    B["iChannelTime"] = tuple(now if samplers.get(f"iChannel{i}") is not None else 0. for i in range(4))
     sx, sy = rc.scale, rc.scale
 
     def attr_value(name, only_explicit):
@@ -663,21 +819,28 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
             v = [x * rc.scale for x in v]
         return v
 
-    passes = header.get("PASSES") or [{}]
-    persistent = [p.get("TARGET") for p in passes if p.get("PERSISTENT")]
-    if persistent:
-        warn_once(CAT, f"{label}:persistent",
-                  f"ISF PERSISTENT buffers {persistent} start empty every frame (renders are stateless)")
+    names = {"WIDTH": w, "HEIGHT": h}
+    for input_ in header.get("INPUTS", []):
+        name = input_.get("NAME")
+        if name and input_.get("TYPE") in ("float", "long", "bool", "event"):
+            value = uniform_value(rc, e, ctx, name, params, B, defaults, space, attr_value)
+            if value is not None:
+                names[name] = float(np.ravel(value)[0])
     out = None
     for i, ps in enumerate(passes):
-        last = i == len(passes) - 1
-        names = {"WIDTH": w, "HEIGHT": h}
-        pw = w if last else isf_size(ps.get("WIDTH"), names, w)
-        ph = h if last else isf_size(ps.get("HEIGHT"), names, h)
+        pw = isf_size(ps.get("WIDTH"), names, w)
+        ph = isf_size(ps.get("HEIGHT"), names, h)
         bi = {**B, "RENDERSIZE": (pw, ph), "PASSINDEX": i}
         resolve_uniforms(rc, e, ctx, prog[0], builtins=bi, defaults=defaults, space=space,
                          attr_value=attr_value, reserved=("padding",))
         out = draw(prog, pw, ph, samplers)
         if ps.get("TARGET"):
             samplers[ps["TARGET"]] = out
+    if persistent:
+        rc.cache["isf-persistent-states"][history_key] = {name: samplers[name] for name in persistent}
+    if out.shape[:2] != (h, w):
+        resize = program('''#version 330
+            in vec2 uv; uniform sampler2D image; out vec4 color;
+            void main() { color = texture(image, uv); }''', CAT, "ISF output resize")
+        out = draw(resize, w, h, {"image": out})
     return Buf(from_shader(rc, out, space), work.x0, work.y0)

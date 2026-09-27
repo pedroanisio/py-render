@@ -255,8 +255,8 @@ def echo(rc,e,buf,ctx,node):
     rect=buf.rect
     for i in range(1,n):
         time=ctx.comp_t-i*interval
-        sampled=replace(ctx,frame=round(time*float(rc.doc.fps)))
-        if not rc.active(node,sampled.at(ctx.t-i*interval)):
+        sampled=rc.ev.context_at(node,ctx,time)
+        if not rc.active(node,sampled):
             continue
         out=rc.render_node_at(node,time,sampled)
         if out is not None:
@@ -288,9 +288,8 @@ def posterize_time(rc,e,buf,ctx,node):
         return buf.copy()
     frequency=max(1e-6,p.n("frequency",1))
     held=math.floor(ctx.t*frequency)/frequency
-    time=ctx.comp_t+(held-ctx.t)
-    sampled=replace(ctx,frame=round(time*float(rc.doc.fps)))
-    out=rc.render_node_at(node,time,sampled)
+    sampled=rc.ev.context_at_local(node,ctx,held)
+    out=rc.render_node_at(node,sampled.comp_t,sampled,local_time=held)
     return out.buf.copy() if out is not None else Buf.empty(buf.x0,buf.y0,buf.w,buf.h)
 
 
@@ -313,6 +312,15 @@ def _echo_lookback(rc, e, ctx) -> float:
     return (n - 1) * p.param("interval", 1 / max(abs(p.n("frequency", 1)), 1e-6))
 
 
+def _echo_ghost_active(rc, e, node, ctx) -> bool:
+    p = Params(rc, e, ctx)
+    n = max(1, min(128, round(p.n("samples", 16))))
+    interval = p.param("interval", 1 / max(abs(p.n("frequency", 1)), 1e-6))
+    return any(rc.active(node, rc.ev.context_at(node, ctx, ctx.comp_t - i * interval))
+               for i in range(1, n))
+
+
 echo.temporal = True
 echo.lookback = _echo_lookback
+echo.ghost_active = _echo_ghost_active
 posterize_time.temporal = True

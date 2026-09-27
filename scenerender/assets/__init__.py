@@ -121,21 +121,35 @@ def draw_surface(rc, mips: Mips, M, aw: float, ah: float, clip=None) -> Buf | No
     return c.to_buf(rc.linear)
 
 
+def buffer_for_asset(rc, asset, ctx):
+    """Render an asset at its declared size, independently of composition clipping."""
+    from copy import copy
+    from ..registry import ASSETS
+    fn = ASSETS.get(ln(asset))
+    if fn is None:
+        warn_once("asset", ln(asset))
+        return None
+    w, h = rc.asset_size(asset, ctx)
+    if w <= 0 or h <= 0:
+        return None
+    local = copy(rc)
+    local.width, local.height = max(1, math.ceil(w)), max(1, math.ceil(h))
+    local.frame_rect = (0, 0, local.width, local.height)
+    local.scale, local.root_matrix = 1., np.eye(3)
+    local.frame_cache, local._flat_depth = {}, 0
+    buf = fn(local, asset, np.eye(3), ctx, src_t=ctx.t)
+    return None if buf is None else Buf(buf.region(local.frame_rect), 0, 0)
+
+
 def surface_for_asset(rc, asset, ctx):
     """(cairo surface, width, height) for assets usable as pattern paint or texture sources."""
     kind = ln(asset)
-    if kind == "image":
-        m = load_mips(rc, rc.doc.resolve_path(rc.ev.str(asset, "src", ctx)))
-        if m is None:
+    if kind in ("image", "imageSequence"):
+        buf = buffer_for_asset(rc, asset, ctx)
+        if buf is None:
             return None, 0, 0
-        return m.levels[0], rc.ev.num(asset, "width", ctx, m.w), rc.ev.num(asset, "height", ctx, m.h)
-    if kind == "imageSequence":
-        from .image import sequence_frame_path
-        path = sequence_frame_path(rc, asset, ctx.t, ctx)
-        m = load_mips(rc, path) if path else None
-        if m is None:
-            return None, 0, 0
-        return m.levels[0], rc.ev.num(asset, "width", ctx), rc.ev.num(asset, "height", ctx)
+        w, h = rc.asset_size(asset, ctx)
+        return premul_float_to_surface(buf.px, rc.linear), w, h
     from ..registry import ASSETS
     fn = ASSETS.get(kind)
     if fn is None:
@@ -150,14 +164,24 @@ def surface_for_asset(rc, asset, ctx):
 
 
 # ---------------------------------------------------------------- shared media helpers
-def representation_src(rc, asset) -> str | None:
-    """@src of the representation named by the representation preference, else the asset's @src."""
+def selected_representation(rc, asset, ctx=None):
     pref = rc.cache.get("representation")
     if pref:
         for r in asset:
-            if getattr(r, "tag", None) == "representation" and r.get("name") == pref:
-                return r.get("src")
-    return asset.get("src")
+            if getattr(r, "tag", None) != "representation":
+                continue
+            name = rc.ev.str(r, "name", ctx) if ctx is not None else r.get("name")
+            if name == pref:
+                return r
+    return None
+
+
+def representation_src(rc, asset, ctx=None) -> str | None:
+    """@src of the representation named by the representation preference, else the asset's @src."""
+    r = selected_representation(rc, asset, ctx)
+    if r is not None:
+        return rc.ev.str(r, "src", ctx) if ctx is not None else r.get("src")
+    return rc.ev.str(asset, "src", ctx) if ctx is not None else asset.get("src")
 
 
 def ffmpeg_exe() -> str:

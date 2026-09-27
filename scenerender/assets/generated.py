@@ -18,17 +18,19 @@ from fractions import Fraction
 
 from ..registry import ASSET_SIZES, ASSETS, FULL
 from ..values import parse_fps
-from . import draw_surface, generated_cache_path, load_mips, probe_media
+from . import generated_cache_path, probe_media
+from .image_pixels import draw_pixels, load_pixels
 
 
-def _dims(rc, asset, path):
-    if asset.get("width") and asset.get("height"):
-        return float(asset.get("width")), float(asset.get("height"))
+def _dims(rc, asset, path, ctx):
+    if rc.ev.get(asset, "width", ctx) and rc.ev.get(asset, "height", ctx):
+        return rc.ev.num(asset, "width", ctx), rc.ev.num(asset, "height", ctx)
     if path is None:
         return 0.0, 0.0
-    if asset.get("kind") == "image":
-        m = load_mips(rc, path)
-        return (float(m.w), float(m.h)) if m else (0.0, 0.0)
+    if rc.ev.str(asset, "kind", ctx) == "image":
+        m = load_pixels(rc, asset, ctx, path)
+        return ((rc.ev.num(asset, "width", ctx, m.w), rc.ev.num(asset, "height", ctx, m.h))
+                if m else (0.0, 0.0))
     info = probe_media(path)
     return float(info.get("width", 0)), float(info.get("height", 0))
 
@@ -42,16 +44,16 @@ def _cached(rc, asset, ctx=None):
 @ASSETS.register("generated", level=FULL,
                  note="image/video drawn from the sha256-verified @cache; speech/music/sound-effect are audio only")
 def render_generated(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
-    kind = asset.get("kind")
+    kind = rc.ev.str(asset, "kind", ctx)
     if kind not in ("image", "video"):
         return None
     path = _cached(rc, asset, ctx)
     if path is None:
         return None
-    aw, ah = _dims(rc, asset, path)
+    aw, ah = _dims(rc, asset, path, ctx)
     if kind == "image":
-        m = load_mips(rc, path)
-        return draw_surface(rc, m, M, aw, ah, clip) if m else None
+        m = load_pixels(rc, asset, ctx, path)
+        return draw_pixels(rc, m, M, aw, ah, clip) if m else None
     from .video import layer_stabilize, render_video_file
     fps = parse_fps(asset.get("fps")) if asset.get("fps") else Fraction(30)
     blend = rc.ev.str(layer, "frameBlend", ctx, "none") if layer is not None else "none"
@@ -63,6 +65,8 @@ def render_generated(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
 
 @ASSET_SIZES.register("generated")
 def generated_size(rc, asset, ctx):
-    if asset.get("kind") not in ("image", "video"):
+    from ..evaluator import Ctx
+    ctx = ctx or Ctx(0, 0)
+    if rc.ev.str(asset, "kind", ctx) not in ("image", "video"):
         return 0.0, 0.0
-    return _dims(rc, asset, _cached(rc, asset, ctx))
+    return _dims(rc, asset, _cached(rc, asset, ctx), ctx)

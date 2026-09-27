@@ -142,15 +142,9 @@ def probe_channels(path: str, stream: int | None = None) -> int | None:
 
 def transition_window(doc, tr) -> tuple[float, float, float] | None:
     """(start, end, cut) of a transition (the compositor's rule, usable without a RenderContext)."""
-    a = doc.ids.get(tr.get("from")) if tr.get("from") else None
-    b = doc.ids.get(tr.get("to")) if tr.get("to") else None
-    if a is None and b is None:
-        return None
-    dur = float(tr.get("duration", 0.5))
-    cut = doc.window(b)[0] if b is not None else (doc.window(a)[1] if doc.window(a)[1] is not None else doc.duration)
-    al = tr.get("alignment", "center")
-    s0 = cut - dur / 2 if al == "center" else cut if al == "start" else cut - dur
-    return s0, s0 + dur, cut
+    from ..evaluator import Evaluator
+    from ..scheduling import transition_window as evaluated_window
+    return evaluated_window(Evaluator(doc), tr, Ctx(0, 0))
 
 
 def transition_gain(tt: np.ndarray, trs) -> np.ndarray:
@@ -220,6 +214,13 @@ class Mixer:
 
     def curve(self, el, prop: str, default: float, i0: int, n: int, s: float = 0.0, e: float | None = None):
         """Per-sample values of el/@prop over samples [i0, i0 + n): a scalar when not animated."""
+        if self.ev.kind(el, prop) == "bool":
+            if not _has_anim(el, prop):
+                return float(self.ev.bool(el, prop, self.ctx(i0 / self.sr, s, e), bool(default)))
+            # Boolean switches are discrete; interpolating a control-rate curve
+            # creates a fade that the document did not request.
+            return np.fromiter((self.ev.bool(el, prop, self.ctx((i0 + i) / self.sr, s, e), bool(default))
+                                for i in range(n)), dtype=np.float32, count=n)
         if not _has_anim(el, prop):
             return self.value(el, prop, i0 / self.sr, default, s, e)
         step = self.sr / CTRL_HZ
@@ -313,7 +314,7 @@ class Mixer:
                             return float(p.get("value"))
                         except (TypeError, ValueError):
                             return p.get("value")
-                if el.get(name) is None and default is None:
+                if not self.ev.explicit(el, name, self.ctx(t0)) and default is None:
                     return None
                 return self.ev.get(el, name, self.ctx(t0), default)
 
@@ -523,15 +524,17 @@ class Mixer:
         """[(window, mode, role)] of the transitions whose node owns this track (module docstring)."""
         if el.get("role") == "music":
             return []
+        from ..scheduling import transitions_for, transition_window as evaluated_window
+        ctx = Ctx(start, start)
+        parents = dict.fromkeys(tr.getparent() for tr in self.doc.root.iter("transition") if not _in_symbol(tr))
+        transitions = [tr for parent in parents for tr in transitions_for(self.ev, parent, ctx)]
         best = None
-        for tr in self.doc.root.iter("transition"):
-            if _in_symbol(tr):
-                continue
+        for tr in transitions:
             for role in ("from", "to"):
-                node = self.doc.ids.get(tr.get(role)) if tr.get(role) else None
+                node = self.doc.ids.get(self.ev.str(tr, role, ctx))
                 if node is None:
                     continue
-                s, e = self.doc.window(node)
+                s, e = self.ev.window(node, ctx)
                 e = self.doc.duration if e is None else e
                 if s - 1e-9 <= start < e - 1e-9 and (best is None or s > best[0]):
                     best = (s, node)
@@ -539,12 +542,12 @@ class Mixer:
             return []
         node = best[1]
         out = []
-        for tr in self.doc.root.iter("transition"):
+        for tr in transitions:
             for role in ("from", "to"):
-                if tr.get(role) == node.get("id") and not _in_symbol(tr):
-                    w = transition_window(self.doc, tr)
+                if self.ev.str(tr, role, ctx) == node.get("id"):
+                    w = evaluated_window(self.ev, tr, ctx)
                     if w is not None:
-                        out.append((w, tr.get("audio", "crossfade"), role))
+                        out.append((w, self.ev.str(tr, "audio", ctx, "crossfade"), role))
         return out
 
     def _clip(self, seg: Segment | None) -> Segment | None:
@@ -830,7 +833,7 @@ class Mixer:
             tag = ln(c)
             if tag == "layer":
                 asset = self.doc.ids.get(c.get("asset"))
-                if asset is not None and ln(asset) == "video" and parse_bool(asset.get("hasAudio")) and not parse_bool(c.get("mute")):
+                if asset is not None and ln(asset) == "video" and parse_bool(asset.get("hasAudio")):
                     yield path + [c]
             elif tag == "instance":
                 sym = self.doc.ids.get(c.get("symbol"))
@@ -839,34 +842,67 @@ class Mixer:
             elif len(c):
                 yield from self._audible_layers(c, path + [c], depth + 1)
 
+    def _node_audio_context(self, el, parent_ctx):
+        """Entered context and transition gain, or None outside the audible window."""
+        rc, ev = self.rc, self.ev
+        ctx = rc.enter_node(el, parent_ctx)
+        if not ev.bool(el, "visible", ctx, True) or not ev.condition(el, ctx):
+            return None
+        start, end = ev.window(el, parent_ctx)
+        end = float("inf") if end is None else end
+        transitions = []
+        for tr in rc.transitions_for(el.getparent(), parent_ctx):
+            outgoing, incoming = ev.str(tr, "from", parent_ctx), ev.str(tr, "to", parent_ctx)
+            if el.get("id") not in (outgoing, incoming):
+                continue
+            w = rc.transition_window(tr, parent_ctx)
+            if w is None:
+                continue
+            mode = ev.str(tr, "audio", parent_ctx, "crossfade")
+            role = "from" if outgoing == el.get("id") else "to"
+            transitions.append((w, mode, role))
+            if mode in ("crossfade", "equal-power"):
+                if role == "from":
+                    end = max(end, w[1])
+                else:
+                    start = min(start, w[0])
+        if parent_ctx.t < start - 1e-9 or parent_ctx.t >= end - 1e-9:
+            return None
+        gain = float(transition_gain(np.array([parent_ctx.t]), transitions)[0]) if transitions else 1.
+        return ctx, gain
+
     def _clock(self, path: list, tc: float):
-        """Walk the compositor's clocks from composition time tc down to the layer: its ctx, or None
-        when an ancestor is inactive at tc."""
-        from ..nodes.core import _repeat_vars, child_ctx, instance_time
+        """Walk from composition time to (layer context, inherited transition gain),
+        or None outside an audible window."""
+        from ..nodes.core import _repeat_vars, child_ctx
         rc = self.rc
         ctx = Ctx(t=tc, comp_t=tc, frame=int(tc * float(self.doc.fps)))
+        gain = 1.
         k = 0
         while k < len(path) - 1:
             el = path[k]
-            if not rc.active(el, ctx):
+            state = self._node_audio_context(el, ctx)
+            if state is None:
                 return None
-            ctx = nctx = rc.enter_node(el, ctx)
+            ctx, weight = state
+            gain *= weight
+            nctx = ctx
             if ln(el) == "instance":
                 sym = path[k + 1]
-                lt = instance_time(rc, el, nctx, sym)
-                if lt is None:
+                ctx = self.ev.enter_instance(el, nctx, sym)
+                if ctx is None:
                     return None
-                ov = {(o.get("target"), o.get("property")): o.get("value") for o in el if ln(o) == "override"}
-                ctx = replace(ctx, t=lt, scope=ctx.scope.push(el.get("id", ""), ov), clock_node=None)
                 k += 2
                 continue
             if ln(el) in ("group", "sequence"):
                 ctx = _repeat_vars(el, child_ctx(rc, el, nctx))
             k += 1
         lay = path[-1]
-        if not self.ev.bool(lay, "visible", rc.enter_node(lay, ctx), True) or not self.ev.condition(lay, rc.enter_node(lay, ctx)):
+        state = self._node_audio_context(lay, ctx)
+        if state is None:
             return None
-        return rc.enter_node(lay, ctx)
+        ctx, weight = state
+        return ctx, gain * weight
 
     def _layer_audio(self, path: list, asset) -> Segment | None:
         rc = self.rc
@@ -876,32 +912,10 @@ class Mixer:
         if src.shape[0] == 0:
             return None
         src_dur = src.shape[0] / self.sr
-        s, e = self.doc.window(el)
-        e = self.doc.duration if e is None else e
-        # transitions extend the audible window and shape the gain
-        trs = []
-        ext = 0.0
-        for tr in rc.trans_members.get(el, ()):
-            w = rc.transition_window(tr)
-            if w is None:
-                continue
-            mode = tr.get("audio", "crossfade")
-            role = "from" if tr.get("from") == el.get("id") else "to"
-            trs.append((w, mode, role))
-            ext = max(ext, w[1] - w[0])
-            if mode in ("crossfade", "equal-power"):
-                if role == "from":
-                    e = max(e, w[1])
-                else:
-                    s = min(s, w[0])
-        top = path[0]
-        ts0, te0 = self.doc.window(top)
-        te0 = self.doc.duration if te0 is None else te0
-        if len(path) == 1:
-            ts0, te0 = s, e
         hz = 1000.0
-        t_lo = max(0.0, ts0 - ext)
-        t_hi = min(self.doc.duration, te0 + ext)
+        # An evaluated schedule may move outside every prepared window. Walk
+        # the full composition interval and apply each window on its own clock.
+        t_lo, t_hi = 0., self.doc.duration
         if t_hi <= t_lo:
             return None
         k = int(math.ceil((t_hi - t_lo) * hz)) + 1
@@ -909,27 +923,21 @@ class Mixer:
         gains = np.zeros(k)
         pos = np.zeros(k)
         vol_anim = _has_anim(el, "volume")
-        mute_anim = _has_anim(el, "mute")
         vcache: dict = {}
         for i, tc in enumerate(ts):
-            ctx = self._clock(path, float(tc))
-            if ctx is None:
+            state = self._clock(path, float(tc))
+            if state is None:
                 continue
-            tl = ctx.t
-            if tl < s - 1e-9 or tl >= e - 1e-9:
-                continue
-            ctx = replace(ctx, node_start=s, node_end=e)
+            ctx, transition_weight = state
             if vol_anim:
                 g = self.ev.num(el, "volume", ctx, 1.0)
             else:
                 g = vcache.get(ctx.scope)
                 if g is None:
                     g = vcache[ctx.scope] = self.ev.num(el, "volume", ctx, 1.0)
-            if mute_anim and self.ev.num(el, "mute", ctx, 0.0) > 0.5:
+            if self.ev.bool(el, "mute", ctx):
                 g = 0.0
-            if trs:
-                g *= float(transition_gain(np.array([tl]), trs)[0])
-            gains[i] = g
+            gains[i] = g * transition_weight
             pos[i] = media_time(rc, el, ctx, src_dur)
         nz = np.nonzero(gains)[0]
         if len(nz) == 0:
@@ -951,12 +959,8 @@ class Mixer:
         return Segment(i0, x)
 
     # ------------------------------------------------------------ envelopes
-    def envelope(self, nid: str, band: str | None = None) -> np.ndarray:
-        """RMS amplitude (linear, full-scale sine = 0.707) at ENV_HZ over 20 ms windows."""
-        key = (nid, band or "")
-        hit = self._env.get(key)
-        if hit is not None:
-            return hit
+    def signal(self, nid: str) -> np.ndarray | None:
+        """Composition-aligned PCM for a track, bus, master or audio-bearing asset."""
         sig = None
         if nid in self.tracks or nid in self.buses or nid == "master" or \
                 (self.master_el is not None and nid == self.master_el.get("id")):
@@ -978,6 +982,15 @@ class Mixer:
                     sig[:m] = raw[:m]
             else:
                 warn_once("audio-amplitude", nid, "unknown track/bus/asset id; amplitude is 0")
+        return sig
+
+    def envelope(self, nid: str, band: str | None = None) -> np.ndarray:
+        """RMS amplitude (linear, full-scale sine = 0.707) at ENV_HZ over 20 ms windows."""
+        key = (nid, band or "")
+        hit = self._env.get(key)
+        if hit is not None:
+            return hit
+        sig = self.signal(nid)
         if sig is None:
             env = np.zeros(int(math.ceil(self.doc.duration * ENV_HZ)) + 1)
         else:

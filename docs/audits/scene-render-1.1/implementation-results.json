@@ -1,0 +1,1000 @@
+{
+  "phase": "implementation in progress, 2026-09-27",
+  "base_commit": "3510103590da132390da9687b74760ae6bdc76ac",
+  "schema_sha256": "3d0ecb499bc682ab69405a7f57dccfe1a659abbc3dbcb5a33897a17e28b3c603",
+  "source_sha256": {
+    "scenerender/__init__.py": "91447944015cec709e8aa7655f7e9d64e1e4508e7023a57fe3746911c0fc6fed",
+    "scenerender/anim.py": "030317411dd5cc6496e01f80a3cd716c2a950261ba768f7cf2b39b0d492912f6",
+    "scenerender/assets/__init__.py": "8612262a2cd531b4e4fe4b91e51e107485a8e3b8fae9e8c6d6eb2ac336a02448",
+    "scenerender/assets/audiogram.py": "3666734929f44c60197991bd1717a344b4d54ed5a6109abb1928f212bab61f80",
+    "scenerender/assets/chart.py": "4debe330878029d641e72136cd958e29136493156542b50b26502df540f3392a",
+    "scenerender/assets/code.py": "fcc72b95fd259eabaf3d2a085df3cea6b05e4f5911af81ffd7e3db7145d9c4be",
+    "scenerender/assets/formula.py": "edfe08b0220289e3f1a47db563ab659248a68d166315b66c6afb8ef058397b5c",
+    "scenerender/assets/generated.py": "9d4688ce64132a2ed6b7e606f40e2f199214c67058aeb112803568bbbd0af923",
+    "scenerender/assets/generator.py": "2976923c184a3c26cb2d62ca5f380ca8965d6836b9997b678a0c9bdd678558ff",
+    "scenerender/assets/image.py": "e30848c991c1a2dd34e39207c1b30e6c56b06c442352b15e5020e0b3fd8a2fcf",
+    "scenerender/assets/image_io.py": "bc1e1af9d091e749f79194067c347ac52952ff35aab0e1da1c9e13cbd33e384a",
+    "scenerender/assets/image_pixels.py": "a127ca9834d3145ce28d072dbe568f2d59da3e87afb22b4efd5cf540b83b03e1",
+    "scenerender/assets/lottie.py": "378675c3daa437ee0409b3c2178572b0ac79dfbb4a597a1c37d99ba568ec91c0",
+    "scenerender/assets/mesh.py": "dbb46d2cb36e76ea4df46b5734e8893dfeaa1d4836f7408b2bce0c68f787cf03",
+    "scenerender/assets/text.py": "58c32437a1c3c3938da12cc834ff282ec16fe68b8c4c7542b22e1184dc5ca22d",
+    "scenerender/assets/vector.py": "1e50287b3b0d7b985a34ba52f96d97c32451cbdcd74c5637ada19fbe87419119",
+    "scenerender/assets/video.py": "6f1a87fc935e12bef78da169587a127eb84e6d0a17336dfd28e55f9f47a4f536",
+    "scenerender/audio/__init__.py": "4989f4c210235e857cc55cb7cae5a54babaa7cd9f8d2c6d2078d445c9540e8e5",
+    "scenerender/audio/dsp.py": "695d458de2f23315b65257e6f906e955ce4f2c90b5d9c6ee68d3854c28a7c00e",
+    "scenerender/audio/effects.py": "41a3e6a6f3f74531370e83cfbf5aa9b954676c07ca6c7d631a9b2bb617fabcbe",
+    "scenerender/audio/io.py": "e5ba5c168be5804c90614daafe215d9271691fd23705035932cbbfabc50cf1fe",
+    "scenerender/audio/mix.py": "25f3c179ffb94e10eedf40cf26f23014732ddfe4a330ceffafe733f9018986ef",
+    "scenerender/audio/spatial.py": "1c76f32288b46eb7c2b3101e4cdde3603d2fd7fba78f2de4845b42d2f999cf34",
+    "scenerender/audio/spectral.py": "53786f20f7773bfae8cec03c19a7ec6db73a0218698af3f1a3023f02812fb3f1",
+    "scenerender/blend.py": "b481c1363dbb388b391a7077cfa0f3e98356d6efe54e763c472b4625da8a1764",
+    "scenerender/camera.py": "1412de86a7a6858488982c110706f7169f1fca5333dd6ef18950175faa28d1dd",
+    "scenerender/captions.py": "b6cae0082580b92ff678240d8e56b55d34f9b3fc3139f9f87a89879435c26ce2",
+    "scenerender/cli.py": "acef1501ef10fcec88dbea4049e0334f3a543b775d036775edcda6ca0e1848fa",
+    "scenerender/color.py": "26f4f763faf8e64812af2195c6688ec4817326526afcbcdcaf19be2df420dc68",
+    "scenerender/compositor.py": "7aa719c74bf871b3b372e29c38270c6a48b37833bc0114866a0282257f6c81c0",
+    "scenerender/constraints.py": "bb011700772aed07298e9a7d85ddaba7dc40f212a336638e0eba90f4a8c73960",
+    "scenerender/coverage.py": "35c661701191a665b665db83e32a38a5d6d25c503b814cf519e919369b733d7d",
+    "scenerender/curves.py": "0ca8920cb344eb1d81a4ed16b92ded633c5a20d32abcfd1becfe76b0c84225f5",
+    "scenerender/deform.py": "795872b142596d43e97845925b19c6e87eabecb41bf248125b51807c998e4d25",
+    "scenerender/document.py": "25dc98ec5662168db90b3fe5463a7377b4d661cd152687423c2bb6e754f414dd",
+    "scenerender/effects/__init__.py": "f2533f9fac6c933cc8b3c9ece5978dcab23fd13dc2cdcff03bfdd72eb90fb13d",
+    "scenerender/effects/agx_data.py": "d08df920225953c72df0ad25d10dc9a8d5859aa13b637c922911a92a52900a32",
+    "scenerender/effects/blur.py": "0a6b949485bb23be83460bb732a2265667a22a9d4556fa8d4cfe47cebbb6a158",
+    "scenerender/effects/color.py": "597ce2e98934d58b9be73cc33b3e8346f2a33c8373c0368a5461a84493982ef4",
+    "scenerender/effects/color_science.py": "8970a0e813d3200f13c3dd39af33e3637fc9470269575e914096a84d9bd8d25d",
+    "scenerender/effects/distort.py": "5b6358953032f2e4a3c415ec54f5ab7fc827cea1a1360d7298008a28b8bee3a3",
+    "scenerender/effects/fields.py": "cab9b6af8a952562db82dadbaa331d4d2f20fc0acfa0b0e0a7f9539c36963aec",
+    "scenerender/effects/generate.py": "3bb00a020919cc47ffc6dfac0688fe092cf2bbcd34cc6dc12ef5226a1509566d",
+    "scenerender/effects/keying.py": "3ddefad6b7b23b3507ac654db79b41b0885ac10902dc517be609eeaf10f38526",
+    "scenerender/effects/light.py": "6a539f823ba57bbb101c69b30f313f2c9df637f34e569b0209eafdf6bd0d00ac",
+    "scenerender/effects/shader.py": "fe11775cf65c6d81dcbc12e6c256bf9f5410a7611200cd0a2a0604337b8ccd28",
+    "scenerender/effects/shadow.py": "5f565b1d96968ee87b05dcff720590bf679b675b0d7db6047b12084aa648a746",
+    "scenerender/effects/stylize.py": "c8ca3dfab93de7152ac01245e6a808b1bd75b324acfc034a4b01ba41e99bc929",
+    "scenerender/evaluator.py": "c43b87177b8fb58de308d1daf684a1f853fc465f0ee38446fbe46a1dc63dc15e",
+    "scenerender/expr.py": "396bcf2b1d0d3a815bd126f4802574f8618bfcae0e642de2ab386e8edb306ebd",
+    "scenerender/geometry.py": "74e60c0204fb4296c745f5df9e13dfb085f14797ed654dd1d0b9d6320da58dc8",
+    "scenerender/gl.py": "e30d271380a3f2eff778e7b36d2a628e5225ebdaffd101bdb26066d11756c6bc",
+    "scenerender/layout.py": "a334db972f3e399a8e5afc94e1265de490800706f35aaaf437b48e37f4ea5902",
+    "scenerender/masks.py": "f398ebfa2fb7f200a9298c3c967eea4865696a11b4691f91f268a8b141149228",
+    "scenerender/modifiers.py": "48f529fe9599725c6cb72451daaff027494572c5aac1c4f9b0fbda8b7673c97c",
+    "scenerender/mxf.py": "204d578bd3e104f1ed4aab868825328f05906d9295fc4541cec78679a3bd6fc2",
+    "scenerender/nodes/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "scenerender/nodes/core.py": "6fb842e017a76175ee4887d13619115e6954a6f2b711ad3e72191c7691520fa8",
+    "scenerender/nodes/particles.py": "169d80e8dd3df555c7f31184a5e4952afdc3b8b7599398107789c2a263661fef",
+    "scenerender/nodes/scene3d.py": "47419e09f43b0a9a832a2842b85d8b5882d1b4c1245ddb136a99fd8107a8455d",
+    "scenerender/output.py": "b178a6b66d9c2d83edf9686d0bd23f2f8b1865d33e2c1cd298e3c113ab89cb2f",
+    "scenerender/paint.py": "04d90dd391e0cb4e7ed29318fceaf6a8359759c6fa3794dad5d1ee5092ea2d1e",
+    "scenerender/pango_bridge.py": "f105cb5562686c7263f9dbc4cc109c1e7b1489664f5281a859263bdddcab3a6a",
+    "scenerender/physics.py": "84c1bcae1c08a9ed8fc7877ca41727284d06fb4f832bac754b4d4c530294f406",
+    "scenerender/publish.py": "dc89a09f2e78faa6c19ca5b0bf767ec0ee335ce054d7654dce24ef962cffbeb6",
+    "scenerender/qa.py": "6e1a7d33c221336835f15565fa61191b1d54ba75e7d7667825b30d8abcda6596",
+    "scenerender/raster.py": "eac4cc1a1e54cfab39ac0612fb6d7c196166c98fa841b4ab3adb7211cd5486fc",
+    "scenerender/references.py": "c07626f838dafa337085573dca7e1502dde1ceb8fdffc9a30af386be6e60585c",
+    "scenerender/registry.py": "8e05c4ef0894c75d4accd1cae21c4a238c61bf6783407d6372385e027a48f714",
+    "scenerender/render.py": "d4d78940925d9946e9e3b487e77835a853f6283d761c8bd8f146a3dc440c6171",
+    "scenerender/safe_areas.py": "1a0cccb7ba064efdb84a0cc3aaf5ebcb87233586116bd4b684d57dd451eb0a66",
+    "scenerender/scheduling.py": "1cbbd2fc9ba18ef91f37ec8810fba8c7035d98696474b3bbf6aed92ff86dd4b1",
+    "scenerender/schema.py": "47d70e127d0cd4e29ca1266b4bcfd92c27235c4d2c47d664d85f90aad87ab3bc",
+    "scenerender/spherical_mesh.py": "260485da5f75acb3fee75a538ea18f4ad964a671932f7e1c803daa0e8669f27a",
+    "scenerender/text_animators.py": "8dedd220c5bd352f66fccbdf1aa140e86463c3f34298aae5072f7c65933b1b80",
+    "scenerender/three/__init__.py": "ce7d5be950a457bfb7602c3838e0215ad96823ef0ea9e9257fa590649e592cfa",
+    "scenerender/three/animation.py": "8a22f364d8c70e993801ba1245bb3cd17f9a59682bc96a007c3c3215e2e5480f",
+    "scenerender/three/geometry.py": "4da3addb23147dcb245e1c1a6a4f02ab79162790a132e81631115fe792f0ccb5",
+    "scenerender/three/lights.py": "506762f23eb2d818f787d62cda6ef585839256ca22fd86f165393535e5aafa6f",
+    "scenerender/three/loaders.py": "e0afd224a0c2f7596e6ba1ec80f9a659f1d81844ac837cc554e451cf7d69e3fd",
+    "scenerender/three/materials.py": "f2df62a0dca628b76814207fa364dc37e503b9d3c4b5931cbdcb9ec829b9eeff",
+    "scenerender/three/model.py": "a9ac68b3a24301cbb104020c36065f5c5de5edc7cf36660f25a63b229e777201",
+    "scenerender/three/postfx.py": "f1b811d3a9bc5f63830bed63409393ca533e721c2d4cc41ed5a0d31548fcfae2",
+    "scenerender/three/renderer.py": "da2024ce61d839dbac360ff08018e69db6ac7d0f4505a61099f04cb5a294e3b0",
+    "scenerender/three/scene.py": "f1fa4eb4ce73f3a4890be1c6e3a83a97eeae611dd65ab05e2f6151f8e09e6510",
+    "scenerender/three/shaders.py": "6c7fd054f7e3be70f38608ef3b6af716948b966823bb9e629da1d1354f11fb30",
+    "scenerender/three/view360.py": "4e79e6f9e6c83533f918d35668211a1d0f0a931dbc20a81a48075ce31c5668ba",
+    "scenerender/tracking.py": "5daa2b9a83fed576e0d5922abbaeb72cabedc942a014d8656cc5c44ccd4d78a9",
+    "scenerender/transitions/__init__.py": "38f5e229446d5f164aa43f34d19ad5c7c84bd12481bb3e0cd261b0ca333e9009",
+    "scenerender/transitions/fx.py": "34a75566d6a0726f5724b13cf44b2f4e84881226e5aad6d9bb0fce9aa6082d5c",
+    "scenerender/transitions/motion.py": "5a758b66fc79777f0897a3dc81a67c994acdee85b53e760a67a6af4bf8e284f2",
+    "scenerender/transitions/shader.py": "c3981b2d4502735afaa32f194fa406cd4cb71d939afeff71d47530297f5c906c",
+    "scenerender/transitions/space.py": "18e562a10231e69b189073dcbafa41d01ae12f7e11c3e957fa5bbfe9f48e4289",
+    "scenerender/transitions/wipes.py": "3ba969ced9b6f755cb6e4c551c39650c5256031ab414ffa23883688eb7d9e8d8",
+    "scenerender/values.py": "ef0d3f4a4ba279923ea112e6b34945c2c5e87b1a6493f3cff0c9be7d9d03be8d"
+  },
+  "current_audit": {
+    "base_commit": "3510103590da132390da9687b74760ae6bdc76ac",
+    "schema_sha256": "3d0ecb499bc682ab69405a7f57dccfe1a659abbc3dbcb5a33897a17e28b3c603",
+    "environment": {
+      "python": "3.12.3",
+      "pycairo": "1.25.1",
+      "cairo": "1.18.0",
+      "gl_available": true,
+      "gl_renderer": "llvmpipe (LLVM 20.1.2, 256 bits)"
+    },
+    "instance_window": {
+      "evaluated_start": 1.0,
+      "painted_pixels_at_half_second": 0,
+      "expected_painted_pixels": 0
+    },
+    "primitive_animation": {
+      "evaluated_primitive": "sphere",
+      "geometry_primitive": "sphere",
+      "changed_channels": 0,
+      "actual_painted_pixels": 1318,
+      "control_painted_pixels": 1318
+    },
+    "material_animation": {
+      "evaluated_material": "blue",
+      "actual_center_rgb": [
+        0,
+        0,
+        255
+      ],
+      "control_center_rgb": [
+        0,
+        0,
+        255
+      ],
+      "changed_channels": 0,
+      "actual_painted_pixels": 1600,
+      "control_painted_pixels": 1600
+    },
+    "camera_ortho_animation": {
+      "evaluated_ortho_height": 50.0,
+      "actual_projection_scale": 2.0,
+      "expected_projection_scale": 2,
+      "changed_channels": 0,
+      "actual_painted_pixels": 1600,
+      "control_painted_pixels": 1600
+    },
+    "instance_geometry_width": {
+      "changed_channels": 0,
+      "actual_painted_pixels": 400,
+      "control_painted_pixels": 400
+    },
+    "instance_3d_cache": {
+      "evaluated_positions": [
+        -20.0,
+        20.0
+      ],
+      "cached_world_positions": [
+        -20.0,
+        20.0
+      ],
+      "actual_right_alpha": 255,
+      "control_right_alpha": 255,
+      "changed_channels": 0,
+      "actual_painted_pixels": 200,
+      "control_painted_pixels": 200
+    },
+    "particle_preset_override": {
+      "evaluated_preset": "snow",
+      "emitter_default_speed": 60,
+      "expected_snow_default_speed": 60,
+      "changed_channels": 0,
+      "actual_painted_pixels": 283,
+      "control_painted_pixels": 283
+    },
+    "audio_effect_enabled": {
+      "evaluated_enabled": false,
+      "rms_ratio_to_disabled_control": 1.0,
+      "expected_ratio": 1
+    },
+    "constraint_target_animation": {
+      "evaluated_target": "b",
+      "actual_left": 60,
+      "control_left": 60,
+      "changed_channels": 0,
+      "actual_painted_pixels": 100,
+      "control_painted_pixels": 100
+    },
+    "deform_type_animation": {
+      "evaluated_type": "twist",
+      "changed_channels": 0,
+      "actual_painted_pixels": 960,
+      "control_painted_pixels": 960
+    },
+    "physics_in_symbol": {
+      "discovered_symbol_bodies": 0,
+      "actual_top": 22,
+      "control_top": 22,
+      "changed_channels": 0,
+      "actual_painted_pixels": 110,
+      "control_painted_pixels": 110
+    },
+    "camera_in_symbol": {
+      "discovered_symbol_cameras": 1,
+      "changed_channels": 0,
+      "actual_painted_pixels": 1600,
+      "control_painted_pixels": 1600
+    },
+    "data_hash": {
+      "incorrect_hash_accepted": false,
+      "rejection": "data 'rows': content does not match sha256"
+    },
+    "validated_fixtures": [
+      "instance_start.xml",
+      "primitive_animated.xml",
+      "primitive_static.xml",
+      "material_animated.xml",
+      "material_static.xml",
+      "camera_ortho_animated.xml",
+      "camera_ortho_static.xml",
+      "instance_width.xml",
+      "instance_width_static.xml",
+      "instance_3d_cache.xml",
+      "instance_3d_cache_control.xml",
+      "particle_preset_override.xml",
+      "particle_preset_static.xml",
+      "audio_effect_enabled.xml",
+      "audio_effect_disabled.xml",
+      "constraint_target_animated.xml",
+      "constraint_target_static.xml",
+      "deform_type_animated.xml",
+      "deform_type_static.xml",
+      "physics_in_symbol.xml",
+      "physics_direct.xml",
+      "camera_in_symbol.xml",
+      "camera_direct.xml",
+      "data_hash.xml"
+    ]
+  },
+  "original_audit": {
+    "inventory": {
+      "node": {
+        "schema_count": 13,
+        "registered_count": 13,
+        "schema_names": [
+          "group",
+          "sequence",
+          "layer",
+          "shape",
+          "object3D",
+          "camera",
+          "particleEmitter",
+          "instance",
+          "include",
+          "repeat",
+          "adjustment",
+          "transition",
+          "skeleton"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "asset": {
+        "schema_count": 15,
+        "registered_count": 15,
+        "schema_names": [
+          "image",
+          "video",
+          "imageSequence",
+          "audio",
+          "text",
+          "vector",
+          "mesh",
+          "lottie",
+          "font",
+          "generator",
+          "chart",
+          "audiogram",
+          "code",
+          "formula",
+          "generated"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "blend": {
+        "schema_count": 35,
+        "registered_count": 35,
+        "schema_names": [
+          "normal",
+          "dissolve",
+          "add",
+          "plus-lighter",
+          "multiply",
+          "screen",
+          "overlay",
+          "difference",
+          "exclusion",
+          "subtract",
+          "divide",
+          "darken",
+          "lighten",
+          "darker-color",
+          "lighter-color",
+          "color-dodge",
+          "color-burn",
+          "linear-dodge",
+          "linear-burn",
+          "soft-light",
+          "hard-light",
+          "linear-light",
+          "vivid-light",
+          "pin-light",
+          "hard-mix",
+          "hue",
+          "saturation",
+          "color",
+          "luminosity",
+          "stencil-alpha",
+          "stencil-luma",
+          "silhouette-alpha",
+          "silhouette-luma",
+          "alpha-add",
+          "behind"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "effect": {
+        "schema_count": 80,
+        "registered_count": 80,
+        "schema_names": [
+          "glow",
+          "bloom",
+          "blur",
+          "color-grade",
+          "vignette",
+          "lens-flare",
+          "drop-shadow",
+          "lighting",
+          "directional-blur",
+          "radial-blur",
+          "zoom-blur",
+          "lens-blur",
+          "pixel-motion-blur",
+          "tilt-shift",
+          "lift-gamma-gain",
+          "cdl",
+          "lut",
+          "curves",
+          "levels",
+          "white-balance",
+          "exposure",
+          "hue-saturation",
+          "tonemap",
+          "tint",
+          "tritone",
+          "gradient-map",
+          "grayscale",
+          "sepia",
+          "invert",
+          "posterize",
+          "threshold",
+          "color-overlay",
+          "gradient-overlay",
+          "selective-color",
+          "film-grain",
+          "noise",
+          "chromatic-aberration",
+          "sharpen",
+          "unsharp-mask",
+          "halation",
+          "light-leak",
+          "light-sweep",
+          "glitch",
+          "rgb-split",
+          "scanlines",
+          "vhs",
+          "halftone",
+          "pixelate",
+          "mosaic",
+          "emboss",
+          "bevel",
+          "inner-shadow",
+          "inner-glow",
+          "long-shadow",
+          "stroke",
+          "outline",
+          "echo",
+          "posterize-time",
+          "letterbox",
+          "mirror",
+          "kaleidoscope",
+          "tile",
+          "displacement-map",
+          "turbulent-displace",
+          "wave-warp",
+          "ripple",
+          "twirl",
+          "spherize",
+          "bulge",
+          "lens-distortion",
+          "heat-haze",
+          "chroma-key",
+          "luma-key",
+          "difference-key",
+          "spill-suppress",
+          "matte-choke",
+          "fill",
+          "fractal-noise",
+          "god-rays",
+          "shader"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "transition": {
+        "schema_count": 35,
+        "registered_count": 35,
+        "schema_names": [
+          "cut",
+          "crossfade",
+          "additive-dissolve",
+          "dip-to-color",
+          "wipe",
+          "slide",
+          "push",
+          "cover",
+          "reveal",
+          "zoom-in",
+          "zoom-out",
+          "spin",
+          "whip-pan",
+          "circle-open",
+          "circle-close",
+          "iris",
+          "clock-wipe",
+          "radial-wipe",
+          "barn-door",
+          "blinds",
+          "luma",
+          "blur",
+          "glitch",
+          "pixelize",
+          "flip",
+          "cube",
+          "page-curl",
+          "film-roll",
+          "stripe",
+          "squash",
+          "shuffle",
+          "carousel",
+          "light-leak",
+          "morph",
+          "shader"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "shapeModifier": {
+        "schema_count": 9,
+        "registered_count": 9,
+        "schema_names": [
+          "repeater",
+          "offset-path",
+          "pucker-bloat",
+          "zig-zag",
+          "twist",
+          "round-corners",
+          "wiggle-path",
+          "merge",
+          "trim"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "deform": {
+        "schema_count": 14,
+        "registered_count": 14,
+        "schema_names": [
+          "bend",
+          "twist",
+          "wave",
+          "squash",
+          "stretch",
+          "mesh-warp",
+          "puppet",
+          "skin",
+          "bulge",
+          "pinch",
+          "spherize",
+          "ripple",
+          "turbulence",
+          "corner-pin"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "textAnimator": {
+        "schema_count": 24,
+        "registered_count": 31,
+        "schema_names": [
+          "typewriter",
+          "fade-in",
+          "fade-out",
+          "word-by-word",
+          "letter-by-letter",
+          "line-by-line",
+          "slide-up",
+          "slide-down",
+          "slide-left",
+          "slide-right",
+          "pop",
+          "scale-in",
+          "blur-in",
+          "wave",
+          "bounce",
+          "spin",
+          "ascend",
+          "shift",
+          "scramble",
+          "counter",
+          "karaoke",
+          "highlight",
+          "tracking-in",
+          "mask-reveal"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "audioEffect": {
+        "schema_count": 16,
+        "registered_count": 16,
+        "schema_names": [
+          "eq",
+          "highpass",
+          "lowpass",
+          "compressor",
+          "limiter",
+          "gate",
+          "de-esser",
+          "reverb",
+          "delay",
+          "chorus",
+          "pitch-shift",
+          "noise-reduction",
+          "stereo-width",
+          "gain",
+          "distortion",
+          "telephone"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "caption": {
+        "schema_count": 13,
+        "registered_count": 13,
+        "schema_names": [
+          "classic",
+          "boxed-line",
+          "boxed-word",
+          "one-word",
+          "karaoke",
+          "highlight",
+          "pop",
+          "fade",
+          "bounce",
+          "slide",
+          "typewriter",
+          "enlarge",
+          "none"
+        ],
+        "missing": [],
+        "non_full": {}
+      },
+      "codec": {
+        "schema_count": 15,
+        "registered_count": 15,
+        "schema_names": [
+          "h264",
+          "h265",
+          "ffv1",
+          "av1",
+          "vp9",
+          "prores",
+          "dnxhr",
+          "gif",
+          "apng",
+          "webp",
+          "png-sequence",
+          "jpeg-sequence",
+          "exr-sequence",
+          "tiff-sequence",
+          "audio-only"
+        ],
+        "missing": [],
+        "non_full": {
+          "gif": {
+            "level": "partial",
+            "note": "GIF format limits: <= 256 colours per frame (global or per-frame palettes chosen from the frames' colour spread) and 1-bit transparency (alpha ordered-dithered with an 8x8 Bayer matrix)"
+          }
+        }
+      },
+      "declarations": {
+        "element": 131,
+        "attribute": 1151,
+        "complexType": 116,
+        "simpleType": 167
+      },
+      "cross_cutting_registry": {
+        "registered_count": 182,
+        "non_full": {}
+      },
+      "schema_sha256": "3d0ecb499bc682ab69405a7f57dccfe1a659abbc3dbcb5a33897a17e28b3c603",
+      "base_commit": "3510103590da132390da9687b74760ae6bdc76ac",
+      "python": "3.12.3"
+    },
+    "visibility_animation": {
+      "evaluated_visible": false,
+      "painted_pixels": 0
+    },
+    "instance_visibility_override": {
+      "painted_pixels": 0
+    },
+    "repeat_current_item": {
+      "first_row_left": 10,
+      "second_row_left": 40,
+      "expected": [
+        10,
+        40
+      ]
+    },
+    "repeat_opacity": {
+      "alpha": [
+        128,
+        64
+      ],
+      "expected_approx": [
+        128,
+        64
+      ]
+    },
+    "repeat_references": {
+      "copied_parent_ids": [
+        "p#0",
+        "p#1"
+      ],
+      "original_parent_exists": false,
+      "rendered_x": 20,
+      "expected_x": 20
+    },
+    "include_relative_paths": {
+      "resolved_asset": "/tmp/scene-render-schema-audit/sub/red.png",
+      "resolved_exists": true,
+      "correct_asset_exists": true,
+      "painted_pixels": 400
+    },
+    "include_property_references": {
+      "link_source": "inc/a.x",
+      "expression": "prop('a.x')",
+      "rendered_x": [
+        30,
+        30,
+        30
+      ],
+      "expected": [
+        30,
+        30,
+        30
+      ]
+    },
+    "include_tokens": {
+      "tokens": {
+        "accent": "#0000ff",
+        "inc/accent": "#ff0000"
+      },
+      "parent_rgb": [
+        0,
+        0,
+        255
+      ],
+      "expected_parent_rgb": [
+        0,
+        0,
+        255
+      ]
+    },
+    "include_cycle": {
+      "error": "SceneError",
+      "message": "include cycle: /tmp/scene-render-schema-audit/cycle.xml -> /tmp/scene-render-schema-audit/cycle.xml"
+    },
+    "conic_user_units": {
+      "user_painted_pixels": 10000,
+      "equivalent_object_painted_pixels": 10000
+    },
+    "conic_midpoint": {
+      "changed_channels": 29763,
+      "values": [
+        ".1",
+        ".9"
+      ]
+    },
+    "gradient_dither": {
+      "changed_channels": 7461,
+      "values": [
+        "true",
+        "false"
+      ]
+    },
+    "radial_animation_without_base": {
+      "evaluated_fx": 0.2,
+      "changed_channels_when_redundant_base_added": 0
+    },
+    "condition_truthiness": {
+      "expression_language_truthiness": true,
+      "painted_pixels": 400
+    },
+    "adaptive_motion_blur": {
+      "changed_channels": 0,
+      "adaptive_painted_pixels": 840,
+      "full_painted_pixels": 840
+    },
+    "animated_z": {
+      "evaluated_z": 2.0,
+      "rgb": [
+        255,
+        0,
+        0
+      ],
+      "expected_rgb": [
+        255,
+        0,
+        0
+      ]
+    },
+    "animated_shape": {
+      "evaluated_shape": "ellipse",
+      "corner_alpha": 0,
+      "expected_corner_alpha": 0
+    },
+    "sequence_media_clock": {
+      "sequence_rgb": [
+        0,
+        0,
+        255
+      ],
+      "equivalent_direct_rgb": [
+        0,
+        0,
+        255
+      ]
+    },
+    "sequence_time_stretch": {
+      "video_window": [
+        0.0,
+        2.0
+      ],
+      "next_child_window": [
+        2.0,
+        3.0
+      ],
+      "expected_video_window": [
+        0,
+        2
+      ]
+    },
+    "instance_scoped_reference": {
+      "scoped_id_indexed": false,
+      "consumer_x": 30,
+      "expected_x": 30
+    },
+    "group_stretch": {
+      "changed_channels": 4800,
+      "painted_pixels": 1600
+    },
+    "include_sha256": {
+      "incorrect_hash_accepted": false,
+      "rejection": "include inc: sha256 mismatch for /tmp/scene-render-schema-audit/sub/hash.xml"
+    },
+    "include_strict": {
+      "invalid_child_rejected_directly": true,
+      "strict_parent_still_draws_invalid_child": false,
+      "rejection": "schema validation failed:\n  3: Element 'shape', attribute 'unexpected': The attribute 'unexpected' is not allowed."
+    },
+    "version_gate": {
+      "declared_version": "1.0",
+      "new_1_1_node_rendered": false,
+      "rejection": "schema validation failed:\n  /scene/composition/repeat: SR-VERSION-GATE: <repeat> requires version=\"1.1\"",
+      "referenced_schematron_exists": true
+    },
+    "validated_fixtures": [
+      "visibility.xml",
+      "instance_visibility.xml",
+      "repeat_param.xml",
+      "repeat_opacity.xml",
+      "repeat_parent.xml",
+      "sub/relative.xml",
+      "include_relative.xml",
+      "sub/links.xml",
+      "include_links.xml",
+      "sub/tokens.xml",
+      "include_tokens.xml",
+      "cycle.xml",
+      "conic_user.xml",
+      "conic_object.xml",
+      "conicGradient_midpoint_a.xml",
+      "conicGradient_midpoint_b.xml",
+      "linearGradient_dither_a.xml",
+      "linearGradient_dither_b.xml",
+      "radial_no_base.xml",
+      "radial_base.xml",
+      "condition.xml",
+      "blur_adaptive.xml",
+      "blur_full.xml",
+      "animated_z.xml",
+      "animated_shape.xml",
+      "sequence_media.xml",
+      "sequence_media_control.xml",
+      "sequence_stretch.xml",
+      "instance_scoped_reference.xml",
+      "group_stretch.xml",
+      "group_start.xml",
+      "sub/hash.xml",
+      "include_hash.xml",
+      "include_strict.xml",
+      "version_gate.xml"
+    ]
+  },
+  "test_checkpoint": {
+    "date": "2026-09-27",
+    "total_passed": 1739,
+    "restricted_full_run_passed": 1721,
+    "sandbox_blocked_then_passed": 16,
+    "additional_regressions_passed_after_full_run": 2,
+    "skipped": 0,
+    "restricted_run_seconds": 98.0,
+    "unrestricted_recheck_seconds": 2.32,
+    "sandbox_limitations": [
+      "local test socket binding",
+      "USD /var/tmp scratch directory"
+    ],
+    "new_sequence_regressions_passed": 32,
+    "sequence_regression_seconds": 4.32,
+    "image_regressions_passed": 43
+  },
+  "remaining_native_observations": {
+    "scope": "No retained failing native reproducer in this snapshot; outstanding requirements remain listed in docs/SCHEMA-IMPLEMENTATION.md."
+  },
+  "repaired_native_observations": {
+    "image_input": {
+      "prior_observations": {
+        "source_rgba8": [
+          128,
+          0,
+          0,
+          128
+        ],
+        "observed": {
+          "srgb": {
+            "pixel": [
+              0.10744025558233261,
+              0.0,
+              0.0,
+              0.501960813999176
+            ]
+          },
+          "linear": {
+            "pixel": [
+              0.10744025558233261,
+              0.0,
+              0.0,
+              0.501960813999176
+            ]
+          },
+          "opaque": {
+            "pixel": [
+              0.10744025558233261,
+              0.0,
+              0.0,
+              0.501960813999176
+            ]
+          },
+          "gap_override": {
+            "pixel": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ]
+          },
+          "gap_static": {
+            "pixel": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "expected_linear_premultiplied_red": 0.2519646289888504,
+        "expected_opaque_alpha": 1.0,
+        "expected_overridden_sequence_gap_alpha": 0.0
+      },
+      "current_observations": {
+        "srgb": {
+          "pixel": [
+            0.10835352540016174,
+            0.0,
+            0.0,
+            0.501960813999176
+          ]
+        },
+        "linear": {
+          "pixel": [
+            0.25196465849876404,
+            0.0,
+            0.0,
+            0.501960813999176
+          ]
+        },
+        "opaque": {
+          "pixel": [
+            0.2158605307340622,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "regression_evidence": "tests/test_image_inputs.py"
+    },
+    "sequence_gap": {
+      "prior_observations": {
+        "current_observations": {
+          "gap_override": {
+            "pixel": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ]
+          },
+          "gap_static": {
+            "pixel": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "expected_overridden_sequence_gap_alpha": 0.0
+      },
+      "current_observations": {
+        "gap_override": {
+          "pixel": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "gap_static": {
+          "pixel": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "regression_evidence": "tests/test_sequence_scheduling.py"
+    },
+    "normalized_sequence_duration": {
+      "prior_observations": {
+        "fixture_xml": "<scene version=\"1.1\"><project width=\"4\" height=\"4\" fps=\"10\" duration=\"3\"/><assets><video id=\"v\" src=\"unused.mp4\" width=\"4\" height=\"4\" fps=\"10\" duration=\"1\"/></assets><composition><sequence id=\"q\"><layer id=\"a\" asset=\"v\"><animate property=\"speed\" timeBase=\"normalized\"><key time=\"0\" value=\"1\"/><key time=\"1\" value=\"2\"/></animate></layer><shape id=\"b\" shape=\"rect\" width=\"4\" height=\"4\" end=\"1\"/></sequence></composition></scene>",
+        "node_time": 0.5,
+        "scheduled_window": [
+          0.0,
+          1.0
+        ],
+        "evaluated_speed": 1.5,
+        "window_span_times_speed": 1.5,
+        "source_span": 1,
+        "issue": "Normalized speed and the inferred duration are evaluated against inconsistent windows."
+      },
+      "current_observations": {
+        "node_time": 0.5,
+        "scheduled_window": [
+          0.0,
+          0.5000000000291038
+        ],
+        "evaluated_speed": 1.9999999999417923,
+        "window_span_times_speed": 1.0000000000291038,
+        "source_span": 1
+      },
+      "regressions": "tests/test_sequence_scheduling.py"
+    }
+  }
+}

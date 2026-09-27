@@ -4,6 +4,9 @@
 `schema/scene-render-1.1.xsd`. It replaced the per-film scripts that used to live in `tools/`
 (removed; see git history), which each hard-coded one document.
 
+See [RUNTIME.md](RUNTIME.md) for graphics and import dependencies and
+[SCHEMA-IMPLEMENTATION.md](SCHEMA-IMPLEMENTATION.md) for current conformance work.
+
 ## Pipeline
 
 ```

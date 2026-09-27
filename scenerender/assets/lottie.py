@@ -53,7 +53,9 @@ Text layers
     Expression selectors use the scene expression language with textIndex (1-based), textTotal,
     selectorValue (100), time, value and deterministic math/random built-ins; scalar or vector
     results are percentages. Unsupported expression syntax is reported explicitly.
-    Glyph "chars" embedded in the JSON are ignored; Pango shapes text with the named font.
+    Embedded glyph shape trees and advances take precedence over local fonts and
+    participate in wrapping, path layout and text animators. Precomp glyphs remain
+    a separate import gap.
 
 Everything else in the animation (shapes, precomps, mattes, masks, time remap, images, effects that
 rlottie supports) is rlottie's rendering; expressions are not evaluated (no Lottie player without a JS
@@ -510,6 +512,54 @@ def _line_glyphs(text: str, fd, tracking: float):
     return subs, cells, width, lay.get_baseline() / Pango.SCALE
 
 
+def _embedded_glyphs(d, fname):
+    font = next((f for f in (d.get("fonts") or {}).get("list", []) if f.get("fName") == fname), {})
+    family, style = font.get("fFamily", fname), font.get("fStyle", "")
+    glyphs = {g["ch"]: g for g in d.get("chars", []) if "ch" in g and g.get("fFamily") == family
+              and g.get("style", "") == style and "shapes" in g.get("data", {})}
+    return glyphs, font
+
+
+def _embedded_line(text, fd, tracking, size, glyphs, font):
+    """Use the embedded advances and preserve each glyph's complete shape tree."""
+    baseline = float(font.get("ascent", 75)) * size / 100
+    subs, cells, x = [], [], 0.
+    for ch in text:
+        glyph = glyphs.get(ch)
+        if glyph is not None:
+            width = float(glyph.get("w", 0)) * size / 100
+        else:
+            outlines, _, width, base = _line_glyphs(ch, fd, 0)
+            for sub in outlines:
+                subs.append([(kind, tuple(v + (x if i % 2 == 0 else baseline - base)
+                                          for i, v in enumerate(pts))) for kind, pts in sub])
+        cells.append((x, x + width))
+        x += width + tracking
+    return subs, cells, max(0., x - tracking if text else 0.), baseline
+
+
+def _wrap_embedded(text, width, measure):
+    lines = []
+    while text:
+        end = 1
+        while end < len(text) and measure(text[:end + 1])[2] <= width:
+            end += 1
+        if end < len(text):
+            word = text.rfind(" ", 0, end + 1)
+            if word > 0:
+                end = word
+        lines.append(text[:end].rstrip())
+        text = text[end:].lstrip(" ")
+    return lines or [""]
+
+
+def _character_shapes(c, size):
+    if c.get("glyph") is not None:
+        return [{"ty": "gr", "it": copy.deepcopy(c["glyph"]["data"]["shapes"]) +
+                 [_tr(p=[c["x0"], c["y"]], s=[size, size])]}]
+    return [_sub_to_shape(s, c["dx"], c["y"] - c["base"]) for s in c["subs"]]
+
+
 def _sub_to_shape(sub, dx: float, dy: float) -> dict:
     v, ii, oo = [], [], []
     closed = False
@@ -775,7 +825,10 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
     if caps == 1:
         text = text.upper()
     fd = _font_desc(d, str(doc.get("f", "Sans")), size, caps)
+    glyphs, font = _embedded_glyphs(d, str(doc.get("f", "Sans")))
     tracking = float(doc.get("tr", 0) or 0) / 1000.0 * size
+    measure = (lambda text: _embedded_line(text, fd, tracking, size, glyphs, font)) if glyphs else \
+              (lambda text: _line_glyphs(text, fd, tracking))
     lh = float(doc.get("lh", size * 1.2) or size * 1.2)
     ls = float(doc.get("ls", 0) or 0)
     j = int(doc.get("j", 0) or 0)
@@ -788,10 +841,11 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
     paras = text.split("\r")
     lines: list[tuple[str, bool]] = []                       # (text, last line of its paragraph)
     for p in paras:
-        wrapped = _wrap(p, fd, tracking, float(box[0])) if box else [p]
+        wrapped = (_wrap_embedded(p, float(box[0]), measure) if glyphs else
+                   _wrap(p, fd, tracking, float(box[0]))) if box else [p]
         lines += [(w, k == len(wrapped) - 1) for k, w in enumerate(wrapped)]
     # glyphs per line
-    shaped = [(*_line_glyphs(t, fd, tracking), t, last) for t, last in lines]
+    shaped = [(*measure(t), t, last) for t, last in lines]
     first_base = None
     chars = []                                              # per character: dict
     word_i = 0
@@ -838,6 +892,7 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
                 word_i += 1
             c0, c1 = cells[i]
             chars.append({"ch": ch, "subs": per_char[i], "x0": c0 + dx + extra[i], "x1": c1 + dx + extra[i],
+                          "glyph": glyphs.get(ch),
                           "base": base, "y": y, "line": li, "word": word_i, "dx": dx + extra[i],
                           "nospace": idx_nospace})
             if not ch.isspace():
@@ -852,7 +907,7 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
     if not animators and not has_path:
         out = []
         for li in sorted({c["line"] for c in chars}):
-            shapes = [_sub_to_shape(s, c["dx"], c["y"] - c["base"]) for c in chars if c["line"] == li for s in c["subs"]]
+            shapes = [s for c in chars if c["line"] == li for s in _character_shapes(c, size)]
             if shapes:
                 out.append({"ty": "gr", "nm": f"line{li}", "it": shapes + _paint_items(fcol, scol, sw, of) + [_tr()]})
         return out
@@ -888,7 +943,7 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
             orders.append(None)
     out = []
     for c in chars:
-        if not c["subs"] and not any((an.get("a") or {}).get("t") for an in animators):
+        if not c["subs"] and c["glyph"] is None and not any((an.get("a") or {}).get("t") for an in animators):
             continue
         if grouping == 1:
             gx0, gx1 = c["x0"], c["x1"]
@@ -971,9 +1026,9 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
     if has_path:
         _place_on_path(chars, L, times, j)
     for c in chars:
-        if not c["subs"] or "P" not in c:
+        if (not c["subs"] and c["glyph"] is None) or "P" not in c:
             continue
-        shapes = [_sub_to_shape(s, c["dx"], c["y"] - c["base"]) for s in c["subs"]]
+        shapes = _character_shapes(c, size)
         paints = _paint_items(_baked(times, c["FC"]) if fcol else None, _baked(times, c["SC"]) if scol else None,
                               _baked(times, c["SW"]) if (scol and (sw > 0 or any(c["SW"]))) else 0, of)
         tr = _tr(p=_baked(times, c["P"]), a=_baked(times, c["A"]), s=_baked(times, c["S"]), r=_baked(times, c["R"]),
@@ -1035,14 +1090,18 @@ def _slots(rc, asset, ctx) -> list[tuple[str, str]]:
 
 
 def prepare(rc, asset, ctx) -> Prepared | None:
+    if ctx is None:
+        from ..evaluator import Ctx
+        ctx = Ctx(0, 0)
     slots = _slots(rc, asset, ctx)
     from .video import provenance_src
-    path = provenance_src(rc, asset)
-    key = ("lottie", path, asset.get("animation"), tuple(slots), asset.get("id"))
+    path = provenance_src(rc, asset, ctx)
+    animation = rc.ev.str(asset, "animation", ctx)
+    key = ("lottie", path, animation, tuple(slots), asset.get("id"))
     if key in rc.cache:
         return rc.cache[key]
     res = None
-    src = _read_source(path, asset.get("animation"))
+    src = _read_source(path, animation)
     if src is not None and LottieAnimation is not None:
         data, files, base = src
         data = copy.deepcopy(data)
@@ -1068,7 +1127,8 @@ def segment_duration(rc, asset, ctx=None) -> float | None:
     p = prepare(rc, asset, ctx)
     if p is None:
         return None
-    a, b = p.segment(asset.get("segment"), asset.get("id"))
+    from ..evaluator import Ctx
+    a, b = p.segment(rc.ev.str(asset, "segment", ctx or Ctx(0, 0)), asset.get("id"))
     return max(0.0, b - a) / p.fr if p.fr > 0 else None
 
 
@@ -1079,8 +1139,8 @@ def render_lottie(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
     p = prepare(rc, asset, ctx)
     if p is None:
         return None
-    w, h = float(asset.get("width")), float(asset.get("height"))
-    first, end = p.segment(asset.get("segment"), asset.get("id"))
+    w, h = rc.ev.num(asset, "width", ctx), rc.ev.num(asset, "height", ctx)
+    first, end = p.segment(rc.ev.str(asset, "segment", ctx), asset.get("id"))
     dur = (end - first) / p.fr if p.fr > 0 else 0.0
     last = max(first, end - 1.0 / SUBFRAMES)
     frame = min(max(first + src_t * p.fr, first), last)
@@ -1107,4 +1167,4 @@ def render_lottie(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
 
 @ASSET_SIZES.register("lottie")
 def lottie_size(rc, asset, ctx):
-    return float(asset.get("width")), float(asset.get("height"))
+    return rc.ev.num(asset, "width", ctx), rc.ev.num(asset, "height", ctx)

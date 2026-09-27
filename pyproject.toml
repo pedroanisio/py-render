@@ -3,18 +3,22 @@ name = "scenerender"
 version = "0.1.0"
 description = "Generic Python renderer for scene-render 1.1 documents (schema/scene-render-1.1.xsd)."
 requires-python = ">=3.10"
-dependencies = ["lxml>=5", "numpy>=1.26", "pillow>=10", "imageio-ffmpeg>=0.5", "segno>=1.5", "shapely>=2",
+dependencies = ["lxml>=5", "numpy>=1.26", "pillow>=10", "pycairo>=1.25", "imageio-ffmpeg>=0.5", "segno>=1.5", "shapely>=2",
                 "pyphen>=0.14", "opencolorio>=2.5", "moderngl>=5.10", "rlottie-python>=1.3", "matplotlib>=3.8",
-                "pygltflib>=1.16", "trimesh>=4"]
+                "pygltflib>=1.16", "trimesh>=4", "pypng>=0.20220715.0", "tifffile>=2023.7",
+                "psd-tools[composite]>=1.20"]
 
 [project.optional-dependencies]
-# pycairo and PyGObject (Pango/PangoCairo) are taken from the system site-packages;
+# Cairo >= 1.18 and PyGObject (Pango/PangoCairo) are system dependencies;
+# pycairo may also be taken from system site-packages when >= 1.25.
 # create the venv with `uv venv --system-site-packages`.
 test = ["pytest>=8", "zxing-cpp>=3"]
 # Data Matrix and PDF417 code assets (also used by the tests to decode every barcode kind).
 codes = ["zxing-cpp>=3"]
 # 3D asset formats and materials: USD/USDZ (usd-core), FBX (ufbx), OpenEXR environments, MaterialX.
-3d = ["usd-core>=24", "ufbx>=0.0.5", "OpenEXR>=3", "MaterialX>=1.39"]
+3d = ["usd-core>=24", "ufbx>=0.0.5", "OpenEXR>=3.3", "MaterialX>=1.39"]
+# OpenEXR still images, parts and channel sets (also included by the 3d extra).
+exr = ["OpenEXR>=3.3"]
 
 [project.scripts]
 scenerender = "scenerender.cli:main"
@@ -27,4 +31,4 @@ build-backend = "setuptools.build_meta"
 include = ["scenerender*"]
 
 [tool.setuptools.package-data]
-scenerender = ["schema/*.xsd", "schema/*.sch"]
+scenerender = ["schema/*.xsd", "schema/*.sch", "schema/*.md", "schema/*.LICENSE"]

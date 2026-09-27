@@ -58,6 +58,18 @@ class Ctx:
     node_start: float = 0.0     # window of the node being evaluated (for timeBase local/normalized)
     node_end: float | None = None
     clock_node: Any = None      # node whose sequence offset has already been applied
+    clock_offset: float = 0.0   # evaluated sequence offset applied at node entry
+    sequence_clocks: tuple = () # (sequence, time before its warp, composition time, window start, end)
+
+    def __hash__(self):
+        def freeze(value):
+            if isinstance(value, dict):
+                return tuple(sorted((k, freeze(v)) for k, v in value.items()))
+            if isinstance(value, (list, tuple)):
+                return tuple(freeze(v) for v in value)
+            return value
+        return hash((self.t, self.comp_t, self.frame, self.scope, freeze(self.vars),
+                     self.node_start, self.node_end, self.clock_node, self.clock_offset, self.sequence_clocks))
 
     def at(self, t: float) -> "Ctx":
         return replace(self, t=t, comp_t=self.comp_t + (t - self.t))
@@ -80,17 +92,42 @@ class Evaluator:
     _depth: int = 0
 
     # ------------------------------------------------------------ public
+    def explicit(self, el, prop: str, ctx: Ctx) -> bool:
+        """Whether a value is authored, driven, or supplied by this instance."""
+        return (el.get(prop) is not None or ctx.scope.lookup(el.get("id"), prop) is not None
+                or bool(self._anims(el, prop)))
+
+    def window(self, el, ctx: Ctx) -> tuple[float, float | None]:
+        """Active window on the parent clock, evaluated in this instance's scope."""
+        from .scheduling import window
+        return window(self, el, ctx)
+
     def node_ctx(self, el, ctx: Ctx) -> Ctx:
-        s, e = self.doc.window(el)
+        s, e = self.window(el, ctx)
         if ctx.clock_node is el:
-            shift = self.doc.clock_shift.get(el, 0)
+            shift = ctx.clock_offset
             s, e = s - shift, e - shift if e is not None else None
         return replace(ctx, node_start=s, node_end=e)
 
     def enter_node(self, el, ctx: Ctx) -> Ctx:
         if ctx.clock_node is not el:
-            ctx = replace(ctx, t=ctx.t - self.doc.clock_shift.get(el, 0), clock_node=el)
+            s, e = self.window(el, ctx)
+            parent = el.getparent()
+            shift = s if parent is not None and ln(parent) == "sequence" and ln(el) != "transition" else 0.
+            return replace(ctx, t=ctx.t - shift, clock_node=el, clock_offset=shift,
+                           node_start=s - shift, node_end=None if e is None else e - shift)
         return self.node_ctx(el, ctx)
+
+    def child_ctx(self, el, ctx: Ctx) -> Ctx:
+        scale = self.num(el, "timeScale", ctx, 1.)
+        offset = self.num(el, "timeOffset", ctx, 0.)
+        if ln(el) == "sequence":
+            clocks = tuple(v for v in ctx.sequence_clocks if v[0] is not el)
+            ctx = replace(ctx, sequence_clocks=(*clocks, (el, ctx.t, ctx.comp_t, ctx.node_start, ctx.node_end)))
+        if scale == 1. and offset == 0.:
+            return ctx
+        start = self.node_ctx(el, ctx).node_start
+        return replace(ctx, t=start + (ctx.t - start - offset) * scale)
 
     def instance_time(self, el, ctx: Ctx, sym) -> float | None:
         ctx = self.node_ctx(el, ctx)
@@ -118,6 +155,15 @@ class Evaluator:
             lt = clip_in + u
         return lt
 
+    def enter_instance(self, el, ctx: Ctx, sym, *, keep_finished=False) -> Ctx | None:
+        time = self.instance_time(el, ctx, sym)
+        if time is None:
+            if not keep_finished:
+                return None
+            time = self.num(el, "clipOut", ctx, self.num(sym, "duration", ctx, 0))
+        overrides = {(o.get("target"), o.get("property")): o.get("value") for o in el if ln(o) == "override"}
+        return replace(ctx, t=time, scope=ctx.scope.push(el.get("id", ""), overrides), clock_node=None, clock_offset=0.)
+
     def _within_context(self, node, boundary, ctx: Ctx) -> Ctx:
         """Follow group/sequence clocks and repeat bindings to a referenced descendant."""
         from .nodes.core import _repeat_vars
@@ -130,11 +176,109 @@ class Evaluator:
             if ln(ancestor) not in ("group", "sequence"):
                 continue
             ctx = self.enter_node(ancestor, ctx)
-            s = ctx.node_start
-            ctx = replace(ctx, t=s + (ctx.t - s - self.num(ancestor, "timeOffset", ctx, 0))
-                          * self.num(ancestor, "timeScale", ctx, 1))
+            ctx = self.child_ctx(ancestor, ctx)
             ctx = _repeat_vars(ancestor, ctx)
         return self.enter_node(node, ctx)
+
+    def context_at(self, node, ctx: Ctx, time: float) -> Ctx:
+        """Rebuild a node's clock at composition time, retaining its instance binding."""
+        boundary = self.doc.section("composition")
+        current = Ctx(time, time, frame=round(time * float(self.doc.fps)), vars=ctx.vars)
+        symbol = next((a for a in (node, *node.iterancestors()) if ln(a) == "symbol"), None)
+        if symbol is not None:
+            for iid in ctx.scope.path:
+                instance = self.doc.ids.get(iid)
+                if instance is None or boundary not in instance.iterancestors():
+                    break
+                entered = self._within_context(instance, boundary, current)
+                boundary = self.doc.ids.get(self.str(instance, "symbol", entered))
+                if boundary is None:
+                    break
+                current = self.enter_instance(instance, entered, boundary, keep_finished=True)
+                if boundary is symbol:
+                    break
+            if boundary is not symbol:
+                # Standalone symbol evaluation has no composition-to-local map.
+                return replace(ctx, t=ctx.t + time - ctx.comp_t, comp_t=time, frame=current.frame)
+        return current if node is boundary else self._within_context(node, boundary, current)
+
+    def context_at_local(self, node, ctx: Ctx, time: float) -> Ctx:
+        """Find a nearby composition sample for a requested node-local time.
+
+        Follow the current branch for loops and reversed/remapped clocks. Held
+        or discontinuous clocks may not contain the requested value; in that
+        case preserve the closest composition sample and explicitly set the
+        requested local clock (as required by posterize-time).
+        """
+        if abs(time - ctx.t) < 1e-12:
+            return ctx
+        anchor = ctx.comp_t
+        cache = {}
+        def sample(t):
+            if t not in cache:
+                cache[t] = self.context_at(node, ctx, t)
+            c = cache[t]
+            return c, c.t - time
+        best, error = ctx, abs(ctx.t - time)
+        t = anchor
+        limit = max(1., self.doc.duration, abs(time - ctx.t))
+        # Newton iteration handles affine clocks exactly and follows the nearby
+        # smooth branch of remaps without searching other loop iterations.
+        for _ in range(16):
+            current, residual = sample(t)
+            if abs(residual) < error:
+                best, error = current, abs(residual)
+            if abs(residual) < 1e-9:
+                return replace(current, t=time)
+            h = 1e-5 * max(1., abs(t))
+            derivative = (sample(t + h)[1] - sample(t - h)[1]) / (2 * h)
+            if not math.isfinite(derivative) or abs(derivative) < 1e-9:
+                break
+            step = max(-limit, min(limit, residual / derivative))
+            t -= step
+        # A freeze can hide a nearby invertible section. Expand around the
+        # original sample, then bisect sign changes; verify the residual so a
+        # jump across a loop boundary is never mistaken for an inverse.
+        radius = max(1e-4, min(abs(time - ctx.t), 1 / float(self.doc.fps)))
+        for _ in range(18):
+            points = sorted({anchor - radius, anchor, anchor + radius})
+            candidates = []
+            for left, right in zip(points, points[1:]):
+                lc, lr = sample(left)
+                rc, rr = sample(right)
+                for c, r in ((lc, lr), (rc, rr)):
+                    if abs(r) < error:
+                        best, error = c, abs(r)
+                    if abs(r) < 1e-9:
+                        candidates.append(c)
+                if lr * rr >= 0:
+                    continue
+                for _ in range(40):
+                    mid = (left + right) / 2
+                    mc, mr = sample(mid)
+                    if abs(mr) < 1e-9:
+                        candidates.append(mc)
+                        break
+                    if lr * mr < 0:
+                        right = mid
+                    else:
+                        left, lr = mid, mr
+            if candidates:
+                return replace(min(candidates, key=lambda c: abs(c.comp_t - anchor)), t=time)
+            if radius >= 2 * limit:
+                break
+            radius *= 2
+        return replace(best, t=time)
+
+    def history_origin(self, node, ctx: Ctx):
+        """Identity of the current simulation replay branch on the composition clock."""
+        origin = self.context_at_local(node, ctx, 0.)
+        actual = self.context_at(node, ctx, origin.comp_t)
+        if abs(actual.t) > 1e-8:
+            # No preimage of local zero (for example a permanently frozen remap).
+            # Such histories depend on the requested composition sample.
+            return ("sample", ctx.comp_t)
+        return ("origin", round(origin.comp_t, 8))
 
     def reference(self, ref: str, origin, ctx: Ctx):
         """Return (node, evaluation context), resolving effective instance/child IDs."""
@@ -180,11 +324,7 @@ class Evaluator:
             sym = self.doc.ids.get(self.str(instance, "symbol", current))
             if sym is None:
                 break
-            lt = self.instance_time(instance, current, sym)
-            if lt is None:
-                lt = self.num(instance, "clipOut", current, self.num(sym, "duration", current, 0))
-            overrides = {(o.get("target"), o.get("property")): o.get("value") for o in instance if ln(o) == "override"}
-            current = replace(current, t=lt, scope=current.scope.push(instance.get("id"), overrides), clock_node=None)
+            current = self.enter_instance(instance, current, sym, keep_finished=True)
             boundary = sym
             name = self.doc.resolve_id(sym, remaining)
             node = self.doc.ids.get(name)
@@ -470,8 +610,9 @@ class Evaluator:
         return None
 
     # ------------------------------------------------------------ expressions
-    def seed_for(self, el, extra: str | None = None) -> int:
-        s = f"{self.doc.seed}:{el.get('id', '')}:{el.get('seed', '')}:{extra or ''}"
+    def seed_for(self, el, extra: str | None = None, ctx: Ctx | None = None) -> int:
+        value = el.get("seed", "") if ctx is None else self.str(el, "seed", ctx, "")
+        s = f"{self.doc.seed}:{el.get('id', '')}:{value}:{extra or ''}"
         return zlib.crc32(s.encode())
 
     def run_expression(self, src: str, el, prop: str, ctx: Ctx, value: Any, seed: str | None = None) -> Any:
