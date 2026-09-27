@@ -15,19 +15,31 @@ Spaces
     emitter that is composition space.
   * Emitter shapes are centred on the emitter origin (x, y): rect/ellipse span
     emitterWidth x emitterHeight around it, line runs horizontally through it (emitterWidth),
-    point is the origin, path uses @emitterPath coordinates as authored (local px), asset-alpha
-    samples opaque pixels of @emitterAsset (centred).
+    point is the origin, path uses @emitterPath coordinates as authored (local px) and samples it
+    uniformly by exact arc length (subpaths are not bridged), asset-alpha samples opaque pixels
+    (alpha > 0.5) of @emitterAsset (centred) rendered at the emission time (media time = time since
+    the emitter's start; still assets are rendered once).
 Units
   * rate particles/s; lifetime, variances: seconds / same units as the base (uniform +/-);
     speed px/s; direction deg (0 = +x, -90 = up); spread = full cone angle in degrees;
     gravityX/Y px/s^2; drag 1/s (v *= exp(-drag dt)); turbulence ~ RMS acceleration px/s^2 of a
     seeded value-noise field of period @turbulenceScale px; size = diameter px (disc/square/sprite
-    width, streak thickness); angularVelocity deg/s; trail seconds of motion drawn behind.
+    width, streak thickness); angularVelocity deg/s; trail = seconds of each particle's actual
+    trajectory (recorded every step) drawn behind it as a polyline fading from 0 to the particle's
+    opacity (streaks: full width; other shapes: 0.7 x size under the particle).
   * Force fields (physics/forceField, listed in @forceFields, else every field with affects
-    all|particles) act in px units: directional/wind forceX/Y px/s^2 (wind adds seeded gusts),
-    radial/vortex strength px/s^2 around x,y with radius/falloff, turbulence strength px/s^2 with
-    period scale * pixelsPerMeter px, drag strength 1/s, attractor-path strength px/s^2.
-  * collide: floor and side walls of the frame in parent space, with @bounce (PARTIAL).
+    all|particles): physics.field_accel with px units (accelerations px/s^2, +y up for forceY like
+    the physics section, distances for falloff in metres via pixelsPerMeter). Particle positions are
+    converted from the parent space to composition px for the fields (and back).
+  * collide: (1) the frame's floor and side walls in parent space; (2) the rendered alpha
+    (>= 0.5, rendered once in node-local px) of every node carrying a rigidBody, placed at its
+    simulated (or keyframed) pose each step. A particle entering the alpha is moved back to the
+    crossing (bisection along its step), and its velocity relative to the body is reflected about the
+    alpha gradient normal with @bounce (tangential part x 0.8); particles found inside are pushed out
+    along the normal. Collisions are evaluated in composition px.
+  * Sprites (shape="sprite") are tinted: the sprite's colour channels are multiplied by the particle
+    colour (color -> colorEnd over life, or the preset palette) and its alpha by the particle opacity;
+    a white colour leaves the sprite unchanged.
 Presets supply defaults that explicit attributes override (see PRESETS below). Internal
 preset-only look parameters: soft (edge softness 0..1 of discs), fade_in (fraction of life),
 palette (per-particle colours when @color is not given), flutter (confetti tumbling), ring
@@ -45,13 +57,17 @@ from .. import curves, paint
 from ..compositor import RenderContext, rotate, translate
 from ..document import ln
 from ..evaluator import ANIM_TAGS, Ctx
-from ..physics import Seekable, fbm, hash01
+from ..physics import PathGeom, Seekable, fbm, field_accel, hash01
 from ..raster import Canvas, intersect
-from ..registry import ASSETS, FEATURES, NODES, PARTIAL, warn_once
+from ..registry import ASSETS, FEATURES, FULL, NODES, warn_once
 from ..values import parse_color
 
-FEATURES.declare("particles:collide", PARTIAL, "frame floor and side walls in the emitter's parent space")
-FEATURES.declare("particles:emitterShape:asset-alpha", PARTIAL, "samples the asset rendered at t=0")
+FEATURES.declare("particles:collide", FULL, "frame floor/walls plus the alpha of every rigid-body node at its pose")
+FEATURES.declare("particles:emitterShape:asset-alpha", FULL, "the asset's alpha rendered at the emission time")
+FEATURES.declare("particles:emitterShape:path", FULL, "uniform by exact arc length")
+FEATURES.declare("particles:trail", FULL, "recorded trajectories")
+FEATURES.declare("particles:sprite", FULL, "sheets (cols/rows/fps) tinted by the particle colour")
+STATIC_ASSETS = ("image", "vector", "formula", "code")
 
 DT = 1.0 / 60.0
 CHECKPOINT_EVERY = 30
@@ -191,8 +207,14 @@ class Emitter:
                 iv = float(b.get("interval", 1) or 1)
                 self.bursts += [(bt + k * iv, cnt) for k in range(rep + 1)]
         self.fields = self._fields()
-        self.emit_pts = None
+        self.emit_pts: dict = {}
         self.path_sampler = None
+        tr = self.P.get("trail") or 0.0
+        self.hist = 0 if (tr <= 0 and "trail" not in self.P.animated) else int(math.ceil(
+            (2.0 if "trail" in self.P.animated else min(tr, 10.0)) / DT)) + 2
+        self.colliders = None
+        ph = rc.doc.section("physics")
+        self.ppm = float(ph.get("pixelsPerMeter", 100)) if ph is not None else 100.0
         self.sim = Seekable(self._init, self._step, every=CHECKPOINT_EVERY)
 
     # ------------------------------------------------------------ helpers
@@ -228,7 +250,8 @@ class Emitter:
     def _init(self) -> dict:
         z = np.zeros(0)
         return dict(x=z, y=z, vx=z, vy=z, age=z, life=z, s0=z, s1=z, rot=z, av=z,
-                    pid=np.zeros(0, np.int64), acc=0.0, next_id=0)
+                    pid=np.zeros(0, np.int64), acc=0.0, next_id=0,
+                    hx=np.zeros((0, self.hist)), hy=np.zeros((0, self.hist)))
 
     # ------------------------------------------------------------ emission
     def _positions(self, ids: np.ndarray, t: float) -> tuple[np.ndarray, np.ndarray]:
@@ -249,14 +272,11 @@ class Emitter:
             return np.cos(a) * rr * w / 2, np.sin(a) * rr * h / 2
         if shape == "path":
             if self.path_sampler is None:
-                from ..geometry import PathSampler
-                self.path_sampler = PathSampler(P.get("emitterPath", c) or "")
-            pts = [self.path_sampler.at(float(u)) for u in r1]
-            return np.array([p[0] for p in pts]), np.array([p[1] for p in pts])
+                self.path_sampler = PathGeom(P.get("emitterPath", c) or "M0 0")
+            x, y, _ = self.path_sampler.sample(r1)
+            return x, y
         if shape == "asset-alpha":
-            if self.emit_pts is None:
-                self.emit_pts = self._asset_points(P.get("emitterAsset", c))
-            pts, aw, ah = self.emit_pts
+            pts, aw, ah = self._asset_points(P.get("emitterAsset", c), t)
             if len(pts) == 0:
                 return np.zeros(len(ids)), np.zeros(len(ids))
             k = np.minimum((r1 * len(pts)).astype(np.int64), len(pts) - 1)
@@ -264,19 +284,35 @@ class Emitter:
         warn_once("particles", f"emitterShape:{shape}", "unknown emitter shape; using point")
         return np.zeros(len(ids)), np.zeros(len(ids))
 
-    def _asset_points(self, aid):
+    def _asset_points(self, aid, t: float):
+        """Opaque pixel centres of the emitter asset rendered at emission time t (media time since the
+        emitter's start), cached per output frame (once for still assets)."""
         rc = self.rc
         asset = rc.doc.ids.get(aid) if aid else None
         fn = ASSETS.get(ln(asset)) if asset is not None else None
         if fn is None:
             warn_once("particles", f"emitterAsset:{aid}", "emitter asset not found")
             return np.zeros((0, 2)), 0.0, 0.0
-        aw, ah = rc.asset_size(asset, self.ctx_base)
-        buf = fn(rc, asset, np.eye(3), self.ctx_at(0.0))
+        src_t = max(0.0, t - self.start)
+        still = ln(asset) in STATIC_ASSETS and not any(ln(a) in ANIM_TAGS for a in asset.iter() if isinstance(a.tag, str))
+        key = (aid, 0 if still else int(math.floor(src_t * float(rc.doc.fps) + 1e-6)))
+        hit = self.emit_pts.get(key)
+        if hit is not None:
+            return hit
+        aw, ah = rc.asset_size(asset, self.ctx_at(t))
+        try:
+            buf = fn(rc, asset, np.eye(3), self.ctx_at(t), src_t=src_t)
+        except TypeError:
+            buf = fn(rc, asset, np.eye(3), self.ctx_at(t))
         if buf is None:
-            return np.zeros((0, 2)), aw, ah
-        ys, xs = np.nonzero(buf.px[..., 3] > 0.5)
-        return np.stack([xs + buf.x0 + 0.5, ys + buf.y0 + 0.5], 1).astype(np.float64), aw, ah
+            out = (np.zeros((0, 2)), aw, ah)
+        else:
+            ys, xs = np.nonzero(buf.px[..., 3] > 0.5)
+            out = (np.stack([xs + buf.x0 + 0.5, ys + buf.y0 + 0.5], 1).astype(np.float64), aw, ah)
+        if len(self.emit_pts) > 4:
+            self.emit_pts.pop(next(iter(self.emit_pts)))
+        self.emit_pts[key] = out
+        return out
 
     def _spawn(self, st: dict, times: np.ndarray, t_end: float) -> None:
         n = len(times)
@@ -321,13 +357,33 @@ class Emitter:
         age = np.maximum(0.0, t_end - times)
         px, py = px + vx * age, py + vy * age
         rot = rot + av * age
+        bx, by = px - vx * age, py - vy * age          # birth points (history before birth)
         for k, v in (("x", px), ("y", py), ("vx", vx), ("vy", vy), ("age", age), ("life", life), ("s0", s0),
                      ("s1", s1), ("rot", np.broadcast_to(rot, (n,)).astype(np.float64)),
-                     ("av", np.broadcast_to(av, (n,)).astype(np.float64)), ("pid", ids)):
+                     ("av", np.broadcast_to(av, (n,)).astype(np.float64)), ("pid", ids),
+                     ("hx", np.repeat(bx[:, None], self.hist, 1)), ("hy", np.repeat(by[:, None], self.hist, 1))):
             st[k] = np.concatenate([st[k], v])
 
     # ------------------------------------------------------------ step
-    def _accel(self, st: dict, t: float) -> tuple[np.ndarray, np.ndarray]:
+    def parent_doc(self, t: float) -> np.ndarray | None:
+        """Emitter parent space -> composition px (keyframes), None when it is the composition."""
+        parent = self.el.getparent()
+        if parent is None or ln(parent) in ("composition", "symbol", "symbols", "scene"):
+            return None
+        rc = self.rc
+        chain, p = [], parent
+        while p is not None and ln(p) not in ("composition", "symbol", "symbols", "scene"):
+            chain.append(p)
+            p = p.getparent()
+        M = np.eye(3)
+        box = (float(rc.doc.width), float(rc.doc.height))
+        ctx = self.ctx_at(t)
+        for node in reversed(chain):
+            M = rc.node_matrix(node, ctx, M, box, None)
+            box = rc.node_size(node, rc.node_ctx(node, ctx), box)
+        return M
+
+    def _accel(self, st: dict, t: float, PD=None) -> tuple[np.ndarray, np.ndarray]:
         P = self.P
         c = self.ctx_at(t)
         x, y, vx, vy = st["x"], st["y"], st["vx"], st["vy"]
@@ -338,64 +394,21 @@ class Emitter:
             sc = max(1e-3, P.get("turbulenceScale", c) or 100.0)
             ax = ax + fbm(self.seed + 11, x / sc, y / sc, t * 0.4) * turb * 3.0
             ay = ay + fbm(self.seed + 23, x / sc, y / sc, t * 0.4) * turb * 3.0
-        for f in self.fields:
-            fx, fy = self._field(f, x, y, vx, vy, t)
-            ax, ay = ax + fx, ay + fy
+        if self.fields:
+            if PD is not None:
+                X, Y = PD[0, 0] * x + PD[0, 1] * y + PD[0, 2], PD[1, 0] * x + PD[1, 1] * y + PD[1, 2]
+                VX, VY = PD[0, 0] * vx + PD[0, 1] * vy, PD[1, 0] * vx + PD[1, 1] * vy
+            else:
+                X, Y, VX, VY = x, y, vx, vy
+            FX, FY = np.zeros_like(x), np.zeros_like(x)
+            for f in self.fields:
+                fx, fy = field_accel(self.rc, f, c.comp_t, X, Y, VX, VY, self.ppm)
+                FX, FY = FX + fx, FY + fy
+            if PD is not None:
+                Li = np.linalg.inv(PD[:2, :2])
+                FX, FY = Li[0, 0] * FX + Li[0, 1] * FY, Li[1, 0] * FX + Li[1, 1] * FY
+            ax, ay = ax + FX, ay + FY
         return ax, ay
-
-    def _field(self, f, x, y, vx, vy, t):
-        ev = self.rc.ev
-        c = self.ctx_at(t)
-        zero = np.zeros_like(x)
-        s = ev.num(f, "start", c, 0.0)
-        e = ev.num(f, "end", c, 0.0) if f.get("end") is not None else None
-        if t < s or (e is not None and t >= e):
-            return zero, zero
-        typ = f.get("type")
-        strength = ev.num(f, "strength", c, 0.0)
-        cx, cy = ev.num(f, "x", c, 0.0), ev.num(f, "y", c, 0.0)
-        radius = ev.num(f, "radius", c, 0.0)
-        falloff = ev.num(f, "falloff", c, 0.0)
-        dx, dy = x - cx, y - cy
-        d = np.hypot(dx, dy)
-        dsafe = np.where(d > 1e-9, d, 1.0)
-        if radius > 0:
-            fall = np.clip(1 - d / radius, 0, 1) ** (falloff if falloff > 0 else 0)
-            fall = np.where(d < radius, fall, 0.0)
-        else:
-            fall = 1.0 / (1.0 + d / 100.0) ** falloff if falloff > 0 else np.ones_like(d)
-        if typ in ("directional", "wind"):
-            fx, fy = ev.num(f, "forceX", c, 0.0), ev.num(f, "forceY", c, 0.0)
-            if typ == "wind":
-                gust = 1.0 + 0.25 * fbm(ev.seed_for(f, "gust"), t * 0.7, y / 400.0, 0.0)
-                return fx * gust, fy * gust
-            return zero + fx, zero + fy
-        if typ == "radial":
-            return dx / dsafe * strength * fall, dy / dsafe * strength * fall
-        if typ == "vortex":
-            return -dy / dsafe * strength * fall, dx / dsafe * strength * fall
-        if typ == "turbulence":
-            ppm = float((self.rc.doc.section("physics").get("pixelsPerMeter", 100)))
-            sc = max(1e-6, ev.num(f, "scale", c, 1.0)) * ppm
-            seed = ev.seed_for(f, "turb")
-            return (fbm(seed, x / sc, y / sc, t * 0.5) * strength * 3.0,
-                    fbm(seed + 1, x / sc, y / sc, t * 0.5) * strength * 3.0)
-        if typ == "drag":
-            return -vx * strength, -vy * strength
-        if typ == "attractor-path" and f.get("path"):
-            from ..geometry import PathSampler
-            key = ("ff-path", f)
-            ps = self.rc.cache.get(key) or PathSampler(f.get("path"))
-            self.rc.cache[key] = ps
-            pts = np.array(ps.pts[::max(1, len(ps.pts) // 256)])
-            ddx = pts[None, :, 0] - x[:, None]
-            ddy = pts[None, :, 1] - y[:, None]
-            k = np.argmin(ddx * ddx + ddy * ddy, 1)
-            gx, gy = ddx[np.arange(len(x)), k], ddy[np.arange(len(x)), k]
-            n = np.hypot(gx, gy)
-            n = np.where(n > 1e-9, n, 1.0)
-            return gx / n * strength, gy / n * strength
-        return zero, zero
 
     def _step(self, st: dict, i: int) -> None:
         ts = self.t0 + i * DT
@@ -403,19 +416,25 @@ class Emitter:
         P = self.P
         # advance existing particles
         if len(st["x"]):
-            ax, ay = self._accel(st, ts)
             c = self.ctx_at(ts)
+            collide = P.get("collide", c)
+            PD = self.parent_doc(ts) if (self.fields or collide) else None
+            ax, ay = self._accel(st, ts, PD)
             damp = math.exp(-max(0.0, P.get("drag", c)) * DT)
             vx = (st["vx"] + ax * DT) * damp
             vy = (st["vy"] + ay * DT) * damp
             x = st["x"] + vx * DT
             y = st["y"] + vy * DT
-            if P.get("collide", c):
+            if collide:
                 x, y, vx, vy = self._collide(x, y, vx, vy, P.get("bounce", c))
+                x, y, vx, vy = self._collide_bodies(st["x"], st["y"], x, y, vx, vy, P.get("bounce", c), c.comp_t + DT, PD)
             st.update(x=x, y=y, vx=vx, vy=vy, age=st["age"] + DT, rot=st["rot"] + st["av"] * DT)
+            if self.hist:
+                st["hx"] = np.concatenate([x[:, None], st["hx"][:, :-1]], 1)
+                st["hy"] = np.concatenate([y[:, None], st["hy"][:, :-1]], 1)
             keep = st["age"] < st["life"]
             if not keep.all():
-                for k in ("x", "y", "vx", "vy", "age", "life", "s0", "s1", "rot", "av", "pid"):
+                for k in ("x", "y", "vx", "vy", "age", "life", "s0", "s1", "rot", "av", "pid", "hx", "hy"):
                     st[k] = st[k][keep]
         # emit
         if self.end is not None and ts >= self.end:
@@ -446,6 +465,141 @@ class Emitter:
             vx = np.where(side, sgn * np.abs(vx) * bounce, vx)
         return x, y, vx, vy
 
+    def _colliders(self):
+        """[(element, alpha (h, w) float, x0, y0, (w, h))] for every rigid-body node (rendered once)."""
+        if self.colliders is not None:
+            return self.colliders
+        from ..physics import get_sim
+        rc = self.rc
+        sim = get_sim(rc)
+        out = []
+        for el, _rb in (sim.body_els if sim is not None else []):
+            fn = NODES.get(ln(el))
+            if fn is None or el is self.el:
+                continue
+            t0 = sim.start
+            size = sim._size(el, t0)
+            prev, sim.busy = sim.busy, True
+            try:
+                buf = fn(rc, el, rc.node_ctx(el, sim._ctx(t0)), np.eye(3), size)
+            finally:
+                sim.busy = prev
+            buf = getattr(buf, "buf", buf)
+            if buf is None or buf.px.size == 0:
+                continue
+            a = np.clip(buf.px[..., 3].astype(np.float64), 0, 1)
+            k = np.pad(a, 1, mode="edge")
+            sm = (k[:-2, :-2] + 2 * k[:-2, 1:-1] + k[:-2, 2:] + 2 * k[1:-1, :-2] + 4 * k[1:-1, 1:-1] + 2 * k[1:-1, 2:]
+                  + k[2:, :-2] + 2 * k[2:, 1:-1] + k[2:, 2:]) / 16
+            out.append((el, a, sm, float(buf.x0), float(buf.y0), size))
+        self.colliders = out
+        return out
+
+    def _body_matrix(self, el, t: float):
+        """Node-local -> composition px of a rigid-body node at composition time t (simulated pose)."""
+        from ..physics import body_state, get_sim
+        sim = get_sim(self.rc)
+        w, h = sim._size(el, t)
+        b = body_state(self.rc, el, t)
+        if b is None:
+            return sim.world_doc(el, t), None, sim
+        key = ("pc-act", el)
+        W0 = self.rc.cache.get(key)
+        if W0 is None:
+            W0 = self.rc.cache[key] = sim.world_doc(el, max(b.activate_at, sim.start))
+        c0 = W0 @ np.array([w / 2, h / 2, 1.0])
+        a0 = math.atan2(W0[1, 0], W0[0, 0])
+        bc = b.box_centre()
+        cx, cy = bc[0] * sim.ppm, -bc[1] * sim.ppm
+        return translate(cx, cy) @ rotate(math.degrees(-b.angle - a0)) @ translate(-c0[0], -c0[1]) @ W0, b, sim
+
+    def _collide_bodies(self, x0, y0, x, y, vx, vy, bounce, t, PD):
+        cols = self._colliders()
+        if not cols or len(x) == 0:
+            return x, y, vx, vy
+        if PD is not None:
+            Lp = PD[:2, :2]
+            tp = lambda X, Y: (PD[0, 0] * X + PD[0, 1] * Y + PD[0, 2], PD[1, 0] * X + PD[1, 1] * Y + PD[1, 2])  # noqa: E731
+            X0, Y0 = tp(x0, y0)
+            X, Y = tp(x, y)
+            VX, VY = Lp[0, 0] * vx + Lp[0, 1] * vy, Lp[1, 0] * vx + Lp[1, 1] * vy
+        else:
+            X0, Y0, X, Y, VX, VY = x0, y0, x.copy(), y.copy(), vx.copy(), vy.copy()
+        for el, a, sm, bx0, by0, _size in cols:
+            W, b, sim = self._body_matrix(el, t)
+            try:
+                Wi = np.linalg.inv(W)
+            except np.linalg.LinAlgError:
+                continue
+
+            def loc(XX, YY):
+                return Wi[0, 0] * XX + Wi[0, 1] * YY + Wi[0, 2] - bx0, Wi[1, 0] * XX + Wi[1, 1] * YY + Wi[1, 2] - by0
+
+            def samp(A, u, v):
+                h_, w_ = A.shape
+                uu, vv = u - 0.5, v - 0.5
+                i0, j0 = np.floor(vv).astype(np.int64), np.floor(uu).astype(np.int64)
+                fx, fy = uu - j0, vv - i0
+                P = np.pad(A, 1)
+                tap = lambda ii, jj: P[np.clip(ii + 1, 0, h_ + 1), np.clip(jj + 1, 0, w_ + 1)]  # noqa: E731
+                return (tap(i0, j0) * (1 - fx) * (1 - fy) + tap(i0, j0 + 1) * fx * (1 - fy)
+                        + tap(i0 + 1, j0) * (1 - fx) * fy + tap(i0 + 1, j0 + 1) * fx * fy)
+            u, v = loc(X, Y)
+            inside = samp(a, u, v) >= 0.5
+            if not inside.any():
+                continue
+            idx = np.nonzero(inside)[0]
+            u0, v0 = loc(X0[idx], Y0[idx])
+            was_out = samp(a, u0, v0) < 0.5
+            lo = np.zeros(len(idx))
+            hi = np.ones(len(idx))
+            uu, vv = u[idx], v[idx]
+            for _ in range(10):
+                mid = (lo + hi) / 2
+                ins = samp(a, u0 + (uu - u0) * mid, v0 + (vv - v0) * mid) >= 0.5
+                hi, lo = np.where(ins, mid, hi), np.where(ins, lo, mid)
+            cu = np.where(was_out, u0 + (uu - u0) * lo, uu)
+            cv = np.where(was_out, v0 + (vv - v0) * lo, vv)
+            e = 1.0
+            gx = (samp(sm, cu + e, cv) - samp(sm, cu - e, cv)) / (2 * e)
+            gy = (samp(sm, cu, cv + e) - samp(sm, cu, cv - e)) / (2 * e)
+            nl = np.stack([-gx, -gy], 1)                                   # outward, node-local
+            nw = nl @ Wi[:2, :2]                                           # normals map with the inverse transpose
+            nn = np.hypot(nw[:, 0], nw[:, 1])
+            ok = nn > 1e-9
+            nw = np.where(ok[:, None], nw / np.where(ok, nn, 1.0)[:, None], np.array([0.0, -1.0]))
+            nloc = nl / np.maximum(np.hypot(nl[:, 0], nl[:, 1]), 1e-9)[:, None]
+            stuck = ~was_out
+            for _ in range(16):                                            # push out particles found inside
+                if not stuck.any():
+                    break
+                cu = np.where(stuck, cu + nloc[:, 0], cu)
+                cv = np.where(stuck, cv + nloc[:, 1], cv)
+                stuck &= samp(a, cu, cv) >= 0.5
+            cu, cv = cu + nloc[:, 0] * 0.25, cv + nloc[:, 1] * 0.25
+            px_ = W[0, 0] * (cu + bx0) + W[0, 1] * (cv + by0) + W[0, 2]
+            py_ = W[1, 0] * (cu + bx0) + W[1, 1] * (cv + by0) + W[1, 2]
+            bvx = bvy = 0.0
+            if b is not None:
+                r = np.stack([px_ / sim.ppm - b.pos[0], -py_ / sim.ppm - b.pos[1]], 1)
+                bvx = (b.vel[0] - b.w * r[:, 1]) * sim.ppm
+                bvy = -(b.vel[1] + b.w * r[:, 0]) * sim.ppm
+            rvx, rvy = VX[idx] - bvx, VY[idx] - bvy
+            vn = rvx * nw[:, 0] + rvy * nw[:, 1]
+            app = vn < 0
+            tvx, tvy = rvx - vn * nw[:, 0], rvy - vn * nw[:, 1]
+            nvn = np.where(app, -vn * bounce, vn)
+            k_t = np.where(app, 0.8, 1.0)
+            VX[idx] = bvx + tvx * k_t + nvn * nw[:, 0]
+            VY[idx] = bvy + tvy * k_t + nvn * nw[:, 1]
+            X[idx], Y[idx] = px_, py_
+        if PD is not None:
+            Pi = np.linalg.inv(PD)
+            x, y = Pi[0, 0] * X + Pi[0, 1] * Y + Pi[0, 2], Pi[1, 0] * X + Pi[1, 1] * Y + Pi[1, 2]
+            vx, vy = Pi[0, 0] * VX + Pi[0, 1] * VY, Pi[1, 0] * VX + Pi[1, 1] * VY
+            return x, y, vx, vy
+        return X, Y, VX, VY
+
     # ------------------------------------------------------------ query
     def state_at(self, t: float) -> tuple[dict, float]:
         if t < self.t0:
@@ -467,7 +621,8 @@ def particles_at(rc: RenderContext, el, ctx: Ctx) -> dict:
     """Live particles at ctx.t in the emitter's parent space (arrays x, y, vx, vy, age, life, size, pid...)."""
     em = get_emitter(rc, el, ctx)
     st, frac = em.state_at(ctx.t)
-    out = {k: st[k] for k in ("x", "y", "vx", "vy", "age", "life", "s0", "s1", "rot", "av", "pid")}
+    out = {k: st[k] for k in ("x", "y", "vx", "vy", "age", "life", "s0", "s1", "rot", "av", "pid", "hx", "hy")}
+    out["frac"] = np.full(len(out["x"]), frac)
     if frac > 0 and len(out["x"]):
         out["x"] = out["x"] + out["vx"] * frac
         out["y"] = out["y"] + out["vy"] * frac
@@ -479,6 +634,23 @@ def particles_at(rc: RenderContext, el, ctx: Ctx) -> dict:
 
 
 # ====================================================================== drawing
+def _trail_points(x, y, hx, hy, frac, trail):
+    """Head plus recorded positions back to `trail` seconds: ([(x, y)], [seconds back])."""
+    pts, taus = [(x, y)], [0.0]
+    for k in range(len(hx)):
+        tau = frac + k * DT
+        if tau > trail:
+            px_, py_ = pts[-1]
+            t0 = taus[-1]
+            u = (trail - t0) / max(tau - t0, 1e-12)
+            pts.append((px_ + (hx[k] - px_) * u, py_ + (hy[k] - py_) * u))
+            taus.append(trail)
+            break
+        pts.append((float(hx[k]), float(hy[k])))
+        taus.append(tau)
+    return pts, taus
+
+
 def _curve_table(name: str | None) -> np.ndarray:
     f = curves.get(name or "linear")
     return np.array([f(u) for u in np.linspace(0, 1, 257)], np.float64)
@@ -513,13 +685,22 @@ def _sprite_surface(rc: RenderContext, aid: str, ctx: Ctx):
     arr[:, :w, 2] = (rgb[..., 0] * a + 0.5).astype(np.uint8)
     arr[:, :w, 3] = (a * 255 + 0.5).astype(np.uint8)
     surf.mark_dirty()
-    rc.cache[key] = (surf, w, h)
+    planes = []
+    for ch in (None, 0, 1, 2):
+        pl = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+        pa = np.frombuffer(pl.get_data(), np.uint8).reshape(h, pl.get_stride() // 4, 4)
+        if ch is None:
+            pa[:, :w, 3] = arr[:, :w, 3]
+        else:
+            pa[:, :w, 2 - ch] = arr[:, :w, 2 - ch]
+        pl.mark_dirty()
+        planes.append(pl)
+    rc.cache[key] = (surf, w, h, planes)
     return rc.cache[key]
 
 
-@NODES.register("particleEmitter", level=PARTIAL,
-                note="all attributes and presets; collide is frame floor/walls only; sprites are not tinted; "
-                     "blend/effects by the compositor")
+@NODES.register("particleEmitter", level=FULL,
+                note="all attributes and presets (see nodes/particles.py); blend/effects by the compositor")
 def render_particles(rc: RenderContext, el, ctx: Ctx, M, size):
     em = get_emitter(rc, el, ctx)
     P = em.P
@@ -583,30 +764,44 @@ def render_particles(rc: RenderContext, el, ctx: Ctx, M, size):
     ring = P.look("ring")
     flutter = P.look("flutter")
     X, Y, VX, VY = p["x"], p["y"], p["vx"], p["vy"]
+    HX, HY, FR = p.get("hx"), p.get("hy"), p.get("frac")
     ROT = p["rot"]
     for i in order:
         x, y, s, a = float(X[i]), float(Y[i]), float(sz[i]), float(alpha[i])
         cr_, cg, cb = (float(v) for v in rgb[i])
         rot = math.degrees(math.atan2(VY[i], VX[i])) if orient else float(ROT[i])
-        if (trail > 0 and shape != "streak") or shape == "streak":
-            ln_t = trail if trail > 0 else 0.0
-            vx, vy = float(VX[i]), float(VY[i])
-            if ln_t <= 0:
-                spd = math.hypot(vx, vy) or 1.0
-                vx, vy, ln_t = vx / spd * s * 4, vy / spd * s * 4, 1.0
+        if shape == "streak" or trail > 0:
             cr.set_line_cap(cairo.LINE_CAP_ROUND)
             cr.set_line_width(s if shape == "streak" else s * 0.7)
-            grad = cairo.LinearGradient(x - vx * ln_t, y - vy * ln_t, x, y)
-            grad.add_color_stop_rgba(0, cr_, cg, cb, 0.0)
-            grad.add_color_stop_rgba(1, cr_, cg, cb, a if shape == "streak" else a * 0.6)
-            cr.set_source(grad)
-            cr.move_to(x - vx * ln_t, y - vy * ln_t)
-            cr.line_to(x, y)
-            cr.stroke()
+            a_head = a if shape == "streak" else a * 0.6
+            if trail > 0 and HX is not None and HX.shape[1]:
+                pts, taus = _trail_points(x, y, HX[i], HY[i], float(FR[i]), trail)
+                for k in range(len(pts) - 1):
+                    (x1, y1), (x2, y2) = pts[k], pts[k + 1]
+                    if abs(x1 - x2) + abs(y1 - y2) < 1e-9:
+                        continue
+                    grad = cairo.LinearGradient(x2, y2, x1, y1)
+                    grad.add_color_stop_rgba(0, cr_, cg, cb, a_head * (1 - taus[k + 1] / trail))
+                    grad.add_color_stop_rgba(1, cr_, cg, cb, a_head * (1 - taus[k] / trail))
+                    cr.set_source(grad)
+                    cr.move_to(x2, y2)
+                    cr.line_to(x1, y1)
+                    cr.stroke()
+            elif shape == "streak":
+                vx, vy = float(VX[i]), float(VY[i])
+                spd = math.hypot(vx, vy) or 1.0
+                vx, vy = vx / spd * s * 4, vy / spd * s * 4
+                grad = cairo.LinearGradient(x - vx, y - vy, x, y)
+                grad.add_color_stop_rgba(0, cr_, cg, cb, 0.0)
+                grad.add_color_stop_rgba(1, cr_, cg, cb, a_head)
+                cr.set_source(grad)
+                cr.move_to(x - vx, y - vy)
+                cr.line_to(x, y)
+                cr.stroke()
             if shape == "streak":
                 continue
         if shape == "sprite" and sprite:
-            surf, sw, sh = sprite
+            surf, sw, sh, chans = sprite
             cols = max(1, int(P.get("spriteCols") or 1))
             rows = max(1, int(P.get("spriteRows") or 1))
             cw, chh = sw / cols, sh / rows
@@ -621,8 +816,20 @@ def render_particles(rc: RenderContext, el, ctx: Ctx, M, size):
             cr.scale(kk, kk)
             cr.rectangle(-cw / 2, -chh / 2, cw, chh)
             cr.clip()
-            cr.set_source_surface(surf, -cw / 2 - ccol * cw, -chh / 2 - crow * chh)
-            cr.paint_with_alpha(a)
+            ox, oy = -cw / 2 - ccol * cw, -chh / 2 - crow * chh
+            if abs(cr_ - 1) + abs(cg - 1) + abs(cb - 1) < 1e-6:
+                cr.set_source_surface(surf, ox, oy)
+                cr.paint_with_alpha(a)
+            else:
+                # tint: sum of the per-channel sprite planes scaled by the colour (+ the alpha plane)
+                cr.push_group()
+                cr.set_operator(cairo.OPERATOR_ADD)
+                for plane, k_ in zip(chans, (1.0, cr_, cg, cb)):
+                    if k_ > 1e-6:
+                        cr.set_source_surface(plane, ox, oy)
+                        cr.paint_with_alpha(min(1.0, k_))
+                cr.pop_group_to_source()
+                cr.paint_with_alpha(a)
             cr.restore()
             continue
         if shape == "square":

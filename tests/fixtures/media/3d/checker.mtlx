@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<materialx version="1.39">
+  <nodegraph name="NG">
+    <checkerboard name="chk" type="color3">
+      <input name="color1" type="color3" value="1, 0, 0"/>
+      <input name="color2" type="color3" value="0, 0, 1"/>
+      <input name="uvtiling" type="vector2" value="4, 4"/>
+    </checkerboard>
+    <output name="out" type="color3" nodename="chk"/>
+  </nodegraph>
+  <standard_surface name="SS" type="surfaceshader">
+    <input name="base_color" type="color3" nodegraph="NG" output="out"/>
+    <input name="specular_roughness" type="float" value="0.3"/>
+  </standard_surface>
+  <surfacematerial name="M" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="SS"/>
+  </surfacematerial>
+</materialx>

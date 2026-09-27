@@ -70,8 +70,7 @@ def asset_buf(rc, aid, M=None, t=0.0, src_t=0.0):
 
 # ---------------------------------------------------------------- registry
 def test_support_levels():
-    assert ASSETS.level("lottie") == NONE and ASSETS.get("lottie") is None
-    assert ASSETS.level("mesh") == NONE
+    assert ASSETS.get("lottie") is not None
     for k in ("video", "vector", "generator", "chart", "code", "formula", "audiogram", "generated"):
         assert ASSETS.get(k) is not None, k
     assert ASSETS.level("generator") == FULL
@@ -350,9 +349,8 @@ def test_generated_cache_verification(tmp_path):
     assert audio_source_path(rc, rc.doc.ids["bad"]) is None
 
 
-def test_lottie_and_mesh_skip(tmp_path):
-    rc = make_rc('<lottie id="l" src="nope.lottie" width="20" height="10"/><mesh id="m" src="x.glb"/>',
-                 '<layer id="L" asset="l"/><layer id="M" asset="m"/>', tmp_path)
+def test_lottie_missing_file_skips(tmp_path):
+    rc = make_rc('<lottie id="l" src="nope.lottie" width="20" height="10"/>', '<layer id="L" asset="l"/>', tmp_path)
     assert rc.asset_size(rc.doc.ids["l"], None) == (20.0, 10.0)
     assert frame_rgb(rc, 0.0).max() == 0
 

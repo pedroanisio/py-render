@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: GLSL effects (scene-render, Shadertoy and ISF conventions) and gl-transitions
+     shader transitions. Scenes: s1 0-3, s2 3-6, s3 6-9, s4 9-11; cuts at 3, 6 and 9. -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="24" duration="11" seed="7" background="#101014FF"/>
+  <paints>
+    <linearGradient id="g-sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" color="#1D3557FF"/><stop offset="1" color="#E63946FF"/>
+    </linearGradient>
+    <linearGradient id="g-sea" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" color="#2A9D8FFF"/><stop offset="1" color="#E9C46AFF"/>
+    </linearGradient>
+  </paints>
+  <composition>
+    <group id="s1" width="1280" height="720" end="3" isolate="true">
+      <shape id="s1-bg" shape="rect" width="1280" height="720" fill="url(#g-sky)"/>
+      <shape id="s1-inv" shape="ellipse" x="120" y="160" width="400" height="400" fill="#F1FAEEFF" effects="fx-invert"/>
+      <shape id="s1-inv-st" shape="ellipse" x="140" y="180" width="360" height="360" fill="#A8DADCFF" effects="fx-invert-st"/>
+      <shape id="s1-star" shape="star" points="5" innerRadius="80" outerRadius="190" x="720" y="170" width="380" height="380"
+             fill="#FFD166FF" effects="fx-glow"/>
+    </group>
+    <group id="s2" width="1280" height="720" start="3" end="6" isolate="true">
+      <shape id="s2-bg" shape="rect" width="1280" height="720" fill="url(#g-sea)"/>
+      <shape id="s2-rainbow" shape="rounded-rect" x="100" y="120" width="500" height="480" radius="40"
+             fill="#FFFFFFFF" effects="fx-rainbow"/>
+      <shape id="s2-duo" shape="rect" x="680" y="120" width="500" height="480" fill="url(#g-sky)" effects="fx-duotone"/>
+    </group>
+    <group id="s3" width="1280" height="720" start="6" end="9" isolate="true">
+      <shape id="s3-bg" shape="rect" width="1280" height="720" fill="#264653FF"/>
+      <shape id="s3-a" shape="ellipse" x="340" y="60" width="600" height="600" fill="#F4A261FF"/>
+      <shape id="s3-b" shape="rect" x="0" y="330" width="1280" height="60" fill="#E76F51FF"/>
+    </group>
+    <group id="s4" width="1280" height="720" start="9" end="11" isolate="true">
+      <shape id="s4-bg" shape="rect" width="1280" height="720" fill="#F1FAEEFF"/>
+      <shape id="s4-a" shape="polygon" points="6" x="440" y="160" width="400" height="400" fill="#457B9DFF"/>
+    </group>
+    <transition id="t-fade" type="shader" from="s1" to="s2" duration="1" shader="shaders/fade.glsl"/>
+    <transition id="t-wipe" type="shader" from="s2" to="s3" duration="1" curve="linear" shader="shaders/directionalwipe.glsl">
+      <param name="smoothness" value="0.2"/>
+    </transition>
+    <transition id="t-circle" type="shader" from="s3" to="s4" duration="1" shader="shaders/circleopen.glsl" motionBlur="false">
+      <param name="smoothness" value="0.1"/>
+    </transition>
+  </composition>
+  <effects>
+    <effect id="fx-invert" type="shader" src="shaders/invert.glsl"/>
+    <effect id="fx-invert-st" type="shader" src="shaders/invert_shadertoy.glsl"/>
+    <effect id="fx-glow" type="shader" src="shaders/glow.glsl" radius="30" color="#FF4FD8FF">
+      <param name="padding" value="36"/>
+    </effect>
+    <effect id="fx-rainbow" type="shader" src="shaders/rainbow_shadertoy.glsl" intensity="1"/>
+    <effect id="fx-duotone" type="shader" src="shaders/duotone.fs">
+      <param name="amount" value="0.85"/>
+    </effect>
+  </effects>
+</scene>

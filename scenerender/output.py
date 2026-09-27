@@ -21,6 +21,38 @@ Frames are pure functions of t: they are streamed as raw RGB(A) to ffmpeg's stdi
 --jobs worker processes (each opens its own Renderer in a Pool initializer, results are
 consumed in order). --frames-dir keeps every frame (PNG, or .npy for 16-bit/float frames) and a
 rerun reuses the frames already there.
+
+Pinned delivery rules:
+
+* tiff-sequence: 16-bit RGB(A) TIFF (deflate) written by ffmpeg from the 16-bit frame.
+* gif: frames are collected first; per-frame palettes (palettegen stats_mode=single, paletteuse
+  new=1) are used when the frames' colours (4-bit bins covering 99 % of each frame's pixels) do
+  not fit one palette (> 256 bins and > 1.5 x the largest frame's), else one global palette
+  (stats_mode=full, rectangle diff). Bayer 4 colour dither (stable in animation). With alpha,
+  coverage becomes 1-bit by ordered 8x8 Bayer dithering (soft edges and fades keep their mean
+  coverage) and one palette entry is reserved for transparency.
+* maxFileSize: rate-controlled codecs (h264/h265/av1/vp9) start at 0.97 x size x 8 / duration
+  minus the audio bitrate (audio takes at most a quarter of the budget), frames go once into a
+  lossless FFV1 intermediate, and the encode is repeated with the bitrate scaled by the measured
+  overshoot (>= 10 % lower each time, 5 encodes at most) until the file fits; WebP bisects its
+  quality; codecs without rate control (prores, dnxhr, ffv1, apng, gif) fail when over the cap.
+* HDR metadata (maxCLL, maxFALL, masteringDisplay in x265's "G(x,y)B(x,y)R(x,y)WP(x,y)L(max,min)"
+  ST 2086 units): h265 also gets x265 SEI; every mp4/mov gets mdcv + clli boxes in the video
+  sample entry (h264, h265, av1, vp9, prores, dnxhr); mkv/webm/mxf go through an MP4/MOV copy
+  that ffmpeg's demuxer turns into stream side data, which the Matroska muxer writes as Colour
+  MasteringMetadata/MaxCLL/MaxFALL (MXF: mastering display only).
+* Spherical metadata (project mode="equirectangular", output/@sphericalMetadata true): Google
+  Spherical Video V2 st3d (stereo mode from scene360/@stereo) and sv3d (svhd, proj: prhd zero
+  pose + equi full-sphere bounds, cbmp layout 0, or for eac / fisheye-180 a mshp mesh projection
+  built by scenerender.spherical_mesh) boxes, injected in Python into the first video sample entry
+  (sizes rewritten, stco/co64 shifted when moov precedes mdat); mkv/webm get Projection +
+  StereoMode through the same side-data route, except the mesh (ffmpeg has no mesh side data):
+  its Projection (ProjectionType 3, ProjectionPrivate = the mshp payload) is written into the
+  video TrackEntry afterwards (EBML sizes, SeekHead/Cues positions and CRC-32 elements rewritten).
+* Destinations other than "file" upload only with --publish (scenerender.publish); without it
+  they are skipped with a warning. A failed upload fails the output.
+* QA (scenerender.qa) runs per output unless --no-qa: static checks before encoding, flash
+  analysis on the frames as they stream; error-level findings fail the output (exit status 4).
 """
 from __future__ import annotations
 
@@ -33,6 +65,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 from dataclasses import dataclass, field
 from fractions import Fraction
 
@@ -48,19 +81,32 @@ for _c in ("h264", "h265", "av1", "vp9", "ffv1", "apng", "webp", "png-sequence",
     CODECS.declare(_c, FULL)
 CODECS.declare("prores", FULL, "prores_ks; proresProfile proxy/lt/422/hq/4444/4444xq")
 CODECS.declare("dnxhr", FULL, "dnxhd encoder, DNxHR profiles (profile attribute, default dnxhr_hq)")
-CODECS.declare("gif", PARTIAL, "per-file 256-colour palette (palettegen/paletteuse); alpha is 1-bit")
+CODECS.declare("gif", PARTIAL, "GIF format limits: <= 256 colours per frame (global or per-frame palettes chosen from "
+               "the frames' colour spread) and 1-bit transparency (alpha ordered-dithered with an 8x8 Bayer matrix)")
 CODECS.declare("jpeg-sequence", FULL, "no alpha")
-CODECS.declare("tiff-sequence", PARTIAL, "8-bit RGB(A) TIFF")
+CODECS.declare("tiff-sequence", FULL, "16-bit RGB(A) TIFF (deflate) from the float frame")
 CODECS.declare("exr-sequence", FULL, "float32 linear-light OpenEXR (ZIP16), premultiplied alpha when alpha=true")
 FEATURES.declare("output:twoPass", FULL, "lossless FFV1 intermediate, then ffmpeg pass 1 + pass 2 (bitrate modes only)")
-FEATURES.declare("output:maxFileSize", PARTIAL, "bitrate = 0.97 x size x 8 / duration - audio bitrate; not verified afterwards")
-FEATURES.declare("output:hdrMetadata", PARTIAL, "maxCLL/maxFALL/masteringDisplay passed to x265 only")
-FEATURES.declare("output:sphericalMetadata", NONE, "no spherical (360) metadata is written")
+FEATURES.declare("output:maxFileSize", FULL, "bitrate/quality derived from the budget, file size verified and re-encoded "
+                 "from a lossless intermediate until it fits (5 tries); fixed-rate codecs fail when over")
+FEATURES.declare("output:hdrMetadata", FULL, "maxCLL/maxFALL/masteringDisplay: x265 SEI for h265, mdcv/clli sample-entry "
+                 "boxes in mp4/mov, Matroska/WebM Colour MasteringMetadata/MaxCLL/MaxFALL")
+FEATURES.declare("output:hdrMetadata:mxf", PARTIAL, "ffmpeg's MXF muxer writes the mastering display but has no MaxCLL/MaxFALL descriptor")
+FEATURES.declare("output:sphericalMetadata", FULL, "Spherical Video V2: st3d + sv3d (equi/cbmp) boxes in mp4/mov, "
+                 "Matroska/WebM Projection + StereoMode; mono, top-bottom, left-right")
+FEATURES.declare("output:sphericalMetadata:mesh", FULL, "eac / fisheye-180: Spherical V2 mesh projection (mshp, dfl8, "
+                 "16x16 quads per EAC cell, 16 x 64 fisheye hemisphere grid) in sv3d for mp4/mov, Matroska/WebM "
+                 "Projection type 3; one per-eye mesh, frame packing via st3d / StereoMode")
 FEATURES.declare("output:embedMetadata", FULL)
 FEATURES.declare("output:posters", FULL)
 FEATURES.declare("output:destination:file", FULL, "copy")
+try:
+    from .publish import LEVELS as _PUB
+except ImportError:          # pragma: no cover
+    _PUB = {}
 for _k in ("s3", "gcs", "azure-blob", "http-put", "sftp", "webhook"):
-    FEATURES.declare(f"output:destination:{_k}", NONE, "the renderer never uploads; skipped with a warning")
+    _lv, _note = _PUB.get(_k, (NONE, "no uploader"))
+    FEATURES.declare(f"output:destination:{_k}", _lv, f"with --publish only (else skipped): {_note}")
 
 SEQUENCES = {"png-sequence": ".png", "jpeg-sequence": ".jpg", "tiff-sequence": ".tif", "exr-sequence": ".exr"}
 _EXT_CODEC = {".mp4": ("h264", "mp4"), ".m4v": ("h264", "mp4"), ".mov": ("h264", "mov"), ".mkv": ("h264", "mkv"),
@@ -69,9 +115,10 @@ _EXT_CODEC = {".mp4": ("h264", "mp4"), ".m4v": ("h264", "mp4"), ".mov": ("h264",
               ".jpeg": ("jpeg-sequence", None), ".tif": ("tiff-sequence", None), ".tiff": ("tiff-sequence", None),
               ".exr": ("exr-sequence", None), ".wav": ("audio-only", "wav"), ".m4a": ("audio-only", "m4a"),
               ".mp3": ("audio-only", "mp3"), ".flac": ("audio-only", "flac"), ".aac": ("audio-only", "m4a"),
-              ".ogg": ("audio-only", "ogg"), ".opus": ("audio-only", "ogg")}
+              ".ogg": ("audio-only", "ogg"), ".opus": ("audio-only", "ogg"),
+              ".mka": ("audio-only", "mka")}
 _FORMATS = {"mp4": "mp4", "mov": "mov", "mkv": "matroska", "webm": "webm", "mxf": "mxf", "wav": "wav",
-            "m4a": "ipod", "mp3": "mp3", "flac": "flac", "ogg": "ogg"}
+            "m4a": "ipod", "mp3": "mp3", "flac": "flac", "ogg": "ogg", "mka": "matroska"}
 _PRORES = {"proxy": 0, "lt": 1, "422": 2, "hq": 3, "4444": 4, "4444xq": 5}
 _AV1_SPEED = {"ultrafast": 8, "superfast": 8, "veryfast": 7, "faster": 7, "fast": 6, "medium": 6, "slow": 4,
               "slower": 3, "veryslow": 2, "placebo": 1}
@@ -104,6 +151,7 @@ class Job:
     color: tuple = (None, None)
     burn: str | None = None
     captions: list | None = None
+    ch_layout: str | None = None      # ffmpeg channel layout of an ambisonic mix ("ambisonic 1"), set by _audio_file
 
     def a(self, name, default=None):
         v = self.attrs.get(name)
@@ -206,10 +254,27 @@ def open_renderer(open_kwargs: dict, cache: dict | None = None):
     return r
 
 
+def hdr_target(job: Job) -> dict | None:
+    """Target display for PQ/HLG: masteringDisplay L(max,min) (0.0001 cd/m2), else maxCLL, else None (1000)."""
+    md = job.a("masteringDisplay")
+    if md:
+        try:
+            L = parse_master_display(str(md))["L"]
+            return {"peak": L[0] / 10000.0, "black": L[1] / 10000.0}
+        except ValueError as e:
+            warn_once("output", f"masteringDisplay-{job.name}", str(e))
+    if job.a("maxCLL"):
+        return {"peak": float(job.a("maxCLL")), "black": 0.0}
+    return None
+
+
 def _job_cache(job: Job) -> dict:
     c = {}
     if job.color != (None, None):
         c["output_color"] = job.color
+    hdr = hdr_target(job)
+    if hdr:
+        c["output_hdr"] = hdr
     if job.burn:
         c["burn_captions"] = job.burn
     return c
@@ -219,6 +284,8 @@ def _job_cache(job: Job) -> dict:
 def _frame_kind(job: Job) -> str:
     if job.codec == "exr-sequence":
         return "floata" if job.alpha else "float"
+    if job.codec == "tiff-sequence":
+        return "rgba16" if job.alpha else "rgb16"
     pf = str(job.a("pixelFormat", "") or "")
     deep = bool(re.search(r"(10|12|16)(le|be)?$", pf)) or job.codec == "prores" and job.alpha
     if job.codec == "prores" or deep and job.codec in ("h264", "h265", "av1", "vp9", "ffv1", "dnxhr"):
@@ -317,7 +384,10 @@ def _wframe(t: float):
 
 
 class FrameSource:
-    """Frames for times[i] in order: from --frames-dir when present, else rendered (maybe in parallel)."""
+    """Frames for times[i] in order: from --frames-dir when present, else rendered (maybe in parallel).
+    `tap(img)` (QA flash analysis) sees every frame as it streams."""
+
+    tap = None
 
     def __init__(self, r, job: Job, times: list[float], kind: str, size, pad_even: bool, jobs: int,
                  frames_dir: str | None, first_index: int):
@@ -406,6 +476,8 @@ class FrameSource:
                 else:
                     img = render_frame(self.r, self.times[i], self.kind, self.size, self.pad)
                     self._save(i, img)
+                if self.tap is not None:
+                    self.tap(img)
                 yield img
         finally:
             if pool is not None:
@@ -481,18 +553,23 @@ def audio_bitrate(job: Job, duration: float) -> int:
     return br
 
 
-def _rate_args(job: Job, codec: str, duration: float, audio_bps: int) -> tuple[list[str], bool]:
-    """Rate control. Returns (args, bitrate_mode)."""
+def size_budget_bitrate(job: Job, duration: float, audio_bps: int) -> int:
+    """Video bitrate that fits maxFileSize: 0.97 x size x 8 / duration - audio bitrate (>= 50 kb/s)."""
+    total = int(job.a("maxFileSize")) * 8 * 0.97 / max(duration, 1e-3)
+    return max(50_000, int(total - (audio_bps if job.audio else 0)))
+
+
+def _rate_args(job: Job, codec: str, duration: float, audio_bps: int, force_bitrate: int | None = None) -> tuple[list[str], bool]:
+    """Rate control. Returns (args, bitrate_mode). force_bitrate: the maxFileSize loop's corrected bitrate."""
     crf = int(job.a("crf", 18))
     br = job.a("bitrate")
     maxbr = job.a("maxBitrate")
     buf = job.a("bufferSize")
     if job.a("maxFileSize"):
-        total = int(job.a("maxFileSize")) * 8 * 0.97 / max(duration, 1e-3)
-        v = max(50_000, int(total - (audio_bps if job.audio else 0)))
+        v = force_bitrate or size_budget_bitrate(job, duration, audio_bps)
         br = min(int(br), v) if br else v
         maxbr = min(int(maxbr), v) if maxbr else v
-        buf = buf or 2 * v
+        buf = min(int(buf), 2 * v) if buf else 2 * v
     a: list[str] = []
     if br:
         a += ["-b:v", str(int(br))]
@@ -510,7 +587,8 @@ def _rate_args(job: Job, codec: str, duration: float, audio_bps: int) -> tuple[l
     return a, False
 
 
-def video_codec_args(job: Job, duration: float, audio_bps: int) -> tuple[list[str], str | None, bool, list[str]]:
+def video_codec_args(job: Job, duration: float, audio_bps: int, force_bitrate: int | None = None,
+                     webp_quality: int | None = None) -> tuple[list[str], str | None, bool, list[str]]:
     """-> (output args, -vf filter, bitrate_mode, extra filters for filter_complex)"""
     c = job.codec
     fps = float(job.fps)
@@ -525,7 +603,7 @@ def video_codec_args(job: Job, duration: float, audio_bps: int) -> tuple[list[st
         warn_once("output", f"alpha-{c}", f"{c} has no alpha channel; rendered opaque")
     if c == "h264":
         a += ["-c:v", "libx264", "-preset", preset, "-pix_fmt", pf or "yuv420p"]
-        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps)
+        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps, force_bitrate)
         a += ra
         if job.a("profile"):
             a += ["-profile:v", job.a("profile")]
@@ -536,7 +614,7 @@ def video_codec_args(job: Job, duration: float, audio_bps: int) -> tuple[list[st
             a += ["-bf", str(job.a("bFrames"))]
     elif c == "h265":
         a += ["-c:v", "libx265", "-preset", preset, "-pix_fmt", pf or "yuv420p"]
-        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps)
+        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps, force_bitrate)
         a += ra
         xp = ["log-level=error", f"keyint={gop}"]
         if job.a("bFrames") is not None:
@@ -554,12 +632,12 @@ def video_codec_args(job: Job, duration: float, audio_bps: int) -> tuple[list[st
     elif c == "av1":
         a += ["-c:v", "libaom-av1", "-cpu-used", str(_AV1_SPEED.get(preset, 6)), "-row-mt", "1",
               "-pix_fmt", pf or "yuv420p", "-g", str(gop)]
-        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps)
+        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps, force_bitrate)
         a += ra
     elif c == "vp9":
         a += ["-c:v", "libvpx-vp9", "-deadline", "good", "-cpu-used", str(_VP9_SPEED.get(preset, 3)), "-row-mt", "1",
               "-pix_fmt", ("yuva420p" if job.alpha else (pf or "yuv420p")), "-g", str(gop)]
-        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps)
+        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps, force_bitrate)
         a += ra
     elif c == "prores":
         prof = job.a("proresProfile") or ("4444" if job.alpha else "hq")
@@ -580,7 +658,7 @@ def video_codec_args(job: Job, duration: float, audio_bps: int) -> tuple[list[st
         a += ["-c:v", "apng", "-plays", str(int(job.a("loopCount", 0))), "-pix_fmt", "rgba" if job.alpha else "rgb24", "-f", "apng"]
         vf = None
     elif c == "webp":
-        q = max(0, min(100, 100 - 2 * int(job.a("crf", 18)) + 16))
+        q = webp_quality if webp_quality is not None else max(0, min(100, 100 - 2 * int(job.a("crf", 18)) + 16))
         a += ["-c:v", "libwebp_anim", "-lossless", "0", "-quality", str(q), "-loop", str(int(job.a("loopCount", 0))),
               "-pix_fmt", "yuva420p" if job.alpha else "yuv420p", "-f", "webp"]
         tags, vf = [], None
@@ -602,7 +680,7 @@ def audio_codec_args(job: Job, bits: int, duration: float = 0.0) -> list[str]:
         if cont == "mp3":
             return ["-c:a", "libmp3lame", "-b:a", str(br)]
         if cont == "ogg":
-            return ["-c:a", "libopus", "-b:a", str(br)]
+            return ["-c:a", "libopus", "-b:a", str(br)] + (["-mapping_family", "2"] if job.ch_layout else [])
     name = {"aac": "aac", "opus": "libopus", "mp3": "libmp3lame", "flac": "flac", "pcm": "pcm_s24le",
             "vorbis": "libvorbis"}.get(ac, ac)
     if cont == "webm" and name not in ("libopus", "libvorbis"):
@@ -610,9 +688,19 @@ def audio_codec_args(job: Job, bits: int, duration: float = 0.0) -> list[str]:
         name = "libopus"
     if cont == "mxf" and not name.startswith("pcm"):
         name = "pcm_s24le"
+    if job.ch_layout and not name.startswith("pcm") and name != "flac":
+        # ambisonics: only Opus (channel mapping family 2, ambisonic ACN/SN3D) carries it losslessly-ordered;
+        # AAC/MP3/Vorbis would re-map the channels as speakers
+        if name != "libopus":
+            warn_once("output", f"ambisonic-{ac}", f"{ac} cannot carry ambisonics; using Opus (mapping family 2)")
+        name = "libopus"
+        if cont in ("mov", "mxf", "m4a", "mp3"):
+            warn_once("output", f"ambisonic-{cont}", f"the {cont} container cannot hold Opus ambisonics; use mkv/mka/webm/mp4/ogg")
     out = ["-c:a", name]
     if not name.startswith("pcm") and name != "flac":
         out += ["-b:a", str(br)]
+    if name == "libopus" and job.ch_layout:
+        out += ["-mapping_family", "2"]
     return out
 
 
@@ -625,7 +713,8 @@ def metadata_args(doc, job: Job) -> list[str]:
     out = []
     keymap = {"title": ["title"], "author": ["artist", "author"], "description": ["description", "comment"],
               "copyright": ["copyright"], "keywords": ["keywords"], "created": ["creation_time", "date"],
-              "generator": ["encoder_generator"], "revision": ["revision"], "language": ["language"]}
+              "generator": ["encoder_generator"], "revision": ["revision"], "language": ["language"],
+              "modified": ["modification_time"]}
     for attr, keys in keymap.items():
         v = md.get(attr)
         if v:
@@ -657,7 +746,12 @@ def _audio_file(r, job: Job, tmpdir: str, n_frames: int) -> tuple[str | None, in
     pcm = m.render(job.t0, t1)
     dither = (m.master_el.get("dither", "true") != "false") if m.master_el is not None else True
     path = os.path.join(tmpdir, "mix.wav")
-    write_wav(path, pcm, m.sr, m.bits, dither, seed=m.seed)
+    lay = getattr(m, "layout", None)
+    if lay is not None:
+        write_wav(path, pcm, m.sr, m.bits, dither, seed=m.seed, channel_mask=lay.wav_mask)
+        job.ch_layout = m.ffmpeg_layout if lay.ambisonic else None
+    else:
+        write_wav(path, pcm, m.sr, m.bits, dither, seed=m.seed)
     info = m.stats
     extra = ""
     if "final_lufs" in info:
@@ -700,8 +794,8 @@ def _pix_in(kind: str) -> str:
             "floata": "gbrapf32le"}[kind]
 
 
-def run_job(r, job: Job, args) -> list[str]:
-    """Render one job; returns the files written."""
+def run_job(r, job: Job, args, tap=None) -> list[str]:
+    """Render one job; returns the files written. tap(frame) observes every delivered frame."""
     doc = r.doc
     fps = job.fps
     n = max(0, int(math.ceil((job.t1 - job.t0) * float(fps) - 1e-9)))
@@ -734,7 +828,8 @@ def run_job(r, job: Job, args) -> list[str]:
         if job.codec == "audio-only":
             if audio_path is None:
                 raise RuntimeError("audio-only output but the document has no audio")
-            cmd = [ffmpeg_exe(), "-y", "-v", "error", "-nostdin", "-i", audio_path, *audio_codec_args(job, bits),
+            lay_in = ["-ch_layout", job.ch_layout] if job.ch_layout else []
+            cmd = [ffmpeg_exe(), "-y", "-v", "error", "-nostdin", *lay_in, "-i", audio_path, *audio_codec_args(job, bits),
                    *metadata_args(doc, job)]
             fmt = _FORMATS.get(job.container or "")
             if fmt:
@@ -743,6 +838,7 @@ def run_job(r, job: Job, args) -> list[str]:
             written.append(job.path)
         elif job.codec in SEQUENCES:
             src = FrameSource(r, job, times, kind, size, False, jobs_n, frames_dir, first_index)
+            src.tap = tap
             written += _write_sequence(job, src, first_index, progress, n, tmp)
             if audio_path:
                 prefix = os.path.basename(job.path.split("%")[0]).rstrip("_-.")
@@ -751,6 +847,7 @@ def run_job(r, job: Job, args) -> list[str]:
                 written.append(wav)
         else:
             src = FrameSource(r, job, times, kind, size, pad_even, jobs_n, frames_dir, first_index)
+            src.tap = tap
             written += _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, progress, tmp)
     log.info("%s: %s in %.1fs", job.name, "audio" if job.codec == "audio-only" else f"{n} frames", time.perf_counter() - t_start)
     return written
@@ -763,21 +860,129 @@ def _frame_dims(r, size, pad_even):
     return w, h
 
 
+_RATE_CODECS = ("h264", "h265", "av1", "vp9")
+
+
+def fit_to_size(encode, cap: int, v0: int, fixed_bits: float, tries: int = 5, floor: int = 20_000) -> tuple[int, int]:
+    """maxFileSize loop: encode(bitrate) -> bytes; lower the video bitrate by the measured overshoot until the
+    file fits (each retry at least 10 % lower). -> (size, bitrate); RuntimeError when it cannot fit."""
+    v = int(v0)
+    size = 0
+    for _ in range(tries):
+        size = encode(v)
+        if size <= cap:
+            return size, v
+        video_bits = max(size * 8 - fixed_bits, 1.0)
+        target = cap * 8 * 0.97 - fixed_bits
+        nv = max(floor, min(int(v * target / video_bits), int(v * 0.9)))
+        if nv >= v:
+            break
+        v = nv
+    raise RuntimeError(f"cannot fit maxFileSize {cap} bytes: {size} bytes at {v} b/s after {tries} encodes")
+
+
+def fit_quality(encode, cap: int, q0: int, tries: int = 7) -> tuple[int, int]:
+    """Quality bisection for encoders without bitrate control (WebP): highest quality <= q0 that fits."""
+    lo, hi, q, best, last = 0, q0, q0, None, None
+    for _ in range(tries):
+        size, last = encode(q), q
+        if size <= cap:
+            best, lo = (size, q), q + 1
+        else:
+            hi = q - 1
+        if lo > hi:
+            break
+        q = (lo + hi + 1) // 2 if best else (lo + hi) // 2
+    if best is None:
+        raise RuntimeError(f"cannot fit maxFileSize {cap} bytes even at quality {last}")
+    if best[1] != last:
+        encode(best[1])
+    return best
+
+
+_BAYER8 = (np.array([[0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26], [12, 44, 4, 36, 14, 46, 6, 38],
+                     [60, 28, 52, 20, 62, 30, 54, 22], [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25],
+                     [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21]], np.float32) + 0.5) / 64.0
+
+
+def gif_alpha(img: np.ndarray) -> np.ndarray:
+    """Straight RGBA8 -> 1-bit alpha by ordered (8x8 Bayer) dithering; transparent pixels get black colour."""
+    h, w = img.shape[:2]
+    thr = np.tile(_BAYER8, (h // 8 + 1, w // 8 + 1))[:h, :w]
+    opaque = img[..., 3].astype(np.float32) / 255.0 > thr
+    out = img.copy()
+    out[..., 3] = np.where(opaque, 255, 0)
+    out[..., :3] = np.where(opaque[..., None], img[..., :3], 0)
+    return out
+
+
+def _colour_bins(img: np.ndarray) -> np.ndarray:
+    """4096-bin (4 bits per channel) set covering 99 % of the (opaque) pixels of a frame."""
+    s = img[::2, ::2]
+    q = (s[..., :3] >> 4).astype(np.int32)
+    idx = (q[..., 0] << 8) | (q[..., 1] << 4) | q[..., 2]
+    if s.shape[-1] == 4:
+        idx = idx[s[..., 3] > 0]
+    hist = np.bincount(idx.ravel(), minlength=4096)
+    order = np.argsort(-hist, kind="stable")
+    cum = np.cumsum(hist[order])
+    k = int(np.searchsorted(cum, 0.99 * max(cum[-1], 1))) + 1
+    used = np.zeros(4096, bool)
+    used[order[:k]] = True
+    return used
+
+
+def gif_palette_mode(sets: list[np.ndarray]) -> str:
+    """'frame' when a single 256-colour palette would have to merge colours the frames need, else 'global'."""
+    if len(sets) < 2:
+        return "global"
+    union = np.logical_or.reduce(sets).sum()
+    return "frame" if union > 256 and union > 1.5 * max(s.sum() for s in sets) else "global"
+
+
+def _encode_gif(job, src, w, h, kind, progress, tmp) -> None:
+    raw = os.path.join(tmp, "gif.raw")
+    sets = []
+    with open(raw, "wb") as f:
+        for i, img in enumerate(src, 1):
+            if job.alpha:
+                img = gif_alpha(img)
+            f.write(np.ascontiguousarray(img).tobytes())
+            sets.append(_colour_bins(img))
+            progress.step(i)
+    mode = gif_palette_mode(sets)
+    trans = ":reserve_transparent=1" if job.alpha else ""
+    athr = ":alpha_threshold=128" if job.alpha else ""
+    if mode == "frame":
+        graph = f"[0:v]split[a][b];[a]palettegen=stats_mode=single{trans}[p];[b][p]paletteuse=new=1:dither=bayer:bayer_scale=4{athr}[v]"
+    else:
+        graph = f"[0:v]split[a][b];[a]palettegen=stats_mode=full{trans}[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle{athr}[v]"
+    log.info("%s: GIF with %s palette%s", job.name, "per-frame" if mode == "frame" else "a global", "s" if mode == "frame" else "")
+    _run_ffmpeg([ffmpeg_exe(), "-y", "-v", "error", "-nostdin", "-f", "rawvideo", "-pix_fmt", _pix_in(kind), "-s", f"{w}x{h}",
+                 "-r", _fps_str(job.fps), "-i", raw, "-filter_complex", graph, "-map", "[v]",
+                 "-loop", str(int(job.a("loopCount", 0))), "-f", "gif", job.path])
+
+
+def _check_size(job) -> None:
+    cap = int(job.a("maxFileSize") or 0)
+    if cap and os.path.getsize(job.path) > cap:
+        why = "the size loop could not meet it" if job.codec in _RATE_CODECS or job.codec == "webp" else "no rate control"
+        raise RuntimeError(f"{os.path.getsize(job.path)} bytes exceed maxFileSize {cap} ({job.codec}: {why})")
+
+
 def _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, progress, tmp) -> list[str]:
     duration = len(times) / float(job.fps)
     w, h = _frame_dims(r, size, pad_even)
-    vargs, vf, bitrate_mode, _ = video_codec_args(job, duration, audio_bitrate(job, duration) if audio_path else 0)
-    inp = ["-f", "rawvideo", "-pix_fmt", _pix_in(kind), "-s", f"{w}x{h}", "-r", _fps_str(job.fps), "-i", "-"]
-    ain = ["-i", audio_path] if audio_path else []
-    maps = ["-map", "0:v:0"] + (["-map", "1:a:0"] if audio_path else [])
-    fargs: list[str] = []
     if job.codec == "gif":
-        trans = ":reserve_transparent=1" if job.alpha else ""
-        fargs = ["-filter_complex", f"[0:v]split[a][b];[a]palettegen=stats_mode=diff{trans}[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle[v]"]
-        maps = ["-map", "[v]"]
-        ain = []
-    elif vf:
-        fargs = ["-vf", vf]
+        _encode_gif(job, src, w, h, kind, progress, tmp)
+        _check_size(job)
+        return [job.path]
+    abps = audio_bitrate(job, duration) if audio_path else 0
+    vargs, vf, bitrate_mode, _ = video_codec_args(job, duration, abps)
+    raw_in = ["-f", "rawvideo", "-pix_fmt", _pix_in(kind), "-s", f"{w}x{h}", "-r", _fps_str(job.fps), "-i", "-"]
+    ain = ((["-ch_layout", job.ch_layout] if job.ch_layout else []) + ["-i", audio_path]) if audio_path else []
+    maps = ["-map", "0:v:0"] + (["-map", "1:a:0"] if audio_path else [])
+    fargs = ["-vf", vf] if vf else []
     aargs = audio_codec_args(job, bits, duration) if audio_path else []
     cont = job.container
     fmt = ["-f", _FORMATS[cont]] if cont in _FORMATS and cont not in ("wav", "m4a", "mp3", "flac", "ogg") else []
@@ -792,36 +997,117 @@ def _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, pr
             flags.append("+use_metadata_tags")
         if flags:
             movflags = ["-movflags", "".join(flags)]
-    meta = metadata_args(r.doc, job) if job.codec not in ("gif",) else []
-    two_pass = job.a("twoPass", "false") in ("true", True) and bitrate_mode and job.codec in ("h264", "h265", "av1", "vp9")
+    meta = metadata_args(r.doc, job)
+    tail = ["-shortest"] if audio_path and job.codec in ("apng", "webp") else []
+    two_pass = job.a("twoPass", "false") in ("true", True) and bitrate_mode and job.codec in _RATE_CODECS
     if job.a("twoPass", "false") in ("true", True) and not two_pass:
         warn_once("output", f"twoPass-{job.name}", "twoPass needs a bitrate (bitrate/maxFileSize); encoded in one pass")
+    cap = int(job.a("maxFileSize") or 0)
+    fit = bool(cap) and (job.codec in _RATE_CODECS or job.codec == "webp")
     ff = ffmpeg_exe()
-    if not two_pass:
-        cmd = [ff, "-y", "-v", "error", "-nostdin", *inp, *ain, *fargs, *maps, *vargs, *aargs, *movflags, *meta, *fmt]
-        if audio_path:
-            cmd += ["-shortest"] if job.codec in ("gif", "apng", "webp") else []
-        _run_ffmpeg(cmd + [job.path], iter(src), progress)
-        return [job.path]
-    # two-pass: lossless intermediate, then pass 1 and pass 2 from it
-    inter = os.path.join(tmp, "intermediate.mkv")
-    ipix = {"rgb8": "bgr0", "rgba8": "bgra", "rgb16": "rgb48le", "rgba16": "rgba64le"}.get(kind, "bgr0")
-    _run_ffmpeg([ff, "-y", "-v", "error", "-nostdin", *inp, "-c:v", "ffv1", "-level", "3", "-pix_fmt", ipix, inter],
-                iter(src), progress)
-    log_prefix = os.path.join(tmp, "passlog")
-    base = [ff, "-y", "-v", "error", "-nostdin", "-i", inter, *ain, *fargs, *maps, *vargs]
-    if job.codec == "h265":
-        i = base.index("-x265-params") + 1
-        p1 = base.copy()
-        p1[i] = base[i] + f":pass=1:stats={log_prefix}.log"
-        p2 = base.copy()
-        p2[i] = base[i] + f":pass=2:stats={log_prefix}.log"
-        _run_ffmpeg(p1 + ["-an", "-f", "null", os.devnull])
-        _run_ffmpeg(p2 + [*aargs, *movflags, *meta, *fmt, job.path])
+    if two_pass or fit:          # frames are rendered once into a lossless intermediate the encodes read
+        inter = os.path.join(tmp, "intermediate.mkv")
+        ipix = {"rgb8": "bgr0", "rgba8": "bgra", "rgb16": "rgb48le", "rgba16": "rgba64le"}.get(kind, "bgr0")
+        _run_ffmpeg([ff, "-y", "-v", "error", "-nostdin", *raw_in, "-c:v", "ffv1", "-level", "3", "-pix_fmt", ipix, inter],
+                    iter(src), progress)
+        vin, frames = ["-i", inter], None
     else:
-        _run_ffmpeg(base + ["-pass", "1", "-passlogfile", log_prefix, "-an", "-f", "null", os.devnull])
-        _run_ffmpeg(base + ["-pass", "2", "-passlogfile", log_prefix, *aargs, *movflags, *meta, *fmt, job.path])
+        vin, frames = raw_in, iter(src)
+
+    def encode(force_bitrate: int | None = None, webp_q: int | None = None) -> int:
+        va, _, _, _ = video_codec_args(job, duration, abps, force_bitrate, webp_q)
+        if not two_pass:
+            cmd = [ff, "-y", "-v", "error", "-nostdin", *vin, *ain, *fargs, *maps, *va, *aargs, *movflags, *meta, *fmt, *tail]
+            _run_ffmpeg(cmd + [job.path], frames, progress if frames is not None else None)
+            return os.path.getsize(job.path)
+        log_prefix = os.path.join(tmp, "passlog")
+        base = [ff, "-y", "-v", "error", "-nostdin", *vin, *ain, *fargs, *maps, *va]
+        if job.codec == "h265":
+            i = base.index("-x265-params") + 1
+            p1, p2 = base.copy(), base.copy()
+            p1[i] = base[i] + f":pass=1:stats={log_prefix}.log"
+            p2[i] = base[i] + f":pass=2:stats={log_prefix}.log"
+            _run_ffmpeg(p1 + ["-an", "-f", "null", os.devnull])
+            _run_ffmpeg(p2 + [*aargs, *movflags, *meta, *fmt, job.path])
+        else:
+            _run_ffmpeg(base + ["-pass", "1", "-passlogfile", log_prefix, "-an", "-f", "null", os.devnull])
+            _run_ffmpeg(base + ["-pass", "2", "-passlogfile", log_prefix, *aargs, *movflags, *meta, *fmt, job.path])
+        return os.path.getsize(job.path)
+
+    def encode_final(**kw) -> int:
+        """Encode plus container metadata injection, so maxFileSize measures the delivered file."""
+        encode(**kw)
+        post_metadata(r, job, tmp)
+        return os.path.getsize(job.path)
+
+    if fit and job.codec == "webp":
+        q0 = max(0, min(100, 100 - 2 * int(job.a("crf", 18)) + 16))
+        sz, q = fit_quality(lambda q: encode_final(webp_q=q), cap, q0)
+        log.info("%s: %d bytes at WebP quality %d (maxFileSize %d)", job.name, sz, q, cap)
+    elif fit:
+        v0 = size_budget_bitrate(job, duration, abps)
+        sz, v = fit_to_size(lambda v: encode_final(force_bitrate=v), cap, v0, abps * duration)
+        log.info("%s: %d bytes at %d b/s video (maxFileSize %d)", job.name, sz, v, cap)
+    else:
+        encode_final()
+    _check_size(job)
     return [job.path]
+
+
+# ====================================================================== spherical / HDR container metadata
+def spherical_params(doc, job: Job) -> dict | None:
+    """(projection, stereo, eye size) for equirectangular projects unless output/@sphericalMetadata="false"."""
+    if doc.project.get("mode") != "equirectangular" or str(job.a("sphericalMetadata", "true")) == "false":
+        return None
+    s360 = doc.section("scene360")
+    layout = s360.get("layout", "equirectangular") if s360 is not None else "equirectangular"
+    stereo = s360.get("stereo", "mono") if s360 is not None else "mono"
+    w = int(s360.get("width", 3840)) if s360 is not None else 3840
+    h = int(s360.get("height", 1920)) if s360 is not None else 1920
+    eye = (w // 2, h) if stereo == "left-right" else (w, h // 2) if stereo == "top-bottom" else (w, h)
+    return {"projection": layout, "stereo": stereo, "eye": eye}
+
+
+def post_metadata(r, job: Job, tmp: str) -> None:
+    """Write spherical (st3d/sv3d) and HDR (mdcv/clli) metadata into the finished video file."""
+    boxes: list[bytes] = []
+    sph = spherical_params(r.doc, job)
+    mesh = sph["projection"] in MESH_LAYOUTS if sph else False
+    if sph:
+        boxes += spherical_boxes(sph["projection"], sph["stereo"], eye=sph["eye"])
+    if any(job.a(k) is not None for k in ("maxCLL", "maxFALL", "masteringDisplay")):
+        try:
+            boxes += hdr_boxes(job.a("masteringDisplay"), job.a("maxCLL"), job.a("maxFALL"))
+        except ValueError as e:
+            warn_once("output", f"hdr-{job.name}", str(e))
+    if not boxes:
+        return
+    cont = job.container or os.path.splitext(job.path)[1].lstrip(".").lower()
+    if job.codec in ("gif", "apng", "webp") or cont not in ("mp4", "m4v", "mov", "mkv", "webm", "mxf"):
+        warn_once("output", f"meta-{job.name}", f"{job.codec}/{cont or '?'} cannot carry spherical/HDR metadata; not written")
+        return
+    if cont in ("mp4", "m4v", "mov"):
+        inject_sample_entry_boxes(job.path, boxes)
+        return
+    if job.codec == "ffv1":
+        warn_once("output", f"meta-{job.name}", "FFV1 cannot pass through an MP4/MOV intermediate; spherical/HDR metadata not written")
+        return
+    ff = ffmpeg_exe()
+    v = os.path.join(tmp, "meta" + (".mov" if job.codec in ("prores", "dnxhr") else ".mp4"))
+    _run_ffmpeg([ff, "-y", "-v", "error", "-nostdin", "-i", job.path, "-map", "0:v:0", "-c", "copy", v])
+    if mesh:        # ffmpeg's demuxer has no mesh side data: keep st3d for StereoMode, write Projection below
+        boxes = [b for b in boxes if b[4:8] != b"sv3d"]
+    inject_sample_entry_boxes(v, boxes)
+    out = os.path.join(tmp, "final." + cont)
+    rate = ["-r", _fps_str(job.fps)] if cont == "mxf" else []
+    _run_ffmpeg([ff, "-y", "-v", "error", "-nostdin", "-i", v, "-i", job.path, "-map", "0:v:0", "-map", "1", "-map", "-1:v",
+                 "-c", "copy", "-map_metadata", "1", *rate, "-f", _FORMATS[cont], out])
+    shutil.move(out, job.path)
+    if mesh and cont in ("mkv", "webm"):
+        from .spherical_mesh import layout_mshp
+        inject_matroska_projection(job.path, 3, layout_mshp(sph["projection"], *sph["eye"]))
+    elif mesh:
+        warn_once("output", f"meta-{job.name}", f"{cont} cannot carry a mesh projection; only stereo metadata written")
 
 
 def _write_sequence(job, src: FrameSource, first_index: int, progress: Progress, n: int, tmp) -> list[str]:
@@ -841,18 +1127,362 @@ def _write_sequence(job, src: FrameSource, first_index: int, progress: Progress,
                 yield np.ascontiguousarray(np.stack([img[..., c] for c in ch], 0).astype("<f4"))
         _run_ffmpeg(cmd, planar(), progress)
         return [pattern % (first_index + i) for i in range(n)]
+    if job.codec == "tiff-sequence":
+        w, h = _frame_dims(src.r, src.size, False)
+        pix = "rgba64le" if job.alpha else "rgb48le"
+        cmd = [ffmpeg_exe(), "-y", "-v", "error", "-nostdin", "-f", "rawvideo", "-pix_fmt", pix, "-s", f"{w}x{h}",
+               "-r", _fps_str(job.fps), "-i", "-", "-c:v", "tiff", "-pix_fmt", pix, "-compression_algo", "deflate",
+               "-start_number", str(first_index), "-f", "image2", pattern]
+        _run_ffmpeg(cmd, (np.ascontiguousarray(img.astype("<u2")) for img in src), progress)
+        return [pattern % (first_index + i) for i in range(n)]
     quality = int(round(float(job.a("quality", 0.95)) * 100)) if job.a("quality") else 95
     for i, img in enumerate(src):
         p = pattern % (first_index + i)
         if job.codec == "jpeg-sequence":
             Image.fromarray(img[..., :3]).save(p, quality=quality)
-        elif job.codec == "tiff-sequence":
-            Image.fromarray(img).save(p, compression="tiff_deflate")
         else:
             Image.fromarray(img).save(p, compress_level=4)
         written.append(p)
         progress.step(i + 1)
     return written
+
+
+# ====================================================================== MP4/MOV box injection
+_CONTAINERS = {b"moov", b"trak", b"mdia", b"minf", b"stbl", b"edts", b"dinf", b"udta"}
+_VISUAL_ENTRY = 86          # size of a VisualSampleEntry / QuickTime video sample description before child boxes
+
+
+def _boxes(buf: bytes, start: int, end: int):
+    """(type, start, header_len, end) for each box in buf[start:end]."""
+    i = start
+    while i + 8 <= end:
+        size = int.from_bytes(buf[i:i + 4], "big")
+        typ = bytes(buf[i + 4:i + 8])
+        hdr = 8
+        if size == 1:
+            size = int.from_bytes(buf[i + 8:i + 16], "big")
+            hdr = 16
+        elif size == 0:
+            size = end - i
+        if size < hdr or i + size > end:
+            raise ValueError(f"malformed box {typ!r} at {i}")
+        yield typ, i, hdr, i + size
+        i += size
+
+
+def box(typ: bytes, payload: bytes, full: tuple[int, int] | None = None) -> bytes:
+    if full is not None:
+        payload = bytes([full[0]]) + full[1].to_bytes(3, "big") + payload
+    return (8 + len(payload)).to_bytes(4, "big") + typ + payload
+
+
+MESH_LAYOUTS = ("eac", "fisheye-180")
+
+
+def spherical_boxes(projection: str = "equirectangular", stereo: str = "mono", yaw: float = 0.0,
+                    pitch: float = 0.0, roll: float = 0.0, source: str = "scenerender",
+                    eye: tuple[int, int] = (3840, 1920)) -> list[bytes]:
+    """Spherical Video V2 (google/spatial-media docs/spherical-video-v2-rfc.md): st3d + sv3d(svhd, proj(prhd,
+    equi|cbmp|mshp)); eye is the per-eye image size (the fisheye mesh depends on its aspect ratio)."""
+    st3d = box(b"st3d", bytes([{"mono": 0, "top-bottom": 1, "left-right": 2}.get(stereo, 0)]), (0, 0))
+    fx = lambda d: int(round(d * 65536)).to_bytes(4, "big", signed=True)   # noqa: E731 — 16.16 fixed point
+    prhd = box(b"prhd", fx(yaw) + fx(pitch) + fx(roll), (0, 0))
+    if projection in MESH_LAYOUTS:
+        from .spherical_mesh import layout_mshp
+        pbox = box(b"mshp", layout_mshp(projection, *eye))            # payload carries its FullBox header
+    elif projection == "cubemap":
+        pbox = box(b"cbmp", (0).to_bytes(4, "big") + (0).to_bytes(4, "big"), (0, 0))    # layout 0, padding 0
+    else:
+        pbox = box(b"equi", bytes(16), (0, 0))        # full-sphere bounds: top, bottom, left, right = 0
+    sv3d = box(b"sv3d", box(b"svhd", source.encode() + b"\0", (0, 0)) + box(b"proj", prhd + pbox))
+    return [st3d, sv3d]
+
+
+def parse_master_display(s: str) -> dict:
+    """x265/ST 2086 string "G(x,y)B(x,y)R(x,y)WP(x,y)L(max,min)" (0.00002 and 0.0001 cd/m2 units)."""
+    vals = {k: tuple(int(v) for v in re.findall(r"-?\d+", m)) for k, m in re.findall(r"(G|B|R|WP|L)\(([^)]*)\)", s)}
+    missing = {"G", "B", "R", "WP", "L"} - set(vals)
+    if missing:
+        raise ValueError(f"masteringDisplay {s!r}: missing {', '.join(sorted(missing))}")
+    return vals
+
+
+def hdr_boxes(master: str | None, max_cll: int | None, max_fall: int | None) -> list[bytes]:
+    """ISO/IEC 14496-12 mdcv (SMPTE ST 2086, primaries G, B, R) and clli (CTA-861.3) boxes."""
+    out = []
+    if master:
+        m = parse_master_display(master)
+        p = b"".join(v.to_bytes(2, "big") for k in ("G", "B", "R", "WP") for v in m[k][:2])
+        out.append(box(b"mdcv", p + m["L"][0].to_bytes(4, "big") + m["L"][1].to_bytes(4, "big")))
+    if max_cll is not None or max_fall is not None:
+        out.append(box(b"clli", int(max_cll or 0).to_bytes(2, "big") + int(max_fall or 0).to_bytes(2, "big")))
+    return out
+
+
+def inject_sample_entry_boxes(path: str, new: list[bytes]) -> None:
+    """Append (or replace same-type) child boxes of the first video sample entry of an MP4/MOV file in place.
+
+    Box sizes up the moov chain are rewritten; when moov precedes mdat (faststart) every stco/co64
+    chunk offset is shifted by the growth (stco is promoted to co64 if an offset would overflow)."""
+    with open(path, "rb") as f:
+        data = bytearray(f.read())
+    top = list(_boxes(data, 0, len(data)))
+    moov = next((b for b in top if b[0] == b"moov"), None)
+    if moov is None:
+        raise ValueError(f"{path}: no moov box")
+    mdat_after = any(b[0] == b"mdat" and b[1] > moov[1] for b in top)
+    mstart, mend = moov[1], moov[3]
+    tree = bytes(data[mstart:mend])
+    types = {b[4:8] for b in new}
+
+    def rebuild(buf: bytes, start: int, end: int, path_: tuple, ctx: dict) -> bytes:
+        out = bytearray()
+        for typ, s, hdr, e in _boxes(buf, start, end):
+            if typ == b"trak":
+                ctx["video"] = _is_video(buf, s + hdr, e)
+            if typ in _CONTAINERS:
+                body = rebuild(buf, s + hdr, e, path_ + (typ,), ctx)
+                out += (8 + len(body)).to_bytes(4, "big") + typ + body
+            elif typ == b"stsd" and ctx.get("video") and not ctx.get("done"):
+                n = int.from_bytes(buf[s + hdr + 4:s + hdr + 8], "big")
+                entries = list(_boxes(buf, s + hdr + 8, e))
+                body = bytearray(buf[s + hdr:s + hdr + 8])
+                for k, (et, es, eh, ee) in enumerate(entries):
+                    if k == 0:
+                        base = bytes(buf[es + eh:es + eh + _VISUAL_ENTRY - 8])
+                        kids = [bytes(buf[cs:ce]) for ct, cs, ch, ce in _boxes(buf, es + _VISUAL_ENTRY, ee) if ct not in types]
+                        payload = base + b"".join(kids) + b"".join(new)
+                        body += (8 + len(payload)).to_bytes(4, "big") + et + payload
+                    else:
+                        body += buf[es:ee]
+                ctx["done"] = True
+                assert n == len(entries)
+                out += (8 + len(body)).to_bytes(4, "big") + typ + body
+            else:
+                out += buf[s:e]
+        return bytes(out)
+
+    ctx: dict = {}
+    body = rebuild(tree, moov[2], len(tree), (), ctx)
+    if not ctx.get("done"):
+        raise ValueError(f"{path}: no video sample entry")
+    moov_new = (8 + len(body)).to_bytes(4, "big") + b"moov" + body
+    if mdat_after:
+        d, wide = len(moov_new) - (mend - mstart), False
+        while True:
+            shifted = _shift_chunk_offsets(moov_new, d, wide)
+            nd = len(shifted) - (mend - mstart)
+            if nd == d:
+                break
+            d, wide = nd, True
+        moov_new = shifted
+    data[mstart:mend] = moov_new
+    tmp = path + ".inject"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+def _is_video(buf: bytes, start: int, end: int) -> bool:
+    for typ, s, hdr, e in _boxes(buf, start, end):
+        if typ == b"mdia":
+            for t2, s2, h2, e2 in _boxes(buf, s + hdr, e):
+                if t2 == b"hdlr":
+                    return bytes(buf[s2 + h2 + 8:s2 + h2 + 12]) == b"vide"
+    return False
+
+
+def _shift_chunk_offsets(moov: bytes, delta: int, force64: bool = False) -> bytes:
+    def walk(buf: bytes, start: int, end: int) -> bytes:
+        out = bytearray()
+        for typ, s, hdr, e in _boxes(buf, start, end):
+            if typ in _CONTAINERS:
+                body = walk(buf, s + hdr, e)
+                out += (8 + len(body)).to_bytes(4, "big") + typ + body
+            elif typ in (b"stco", b"co64"):
+                vf = buf[s + hdr:s + hdr + 4]
+                n = int.from_bytes(buf[s + hdr + 4:s + hdr + 8], "big")
+                w = 4 if typ == b"stco" else 8
+                offs = [int.from_bytes(buf[s + hdr + 8 + i * w:s + hdr + 8 + (i + 1) * w], "big") + delta for i in range(n)]
+                big = typ == b"co64" or force64 or (offs and max(offs) >= 2 ** 32)
+                w2 = 8 if big else 4
+                payload = vf + n.to_bytes(4, "big") + b"".join(o.to_bytes(w2, "big") for o in offs)
+                out += (8 + len(payload)).to_bytes(4, "big") + (b"co64" if big else b"stco") + payload
+            else:
+                out += buf[s:e]
+        return bytes(out)
+    body = walk(moov, 8, len(moov))
+    return (8 + len(body)).to_bytes(4, "big") + b"moov" + body
+
+
+def read_sample_entry_boxes(path: str) -> dict[bytes, bytes]:
+    """Child boxes (type -> payload) of the first video sample entry (for tests and verification)."""
+    with open(path, "rb") as f:
+        data = f.read()
+
+    def find(start, end):
+        video = False
+        for typ, s, hdr, e in _boxes(data, start, end):
+            if typ == b"trak":
+                video = _is_video(data, s + hdr, e)
+                if not video:
+                    continue
+            if typ in _CONTAINERS:
+                r = find(s + hdr, e)
+                if r is not None:
+                    return r
+            elif typ == b"stsd":
+                es, ee = next((b[1], b[3]) for b in _boxes(data, s + hdr + 8, e))
+                return {ct: data[cs + ch:ce] for ct, cs, ch, ce in _boxes(data, es + _VISUAL_ENTRY, ee)}
+        return None
+    return find(0, len(data)) or {}
+
+
+# ====================================================================== Matroska projection injection
+_EBML_MASTERS = {0x18538067, 0x114D9B74, 0x4DBB, 0x1654AE6B, 0xAE, 0xE0, 0x7670, 0x1C53BB6B, 0xBB, 0xB7}
+
+
+def _ebml_elems(buf: bytes, start: int, end: int):
+    """(id, start, header_len, end) of each EBML element in buf[start:end]; unknown sizes run to end."""
+    i = start
+    while i < end:
+        n = 1
+        while n <= 4 and not buf[i] & (0x80 >> (n - 1)):
+            n += 1
+        eid = int.from_bytes(buf[i:i + n], "big")
+        m = 1
+        while m <= 8 and not buf[i + n] & (0x80 >> (m - 1)):
+            m += 1
+        if n > 4 or m > 8:
+            raise ValueError(f"malformed EBML element at {i}")
+        size = int.from_bytes(buf[i + n:i + n + m], "big") & ((1 << (7 * m)) - 1)
+        e = end if size == (1 << (7 * m)) - 1 else i + n + m + size
+        if e > end:
+            raise ValueError(f"EBML element {eid:X} at {i} overruns its parent")
+        yield eid, i, n + m, e
+        i = e
+
+
+def _ebml_el(eid: int, payload: bytes) -> bytes:
+    n = len(payload)
+    m = next(k for k in range(1, 9) if n < (1 << (7 * k)) - 1)
+    return eid.to_bytes((eid.bit_length() + 7) // 8, "big") + ((1 << (7 * m)) | n).to_bytes(m, "big") + payload
+
+
+def _ebml_uint(eid: int, v: int, width: int = 1) -> bytes:
+    return _ebml_el(eid, v.to_bytes(max(width, (v.bit_length() + 7) // 8, 1), "big"))
+
+
+def _ebml_master(eid: int, kids: list[tuple[int, bytes]]) -> bytes:
+    """Master element from (id, encoded child) pairs; a leading CRC-32 child is recomputed over the rest."""
+    rest = b"".join(k for i, k in kids if i != 0xBF)
+    crc = _ebml_el(0xBF, zlib.crc32(rest).to_bytes(4, "little")) if kids and kids[0][0] == 0xBF else b""
+    return _ebml_el(eid, crc + rest)
+
+
+def _ebml_rebuild(buf: bytes, s: int, h: int, e: int, edit) -> bytes:
+    """Re-encode the master buf[s:e], each child replaced by edit(id, start, header, end) unless that is None."""
+    eid = next(_ebml_elems(buf, s, e))[0]
+    kids = []
+    for cid, cs, ch, ce in _ebml_elems(buf, s + h, e):
+        new = edit(cid, cs, ch, ce)
+        kids.append((cid, bytes(buf[cs:ce]) if new is None else new))
+    return _ebml_master(eid, kids)
+
+
+def inject_matroska_projection(path: str, ptype: int, private: bytes | None) -> None:
+    """Write Video/Projection (ProjectionType, ProjectionPrivate) into the first video TrackEntry of an
+    mkv/webm file in place (an existing Projection is replaced).
+
+    Everything after Tracks moves: the Segment size, SeekHead SeekPositions and Cues
+    CueClusterPositions are rewritten (iterated until their widths settle) and the CRC-32 elements of
+    rebuilt masters are recomputed."""
+    import bisect
+    with open(path, "rb") as f:
+        data = f.read()
+    seg = next((x for x in _ebml_elems(data, 0, len(data)) if x[0] == 0x18538067), None)
+    if seg is None:
+        raise ValueError(f"{path}: no Matroska Segment")
+    s0, h0, e0 = seg[1], seg[2], seg[3]
+    base = s0 + h0
+    proj = _ebml_master(0x7670, [(0x7671, _ebml_uint(0x7671, ptype))] + ([(0x7672, _ebml_el(0x7672, private))] if private else []))
+    done = []
+
+    def track(cid, cs, ch, ce):
+        if cid != 0xAE or done:
+            return None
+        kinds = [int.from_bytes(data[ks + kh:ke], "big") for k, ks, kh, ke in _ebml_elems(data, cs + ch, ce) if k == 0x83]
+        if kinds != [1]:
+            return None
+        done.append(True)
+
+        def video(vid, vs, vh, ve):
+            if vid != 0xE0:
+                return None
+            kids = [(k, bytes(data[ks:ke])) for k, ks, kh, ke in _ebml_elems(data, vs + vh, ve) if k != 0x7670]
+            return _ebml_master(0xE0, kids + [(0x7670, proj)])
+        return _ebml_rebuild(data, cs, ch, ce, video)
+
+    kids = list(_ebml_elems(data, base, e0))
+    new = [bytes(data[s:e]) for _, s, _, e in kids]
+    for k, (cid, s, h, e) in enumerate(kids):
+        if cid == 0x1654AE6B:
+            new[k] = _ebml_rebuild(data, s, h, e, track)
+    if not done:
+        raise ValueError(f"{path}: no video TrackEntry")
+    old_starts = [s - base for _, s, _, _ in kids]
+    for _ in range(8):
+        starts = np.cumsum([0] + [len(b) for b in new[:-1]]).tolist()
+
+        def moved(pos: int) -> int:
+            k = max(0, bisect.bisect_right(old_starts, pos) - 1)
+            return pos + starts[k] - old_starts[k]
+
+        def positions(pid: int):
+            def edit(cid, cs, ch, ce):
+                if cid == pid:
+                    return _ebml_uint(pid, moved(int.from_bytes(data[cs + ch:ce], "big")), ce - cs - ch)
+                return _ebml_rebuild(data, cs, ch, ce, edit) if cid in _EBML_MASTERS else None
+            return edit
+
+        lens = [len(b) for b in new]
+        for k, (cid, s, h, e) in enumerate(kids):
+            if cid == 0x114D9B74:
+                new[k] = _ebml_rebuild(data, s, h, e, positions(0x53AC))
+            elif cid == 0x1C53BB6B:
+                new[k] = _ebml_rebuild(data, s, h, e, positions(0xF1))
+        if [len(b) for b in new] == lens:
+            break
+    body = b"".join(new)
+    head, m = data[s0:s0 + 4], h0 - 4       # keep the Segment size field width (unknown size stays unknown)
+    size = int.from_bytes(data[s0 + 4:base], "big") & ((1 << (7 * m)) - 1)
+    if size != (1 << (7 * m)) - 1:
+        if len(body) >= (1 << (7 * m)) - 1:
+            raise ValueError(f"{path}: Segment size field too narrow")
+        head += ((1 << (7 * m)) | len(body)).to_bytes(m, "big")
+    else:
+        head += data[s0 + 4:base]
+    tmp = path + ".inject"
+    with open(tmp, "wb") as f:
+        f.write(data[:s0] + head + body + data[e0:])
+    os.replace(tmp, path)
+
+
+def read_matroska_projection(path: str) -> dict[int, bytes]:
+    """Children (id -> payload) of the first video track's Projection element (for tests and verification)."""
+    with open(path, "rb") as f:
+        data = f.read()
+
+    def find(s: int, e: int) -> dict[int, bytes] | None:
+        for cid, cs, ch, ce in _ebml_elems(data, s, e):
+            if cid == 0x7670:
+                return {k: data[ks + kh:ke] for k, ks, kh, ke in _ebml_elems(data, cs + ch, ce)}
+            if cid in _EBML_MASTERS and cid not in (0x114D9B74, 0x1C53BB6B):
+                r = find(cs + ch, ce)
+                if r is not None:
+                    return r
+        return None
+    return find(0, len(data)) or {}
 
 
 # ====================================================================== stills, captions, destinations
@@ -916,15 +1546,27 @@ def write_captions(doc, job: Job) -> list[str]:
         return []
 
 
-def deliver(job: Job, files: list[str]) -> None:
+def deliver(job: Job, files: list[str], publish: bool = False, info: dict | None = None) -> bool:
+    """Copy to file destinations; upload to the others only with --publish (else warn and skip). -> all ok."""
     if job.el is None:
-        return
+        return True
+    ok = True
     for d in job.el:
         if not isinstance(d.tag, str) or d.tag != "destination":
             continue
         kind, uri = d.get("kind"), d.get("uri", "")
         if kind != "file":
-            warn_once("destination", f"{job.name}:{kind}", f"{kind} destination {uri!r}: the renderer never uploads; skipped")
+            if not publish:
+                warn_once("destination", f"{job.name}:{kind}", f"{kind} destination: not uploaded (pass --publish to upload)")
+                continue
+            from .publish import PublishError, publish as _publish
+            try:
+                where = _publish(kind, uri, [f for f in files if os.path.exists(f)], credentials=d.get("credentials"),
+                                 job=job.name, metadata=info or {})
+                log.info("%s: published %d file(s) to %s", job.name, len(where), kind)
+            except PublishError as e:
+                print(f"{job.name}: {kind} destination failed: {e}", file=sys.stderr)
+                ok = False
             continue
         dst = uri[7:] if uri.startswith("file://") else uri
         into_dir = dst.endswith("/") or os.path.isdir(dst) or len(files) > 1
@@ -936,10 +1578,19 @@ def deliver(job: Job, files: list[str]) -> None:
             if os.path.exists(f):
                 shutil.copy2(f, os.path.join(dst, os.path.basename(f)) if into_dir else dst)
         log.info("%s: copied %d file(s) to %s", job.name, len(files), dst)
+    return ok
+
+
+def _job_info(job: Job, r) -> dict:
+    return {"output": job.name, "codec": job.codec, "container": job.container, "width": job.width or r.rc.width,
+            "height": job.height or r.rc.height, "fps": float(job.fps), "start": job.t0, "end": job.t1,
+            "colorSpace": job.color[0] or "srgb", "transfer": job.color[1] or "auto"}
 
 
 # ====================================================================== entry point
 def render_outputs(renderer, args) -> int:
+    """Render every job; exit status 0, 1 (an output failed) or 4 (an output failed QA only)."""
+    from . import qa
     jobs = jobs_from_args(renderer, args)
     if not jobs:
         if getattr(args, "output", None):
@@ -950,22 +1601,46 @@ def render_outputs(renderer, args) -> int:
     args._jobs_list = jobs
     given = _base_open_kwargs(args)
     renderers: dict = {}
-    failed = 0
+    failed = qa_failed = 0
+    run_qa = not getattr(args, "no_qa", False)
     for job in jobs:
         key = tuple(sorted((k, repr(v)) for k, v in job.open_kwargs.items()))
         r = renderers.get(key)
         if r is None:
             r = renderer if job.open_kwargs == given else open_renderer(job.open_kwargs)
             renderers = {key: r}           # keep one renderer alive at a time
-        r.rc.cache.pop("output_color", None)
-        r.rc.cache.pop("burn_captions", None)
+        for k in ("output_color", "burn_captions", "output_hdr"):
+            r.rc.cache.pop(k, None)
         r.rc.cache.update(_job_cache(job))
+        findings: list = []
+        sidecars: list[str] = []
+        det = None
+        if run_qa:
+            picture_only = job.codec in ("gif", "apng", "webp") or job.codec in SEQUENCES
+            audio_out = job.audio and not getattr(args, "no_audio", False)
+            findings, sidecars = qa.static_checks(r, t0=job.t0, t1=job.t1, captions=job.captions, burn=job.burn,
+                                                  audio=audio_out, out_path=job.path, picture_only=picture_only)
+            if any(f.level == "error" for f in findings):
+                print(qa.report(job.name, findings), file=sys.stderr)
+                qa_failed += 1
+                continue
+            mode = qa.accessibility(r.doc)["flash"]
+            if mode != "off" and job.codec != "audio-only":
+                det = qa.FlashDetector(float(job.fps), *job.color)
         try:
-            files = run_job(r, job, args)
+            files = run_job(r, job, args, tap=det.feed if det is not None else None)
         except (RuntimeError, OSError, ValueError) as e:
             print(f"{job.name}: {e}", file=sys.stderr)
             failed += 1
             continue
+        if det is not None:
+            findings += det.findings(qa.accessibility(r.doc)["flash"], job.t0)
+        if findings:
+            print(qa.report(job.name, findings), file=sys.stderr)
+            if any(f.level == "error" for f in findings):
+                qa_failed += 1
+                continue
+        files += sidecars
         if job.el is not None:
             for st in job.el:
                 if isinstance(st.tag, str) and st.tag in ("poster", "thumbnail"):
@@ -973,7 +1648,8 @@ def render_outputs(renderer, args) -> int:
                     if p:
                         files.append(p)
         files += write_captions(r.doc, job)
-        deliver(job, files)
+        if not deliver(job, files, publish=bool(getattr(args, "publish", False)), info=_job_info(job, r)):
+            failed += 1
         shown = files[0] if len(files) == 1 else f"{files[0]} (+{len(files) - 1} files)" if files else "(nothing)"
         print(f"{job.name}: {shown}")
-    return 1 if failed else 0
+    return 1 if failed else (qa.EXIT_QA if qa_failed else 0)

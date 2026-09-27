@@ -2,8 +2,15 @@
 
 The schema does not define tint/tritone palettes: tint uses black -> color,
 tritone uses keyColor (black) -> color (grey) -> white. Gradient overlays use
-paint/source stops along angle in frame pixels. Selective colour adjusts the
-keyColor neighbourhood towards color, rather than implementing a CMYK UI.
+paint/source stops along angle in frame pixels. Selective colour uses additive ink adjustments over nine overlapping families:
+reds/yellows/greens/cyans/blues/magentas/whites/neutrals/blacks. Params
+family (default reds), cyan/magenta/yellow/black (-1..1), method relative or
+absolute; family.channel params may adjust multiple families in one pass.
+White-balance temperature is absolute kelvin (0 = 6504 reference), tint in
+0.001 CIE 1960 v. LUTs convert linear Rec.709 to/from @space (default sRGB).
+Tonemap ACES is ACES 2.0 SDR, AgX is Blender 4.0 base, filmic aliases Hable.
+PQ-to-SDR consumes PQ code values; sourcePeak/targetPeak/sourceBlack/targetBlack
+params specify nits (1000/100/0/0). See color_science.py for normative sources.
 """
 from __future__ import annotations
 
@@ -15,7 +22,7 @@ import numpy as np
 from . import (Params, display_rgb, from_display, gradient_colors, grid, luma,
                premul, result, smoothstep, straight)
 from ..raster import linear_to_srgb, srgb_to_linear
-from ..registry import EFFECTS, FULL, PARTIAL, warn_once
+from ..registry import EFFECTS, FULL, warn_once
 
 
 def _saturate(rgb, amount):
@@ -102,42 +109,33 @@ def _read_cube(path):
     return table, lo, hi, size, dim
 
 
-@EFFECTS.register("lut", level=PARTIAL, note=".cube 1D/3D interpolation in sRGB; other formats/spaces and shaper+3D skipped")
+@EFFECTS.register("lut", level=FULL, note="OCIO FileTransform .cube/.3dl/.clf/.csp including shaper+3D, converted through @space")
 def lut(rc, e, buf, ctx, node):
+    from ..color import SPACES, matrix, encode, decode
+    from .color_science import apply_cpu
     p = Params(rc, e, ctx)
     src = p.s("src")
     if not src:
         return buf.copy()
-    if Path(src).suffix.lower() != ".cube" or p.s("space", "srgb") != "srgb":
-        warn_once("effect-lut", src, "only standalone sRGB .cube LUTs are supported; skipped")
-        return buf.copy()
-    path = rc.doc.resolve_path(src)
     try:
+        import PyOpenColorIO as ocio
+        path = str(rc.doc.resolve_path(src))
         stat = Path(path).stat()
-        key = ("effect-cube", path, stat.st_mtime_ns, stat.st_size)
-        data = rc.cache.get(key)
-        if data is None:
-            data = rc.cache[key] = _read_cube(path)
-        table, lo, hi, size, dim = data
-    except (OSError, UnicodeError, ValueError, IndexError) as exc:
-        warn_once("effect-lut", src, f"cannot read LUT: {exc}; skipped")
+        key = ("effect-ocio-file", path, stat.st_mtime_ns, stat.st_size)
+        cpu = rc.cache.get(key)
+        if cpu is None:
+            transform = ocio.FileTransform(src=path, interpolation=ocio.INTERP_LINEAR)
+            cpu = rc.cache[key] = ocio.Config.CreateRaw().getProcessor(transform).getDefaultCPUProcessor()
+        rgb, a = straight(buf.px)
+        rgb = rgb if rc.linear else srgb_to_linear(rgb)
+        prim, enc = SPACES[p.s("space", "srgb")]
+        m = matrix("srgb", prim)
+        mapped = apply_cpu(cpu, encode(rgb @ m.T, enc))
+        mapped = decode(mapped, enc) @ np.linalg.inv(m).T
+        return result(buf, premul(mapped if rc.linear else linear_to_srgb(mapped), a))
+    except Exception as exc:  # OCIO.Exception derives directly from Exception.
+        warn_once("effect-lut", src, f"cannot apply OCIO LUT: {exc}; skipped")
         return buf.copy()
-    rgb, a = display_rgb(rc, buf.px)
-    pos = np.clip((rgb-lo)/(hi-lo), 0, 1)*(size-1)
-    i = np.floor(pos).astype(int)
-    j, f = np.minimum(i+1, size-1), pos-i
-    out = np.zeros_like(rgb)
-    if dim == 1:
-        for c in range(3):
-            out[..., c] = table[i[..., c], c]*(1-f[..., c])+table[j[..., c], c]*f[..., c]
-    else:
-        for r in range(2):
-            for g in range(2):
-                for b in range(2):
-                    idx = [j[..., c] if k else i[..., c] for c, k in enumerate((r, g, b))]
-                    weight = np.prod([f[..., c] if k else 1-f[..., c] for c, k in enumerate((r, g, b))], axis=0)
-                    out += table[idx[2], idx[1], idx[0]]*weight[..., None]
-    return from_display(rc, buf, out, a)
 
 
 @EFFECTS.register("curves", level=FULL, note="piecewise linear x,y control points, selected colour/alpha/luma channel")
@@ -167,13 +165,14 @@ def levels(rc, e, buf, ctx, node):
     return from_display(rc, buf, rgb, a)
 
 
-@EFFECTS.register("white-balance", level=PARTIAL, note="temperature delta in kelvin and tint via diagonal RGB adaptation")
+@EFFECTS.register("white-balance", level=FULL, note="kelvin CIE daylight/Planckian white to D65 via Bradford CAT; tint in CIE 1960 v")
 def white_balance(rc, e, buf, ctx, node):
+    from .color_science import bradford
     p = Params(rc, e, ctx)
     rgb, a = straight(buf.px)
-    t, m = p.n("temperature", 0)/6500, p.n("tint", 0)/100
-    factors = np.exp2(np.clip([t+m/2, -m, -t+m/2], -16, 16))
-    return result(buf, premul(np.clip(rgb*factors, 0, 1), a))
+    rgb = rgb if rc.linear else srgb_to_linear(rgb)
+    rgb = rgb @ bradford(p.n("temperature", 0), p.n("tint", 0)).T
+    return result(buf, premul(rgb if rc.linear else linear_to_srgb(rgb), a))
 
 
 @EFFECTS.register("exposure", level=FULL, note="linear-light RGB multiplied by 2**exposure, preserving HDR values")
@@ -209,11 +208,12 @@ def hue_saturation(rc, e, buf, ctx, node):
     return from_display(rc, buf, _saturate(_hue_rotate(rgb, p.n("hue", 0)), p.n("saturation", 1)) + p.n("brightness", 0), a)
 
 
-@EFFECTS.register("tonemap", level=PARTIAL, note="Reinhard, ACES fit, Hable/filmic; approximate AgX and PQ-to-SDR")
+@EFFECTS.register("tonemap", level=FULL, note="OCIO ACES 2.0; exact Blender 4.0 AgX; Hable/filmic, Reinhard, BT.2390 PQ EETF")
 def tonemap(rc, e, buf, ctx, node):
+    from .color_science import aces_processor, agx_processor, apply_cpu, bt2390
     p = Params(rc, e, ctx)
     rgb, a = straight(buf.px)
-    x = np.maximum(rgb if rc.linear else srgb_to_linear(rgb), 0).astype(np.float64)
+    x = np.maximum(rgb if rc.linear else srgb_to_linear(rgb), 0)
     mode = p.s("tonemapper", "aces")
     if mode == "reinhard":
         y = x/(1+x)
@@ -221,17 +221,18 @@ def tonemap(rc, e, buf, ctx, node):
         def h(v):
             return ((v*(.15*v+.05)+.004)/(v*(.15*v+.5)+.06))-.02/.3
         y = h(x)/h(11.2)
-    elif mode == "agx":
-        y = x/(1+x)
-        y = y*y*(3-2*y)
-        y = _saturate(y, .9)
     elif mode == "pq-to-sdr":
-        # ST2084 inverse EOTF, normalized to a 100-nit SDR white, then Reinhard.
-        v = np.clip(x, 0, 1)**(1/(2523/32))
-        v = (np.maximum(v-3424/4096, 0)/np.maximum(2413/128-2392/128*v, 1e-7))**(1/(2610/16384))*100
-        y = v/(1+v)
+        y = bt2390(rgb, p.param("sourcePeak", 1000), p.param("targetPeak", 100),
+                   p.param("sourceBlack", 0), p.param("targetBlack", 0))
     else:
-        y = x*(2.51*x+.03)/(x*(2.43*x+.59)+.14)
+        try:
+            if mode == "agx":
+                y = np.maximum(apply_cpu(agx_processor(), x), 0)**2.4
+            else:
+                y = srgb_to_linear(apply_cpu(aces_processor(), x))
+        except Exception as exc:  # Optional OCIO backend errors need a visible fallback.
+            warn_once("effect-tonemap", mode, f"OCIO 2.5 required: {exc}; skipped")
+            return buf.copy()
     y = np.clip(y, 0, 1)
     return result(buf, premul(y if rc.linear else linear_to_srgb(y), a))
 
@@ -287,7 +288,7 @@ def tritone(rc, e, buf, ctx, node):
     return result(buf, premul(mapped[..., :3], a*mapped[..., 3:4]))
 
 
-@EFFECTS.register("gradient-map", level=PARTIAL, note="luminance through paint stops or source node centre scanline, root placement")
+@EFFECTS.register("gradient-map", level=FULL, note="luminance through paint stops/midpoints/interpolation space or positioned source scanline")
 def gradient_map(rc, e, buf, ctx, node):
     rgb, a = straight(buf.px)
     mapped = gradient_colors(rc, e, ctx, luma(rgb), node)
@@ -304,7 +305,7 @@ def color_overlay(rc, e, buf, ctx, node):
     return result(buf, premul(rgb+(c[:3]-rgb)*np.clip(c[3]*p.n("intensity", 1), 0, 1), a))
 
 
-@EFFECTS.register("gradient-overlay", level=PARTIAL, note="angled paint-stop ramp over original colour, clipped to input alpha")
+@EFFECTS.register("gradient-overlay", level=FULL, note="angled paint ramp with stop opacity, midpoint and colour-space interpolation, clipped to coverage")
 def gradient_overlay(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
     x, y = grid(buf)
@@ -318,12 +319,30 @@ def gradient_overlay(rc, e, buf, ctx, node):
     return result(buf, premul(rgb+(mapped[..., :3]-rgb)*w, a))
 
 
-@EFFECTS.register("selective-color", level=PARTIAL, note="RGB-distance keyColor selection with soft colour replacement")
+@EFFECTS.register("selective-color", level=FULL, note="relative/absolute CMYK ink corrections across six hue families and whites/neutrals/blacks")
 def selective_color(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
-    rgb, a = straight(buf.px)
-    key, color = p.color("keyColor", (1,0,0,1)), p.color()
-    d = np.linalg.norm(rgb-key[:3], axis=-1)/math.sqrt(3)
-    tol, soft = p.n("tolerance", .2), p.n("softness", .1)
-    w = (1-smoothstep(tol, tol+soft, d))[..., None]*np.clip(p.n("amount", 1)*color[3], 0, 1)
-    return result(buf, premul(rgb+(color[:3]-rgb)*w, a))
+    rgb, a = display_rgb(rc, buf.px)
+    r, g, b = np.moveaxis(rgb, -1, 0)
+    hi, lo = rgb.max(-1), rgb.min(-1)
+    families = {
+        "reds": np.maximum(r-np.maximum(g,b),0),
+        "yellows": np.maximum(np.minimum(r,g)-b,0),
+        "greens": np.maximum(g-np.maximum(r,b),0),
+        "cyans": np.maximum(np.minimum(g,b)-r,0),
+        "blues": np.maximum(b-np.maximum(r,g),0),
+        "magentas": np.maximum(np.minimum(r,b)-g,0),
+        "whites": np.clip(2*lo-1,0,1),
+        "blacks": np.clip(1-2*hi,0,1),
+        "neutrals": np.clip(1-abs(hi+lo-1),0,1)*(1-hi+lo),
+    }
+    out = rgb.copy()
+    relative = p.param("method", "relative") == "relative"
+    selected = p.param("family", "reds")
+    for family, weight in families.items():
+        values = np.array([p.param(f"{family}.{c}", p.param(c, 0) if family == selected else 0)
+                           for c in ("cyan", "magenta", "yellow", "black")])
+        ink = values[:3]+values[3]
+        capacity = np.where(ink >= 0, rgb, 1-rgb) if relative else 1
+        out -= weight[...,None]*capacity*ink*p.n("amount", 1)
+    return from_display(rc, buf, out, a)

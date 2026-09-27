@@ -115,6 +115,11 @@ def collect(root) -> Counter:
             add(R.DEFORMERS, el.get("type"))
         elif tag == "deform":
             add(F, "deform")
+        elif tag == "layer" and el.get("stabilize") == "true":
+            add(F, "layer:stabilize")
+        elif tag == "trackData":
+            add(F, f"trackData:{el.get('format', 'json')}")
+            add(F, f"trackData:kind:{el.get('kind')}")
         elif tag == "textAnimator":
             add(F, "textAnimator")
             if el.get("preset"):
@@ -182,6 +187,8 @@ def collect(root) -> Counter:
                 add(F, "output:maxFileSize")
             if any(el.get(k) for k in ("maxCLL", "maxFALL", "masteringDisplay")):
                 add(F, "output:hdrMetadata")
+                if el.get("container") == "mxf" or (el.get("path") or "").lower().endswith(".mxf"):
+                    add(F, "output:hdrMetadata:mxf")
             if el.get("colorSpace") not in (None, "srgb"):
                 add(F, f"colorSpace:{el.get('colorSpace')}")
             if el.get("transfer") not in (None, "auto"):
@@ -189,9 +196,23 @@ def collect(root) -> Counter:
             if el.get("embedMetadata", "true") != "false" and root.find("metadata") is not None:
                 add(F, "output:embedMetadata")
             if project is not None and project.get("mode") == "equirectangular" and el.get("sphericalMetadata") != "false":
-                add(F, "output:sphericalMetadata")
+                s360 = root.find("scene360")
+                mesh = s360 is not None and s360.get("layout") in ("eac", "fisheye-180")
+                add(F, "output:sphericalMetadata:mesh" if mesh else "output:sphericalMetadata")
         elif tag in ("poster", "thumbnail"):
             add(F, "output:posters")
+        # ---- delivery QA
+        elif tag == "accessibility":
+            if el.get("flashCheck", "warn") != "off":
+                add(F, "accessibility:flashCheck")
+            if el.get("contrastCheck", "off") != "off":
+                add(F, "accessibility:contrastCheck")
+            if el.get("requireCaptions") == "true":
+                add(F, "accessibility:requireCaptions")
+            if el.get("audioDescription"):
+                add(F, "accessibility:audioDescription")
+        elif tag == "safeArea" and el.get("enforce", "warn") != "off":
+            add(F, "safeArea:enforce")
         elif tag == "destination":
             add(F, f"output:destination:{el.get('kind')}")
     return use
@@ -200,7 +221,7 @@ def collect(root) -> Counter:
 # concepts handled inline by the core that no module declares
 
 _OPTIONAL = ("constraints", "text_animators", "camera", "physics", "deform", "modifiers", "masks", "layout",
-             "captions", "audio", "output", "color", "safe_areas")
+             "captions", "audio", "output", "color", "safe_areas", "qa", "publish")
 
 
 def _load_all() -> None:

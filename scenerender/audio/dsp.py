@@ -119,6 +119,52 @@ def filter_sections(x: np.ndarray, sections) -> np.ndarray:
     return fft_convolve(x, impulse_response(sections))
 
 
+_OP_CACHE: dict = {}
+
+
+def _one_pole_tables(d: float, L: int, n: int):
+    key = (d, L, n)
+    hit = _OP_CACHE.get(key)
+    if hit is None:
+        if len(_OP_CACHE) > 256:
+            _OP_CACHE.clear()
+        hit = _OP_CACHE[key] = ((1 - d) * d ** np.arange(L), d ** np.arange(1, n + 1))
+    return hit
+
+
+def one_pole(x: np.ndarray, d: float, state=None):
+    """Exact one-pole low-pass y[n] = (1 - d) x[n] + d y[n-1] over axis 0, starting from `state`.
+    Returns (y, last_state).  Short responses (d^256 < 1e-12) use a truncated-IR convolution,
+    long ones a chunked closed form (cumulative sums of x d^-n)."""
+    x = np.asarray(x, np.float64)
+    one = x.ndim == 1
+    X = x[:, None] if one else x
+    n, ch = X.shape
+    s0 = np.zeros(ch) if state is None else np.broadcast_to(np.asarray(state, np.float64), (ch,)).copy()
+    if n == 0:
+        return (X[:, 0] if one else X).copy(), s0
+    if d <= 0.0:
+        y = X.copy()
+    else:
+        L = int(math.ceil(math.log(1e-12) / math.log(d))) if d < 1 else 1 << 30
+        if L <= 256:
+            h, dec = _one_pole_tables(d, L, n)
+            y = np.empty_like(X)
+            for c in range(ch):
+                y[:, c] = np.convolve(X[:, c], h)[:n] + s0[c] * dec
+        else:
+            c_len = max(1, int(8.0 / -math.log10(d)))
+            y = np.empty_like(X)
+            st = s0.copy()
+            for a in range(0, n, c_len):
+                blk = X[a:a + c_len]
+                k = np.arange(1, blk.shape[0] + 1)[:, None]
+                S = st[None, :] + (1 - d) * np.cumsum(blk * d ** (-k), axis=0)
+                y[a:a + blk.shape[0]] = S * d ** k
+                st = y[a + blk.shape[0] - 1].copy()
+    return (y[:, 0] if one else y), y[-1].copy()
+
+
 def butter_sections(kind: str, f0: float, sr: float, order: int = 2):
     """Butterworth low/high-pass as a cascade of biquads (order even)."""
     order = max(2, order + (order % 2))
@@ -424,9 +470,9 @@ def _channel_weights(nch: int) -> np.ndarray:
     return np.ones(nch)
 
 
-def integrated_loudness(x: np.ndarray, sr: float) -> float:
+def integrated_loudness(x: np.ndarray, sr: float, weights: np.ndarray | None = None) -> float:
     """ITU-R BS.1770-4 integrated loudness (LUFS): K-weighting, 400 ms blocks with 75 % overlap,
-    absolute gate -70 LUFS, relative gate -10 LU."""
+    absolute gate -70 LUFS, relative gate -10 LU.  `weights`: per-channel G_i (default by count)."""
     x = np.asarray(x, np.float64)
     if x.ndim == 1:
         x = x[:, None]
@@ -435,7 +481,7 @@ def integrated_loudness(x: np.ndarray, sr: float) -> float:
     hop = int(round(0.1 * sr))
     if y.shape[0] < blk:
         return -math.inf
-    G = _channel_weights(y.shape[1])
+    G = _channel_weights(y.shape[1]) if weights is None else np.asarray(weights, np.float64)
     c = np.concatenate([np.zeros((1, y.shape[1])), np.cumsum(y * y, axis=0)])
     starts = np.arange(0, y.shape[0] - blk + 1, hop)
     z = (c[starts + blk] - c[starts]) / blk               # (nblocks, ch)
@@ -449,6 +495,76 @@ def integrated_loudness(x: np.ndarray, sr: float) -> float:
     if not ok.any():
         return -math.inf
     return float(-0.691 + 10 * math.log10(max(float(np.mean(zs[ok])), 1e-30)))
+
+
+def short_term_loudness(x: np.ndarray, sr: float, hop: float = 0.1, window: float = 3.0,
+                        weights: np.ndarray | None = None, centred: bool = False):
+    """EBU Tech 3341 short-term loudness (3 s sliding window, K-weighted, LUFS) every `hop` seconds.
+    Returns (times, lufs): the window ends at each time, or is centred on it when `centred`
+    (partial windows at the edges are averaged over the samples they hold)."""
+    x = np.asarray(x, np.float64)
+    if x.ndim == 1:
+        x = x[:, None]
+    n = x.shape[0]
+    y = filter_sections(x.astype(np.float32), k_weighting_sections(sr)).astype(np.float64)
+    G = _channel_weights(y.shape[1]) if weights is None else np.asarray(weights, np.float64)
+    e = np.concatenate([[0.0], np.cumsum((y * y) @ G)])
+    k = int(math.floor(n / (hop * sr))) + 1
+    t = np.arange(k) * hop
+    c = np.round(t * sr).astype(np.int64)
+    w = int(round(window * sr))
+    if centred:
+        a, b = np.clip(c - w // 2, 0, n), np.clip(c + w - w // 2, 0, n)
+    else:
+        a, b = np.clip(c - w, 0, n), np.clip(c, 0, n)
+    ms = (e[b] - e[a]) / np.maximum(b - a, 1)
+    ms = np.where(b - a > 0, ms, 0.0)
+    return t, -0.691 + 10 * np.log10(np.maximum(ms, 1e-30))
+
+
+DYN_ATTACK, DYN_RELEASE = 0.5, 2.0        # s: gain falling / rising (dynamic normalisation)
+DYN_RANGE = (-30.0, 20.0)                 # dB of gain the AGC may apply
+DYN_GATE = 30.0                           # LU under the target below which the gain holds
+
+
+def dynamic_gain_db(x: np.ndarray, sr: float, target: float, weights: np.ndarray | None = None,
+                    hop: float = 0.1) -> tuple[np.ndarray, np.ndarray]:
+    """Broadcast-style loudness AGC.  Every `hop` (100 ms) the K-weighted programme is measured over a
+    3 s window centred on that time (offline look-ahead) counting only the 100 ms blocks louder than
+    the gate max(-70, target - DYN_GATE) LUFS (gated short-term loudness, so pauses neither pump the
+    gain up nor dilute the measurement); gain = target - loudness, limited to DYN_RANGE.  Windows
+    with less than 0.5 s of gated programme hold the previous gain.  The gain is smoothed in dB by a
+    one-pole with DYN_ATTACK when falling and DYN_RELEASE when rising.  Returns (times, gain_db)."""
+    x = np.asarray(x, np.float64)
+    if x.ndim == 1:
+        x = x[:, None]
+    n = x.shape[0]
+    y = filter_sections(x.astype(np.float32), k_weighting_sections(sr)).astype(np.float64)
+    G = _channel_weights(y.shape[1]) if weights is None else np.asarray(weights, np.float64)
+    step = max(1, int(round(hop * sr)))
+    nb = int(math.ceil(n / step))
+    z = (y * y) @ G
+    z = np.concatenate([z, np.zeros(nb * step - n)]).reshape(nb, step).mean(axis=1)
+    ok = (-0.691 + 10 * np.log10(np.maximum(z, 1e-30))) > max(-70.0, target - DYN_GATE)
+    ce = np.concatenate([[0.0], np.cumsum(z * ok)])
+    cn = np.concatenate([[0], np.cumsum(ok)])
+    half = int(round(1.5 / hop))
+    k = np.arange(nb + 1)
+    lo, hi = np.clip(k - half, 0, nb), np.clip(k + half, 0, nb)
+    cnt = cn[hi] - cn[lo]
+    S = -0.691 + 10 * np.log10(np.maximum((ce[hi] - ce[lo]) / np.maximum(cnt, 1), 1e-30))
+    t = k * step / sr
+    gated = cnt < int(round(0.5 / hop))
+    if gated.all():
+        return t, np.zeros(len(t))
+    raw = np.clip(target - S, *DYN_RANGE)
+    held = np.empty_like(raw)
+    g = raw[np.argmax(~gated)]
+    for i in range(len(raw)):
+        if not gated[i]:
+            g = raw[i]
+        held[i] = g
+    return t, smooth_gain_db(held, DYN_ATTACK, DYN_RELEASE, hz=1.0 / hop)
 
 
 # ====================================================================== dither / quantise

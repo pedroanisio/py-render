@@ -31,9 +31,8 @@ log = logging.getLogger("scenerender")
 FEATURES.declare("masks", FULL)
 FEATURES.declare("trackMatte", FULL)
 FEATURES.declare("parent", FULL)
-FEATURES.declare("align", PARTIAL, "axis-aligned box of the unrotated node")
-FEATURES.declare("groupLayout", PARTIAL, "row/column/grid/stack; baseline alignment treated as start")
-FEATURES.declare("threeD", PARTIAL, "2.5D nodes are drawn flat, ignoring zDepth and rotationX/Y, unless a camera module is installed")
+FEATURES.declare("align", FULL, "aligns the transformed (rotated/skewed/scaled) box")
+FEATURES.declare("groupLayout", FULL, "row/column/grid/stack, all justify and alignItems values (baseline: first text line)")
 
 
 def translate(x, y):
@@ -73,6 +72,13 @@ class RenderContext:
     transitions: dict = field(default_factory=dict)   # parent element -> [transition elements]
     trans_members: dict = field(default_factory=dict)  # node -> transition elements it takes part in
     hooks: dict = field(default_factory=dict)          # optional modules: "camera", "particles", "captions", "finish"
+    mb_center: float | None = None                     # frame centre time while the Renderer supersamples a frame
+    working_primaries: str = "srgb"                    # primaries the frame is composited in (colour management)
+    threed_routing: bool = True                        # every node of a collapsed 3D group goes through is_threed
+    exclude: frozenset = frozenset()                   # nodes left out of this frame (QA before/after renders)
+    _node_mb: bool = False
+    _flat_depth: int = 0
+    _skip_effects: set = field(default_factory=set)
 
     def __post_init__(self):
         d = self.doc
@@ -80,6 +86,17 @@ class RenderContext:
         self.width = max(1, round(d.frame_width * self.scale))
         self.height = max(1, round(d.frame_height * self.scale))
         self.frame_rect = (0, 0, self.width, self.height)
+        if d.project.get("mode") == "equirectangular" or d.section("scene360") is not None:
+            from .three.view360 import is_360, size_360
+            if is_360(d):
+                self.width, self.height = size_360(d, self.scale)
+                self.frame_rect = (0, 0, self.width, self.height)
+        from . import color
+        self.working_primaries = color.working_primaries_for(d) if self.linear else "srgb"
+        self._wm = color.matrix("srgb", self.working_primaries) if self.working_primaries != "srgb" else None
+        # The conversion matrix is process state (raster); the newest context owns it until a frame
+        # of another context installs its own.
+        self.install_working_primaries()
         self.root_matrix = scale(self.scale, self.scale) @ self.reframe_matrix(d.reframe)
         for el in d.root.iter():
             if isinstance(el.tag, str) and el.get("matte") and el.get("matteVisible", "false") != "true":
@@ -108,8 +125,16 @@ class RenderContext:
         return translate((d.frame_width - d.width * k) * fx, (d.frame_height - d.height * k) * fy) @ scale(k, k)
 
     # ------------------------------------------------------------ frame
+    def install_working_primaries(self) -> None:
+        from .raster import set_working_matrix
+        set_working_matrix(self._wm)
+
     def render_frame(self, t: float, frame: int = 0) -> Buf:
+        r360 = self.hooks.get("render360")
+        if r360 is not None:
+            return r360(self, t, frame)
         self.frame_cache = {}
+        self.install_working_primaries()
         ctx = Ctx(t=t, comp_t=t, frame=frame)
         comp = self.doc.section("composition")
         out = Buf.empty(0, 0, self.width, self.height)
@@ -138,7 +163,9 @@ class RenderContext:
         hit = self.cache.get(key)
         if hit is None:
             kids = [c for c in self.doc.nodes(parent) if ln(c) != "transition"]
-            hit = [c for _, _, c in sorted((int(c.get("z", 0)), i, c) for i, c in enumerate(kids))]
+            # On object3D and camera, z is a 3D coordinate, not a stacking index.
+            sz = lambda c: 0 if ln(c) in ("object3D", "camera") else int(float(c.get("z", 0)))  # noqa: E731
+            hit = [c for _, _, c in sorted((sz(c), i, c) for i, c in enumerate(kids))]
             self.cache[key] = hit
         return hit
 
@@ -147,8 +174,12 @@ class RenderContext:
         layout = layout if layout is not None else self.layout_positions(parent, ctx, box)
         active_tr = self.active_transitions(parent, ctx)
         done_tr = set()
-        for child in self.child_order(parent):
-            if child in self.matte_nodes:
+        order = self.child_order(parent)
+        ds = self.hooks.get("depth_sort")
+        if ds is not None and parent.get("collapse") == "true":
+            order = ds(self, parent, order, ctx)   # collapsed 3D group: farthest first
+        for child in order:
+            if child in self.matte_nodes or child in self.exclude:
                 continue
             tr = next((tr for tr in active_tr if child in tr[1:3]), None)
             if tr is not None:
@@ -224,13 +255,14 @@ class RenderContext:
         if pose is not None:  # simulated rigid body: parent-space x/y (px) and rotation (deg)
             x, y, rot = pose
         if pose is None and (el.get("alignX") or el.get("alignY")):
-            x, y, sx, sy = self._align(el, ctx, box, (w, h), x, y, ax, ay, sx, sy)
+            x, y, sx, sy = self._align(el, ctx, box, (w, h), x, y, ax, ay, sx, sy, rot, kx, ky)
         L = translate(x, y) @ rotate(rot)
         if kx or ky:
             L = L @ skew(kx, ky)
         return L @ scale(sx, sy) @ translate(-ax, -ay)
 
-    def _align(self, el, ctx, box, size, x, y, ax, ay, sx, sy):
+    def _align(self, el, ctx, box, size, x, y, ax, ay, sx, sy, rot=0.0, kx=0.0, ky=0.0):
+        """Place x/y (and scale for stretch) so the node's transformed box aligns within alignTo."""
         ev = self.ev
         target = el.get("alignTo", "parent")
         bx0, by0, bw, bh = 0.0, 0.0, box[0], box[1]
@@ -240,27 +272,32 @@ class RenderContext:
                 l, t_, r, b = self.safe_insets()
                 bx0, by0, bw, bh = l * bw, t_ * bh, bw * (1 - l - r), bh * (1 - t_ - b)
         m = ev.length(el, "margin", ctx, min(bw, bh))
-        w, h = size[0] * abs(sx), size[1] * abs(sy)
-        axs, ays = ax * sx, ay * sy
+        w, h = size
         ax_mode, ay_mode = el.get("alignX"), el.get("alignY")
-        if ax_mode == "left":
-            x = bx0 + m + axs
+        if ax_mode == "stretch" and w > 0:
+            sx = (bw - 2 * m) / w
+        if ay_mode == "stretch" and h > 0:
+            sy = (bh - 2 * m) / h
+
+        def extent():
+            lin = rotate(rot) @ skew(kx, ky) @ scale(sx, sy)
+            pts = np.array([[0, 0, 1], [w, 0, 1], [0, h, 1], [w, h, 1]], np.float64) - [ax, ay, 0]
+            q = pts @ lin.T
+            return q[:, 0].min(), q[:, 0].max(), q[:, 1].min(), q[:, 1].max()
+
+        x0, x1, y0, y1 = extent()
+        if ax_mode in ("left", "stretch"):
+            x = bx0 + m - x0
         elif ax_mode == "center":
-            x = bx0 + (bw - w) / 2 + axs
+            x = bx0 + (bw - (x1 - x0)) / 2 - x0
         elif ax_mode == "right":
-            x = bx0 + bw - m - w + axs
-        elif ax_mode == "stretch" and size[0] > 0:
-            sx = (bw - 2 * m) / size[0]
-            x = bx0 + m + ax * sx
-        if ay_mode == "top":
-            y = by0 + m + ays
+            x = bx0 + bw - m - x1
+        if ay_mode in ("top", "stretch"):
+            y = by0 + m - y0
         elif ay_mode == "middle":
-            y = by0 + (bh - h) / 2 + ays
+            y = by0 + (bh - (y1 - y0)) / 2 - y0
         elif ay_mode == "bottom":
-            y = by0 + bh - m - h + ays
-        elif ay_mode == "stretch" and size[1] > 0:
-            sy = (bh - 2 * m) / size[1]
-            y = by0 + m + ay * sy
+            y = by0 + bh - m - y1
         return x, y, sx, sy
 
     def safe_insets(self) -> tuple[float, float, float, float]:
@@ -342,16 +379,114 @@ class RenderContext:
                 M = apply_constraint(self, c, el, M, nctx)
         return M
 
+    def is_threed(self, el) -> bool:
+        """2.5D participation: threeD="true", or a child of a collapsed 3D group (camera hook decides)."""
+        fn = self.hooks.get("is_threed")
+        return fn(self, el) if fn is not None else el.get("threeD") == "true"
+
+    def temporal_effects(self, el) -> list:
+        """(effect element, handler) pairs of el's effects that sample other times."""
+        key = ("temporal", el)
+        hit = self.cache.get(key)
+        if hit is None:
+            hit = []
+            for eid in (el.get("effects") or "").split():
+                e = self.doc.ids.get(eid)
+                fn = EFFECTS.get(e.get("type")) if e is not None else None
+                if fn is not None and getattr(fn, "temporal", False):
+                    hit.append((e, fn))
+            self.cache[key] = hit
+        return hit
+
+    def _ghost_active(self, el, ctx: Ctx) -> bool:
+        """Past its window, a node with a lookback effect (echo) stays alive while its tail lasts."""
+        if el.get("visible") == "false":
+            return False
+        s, e = self.doc.window(el)
+        if e is None or ctx.t < e - 1e-9:
+            return False
+        tail = max((getattr(fn, "lookback", lambda *a: 0.0)(self, fx, ctx) for fx, fn in self.temporal_effects(el)), default=0.0)
+        return ctx.t < e + tail
+
     def render_node(self, el, ctx: Ctx, PM, box, layout_pos=None, force: bool = False) -> Out | None:
-        tag = ln(el)
         if not self.active(el, ctx, force):
+            if self.temporal_effects(el) and self._ghost_active(el, ctx):
+                return self._render_node_once(el, ctx, PM, box, layout_pos, ghost=True)
             return None
+        mode = self.motion_blur_mode(el)
+        if self.motion_blur and mode == "off" and self.mb_center is not None:
+            # Excluded from the frame's shutter: always drawn at the frame's centre time.
+            ctx = ctx.at(ctx.t + (self.mb_center - ctx.comp_t))
+        elif not self.motion_blur and mode == "on" and not self._node_mb:
+            return self._render_node_blurred(el, ctx, PM, box, layout_pos, force)
+        return self._render_node_once(el, ctx, PM, box, layout_pos)
+
+    def motion_blur_mode(self, el) -> str:
+        """Effective node motionBlur: the nearest non-"inherit" value on el or its ancestors."""
+        key = ("mb", el)
+        hit = self.cache.get(key)
+        if hit is None:
+            hit = "inherit"
+            for n in [el, *el.iterancestors()]:
+                v = n.get("motionBlur") if isinstance(n.tag, str) else None
+                if v in ("on", "off"):
+                    hit = v
+                    break
+            self.cache[key] = hit
+        return hit
+
+    def _render_node_blurred(self, el, ctx, PM, box, layout_pos, force) -> Out | None:
+        p = self.doc.project
+        n = max(1, int(p.get("motionBlurSamples", 16)))
+        fps = float(self.doc.fps)
+        base = float(p.get("shutterAngle", 180))
+        sa = self.hooks.get("shutter_angle")
+        shutter = (sa(self, ctx.comp_t, base) if sa else base) / 360.0 / fps   # active camera may override
+        phase = float(p.get("shutterPhase", -90)) / 360.0 / fps
+        outs = []
+        self._node_mb = True
+        try:
+            for i in range(n):
+                dt = phase + shutter * (i + 0.5) / n
+                o = self._render_node_once(el, ctx.at(ctx.t + dt), PM, box, layout_pos)
+                if o is not None:
+                    outs.append(o)
+        finally:
+            self._node_mb = False
+        if not outs:
+            return None
+        r = None
+        for o in outs:
+            r = union(r, o.buf.rect)
+        acc = np.zeros((r[3] - r[1], r[2] - r[0], 4), np.float32)
+        for o in outs:
+            acc += o.buf.region(r) * o.opacity
+        return Out(Buf(acc / n, r[0], r[1]), outs[0].blend, 1.0)
+
+    def render_node_at(self, el, t: float, ctx: Ctx, effects: bool = False) -> Out | None:
+        """el rendered at composition time t in its own place (for temporal effects such as echo);
+        its effect stack is skipped unless effects=True, so an effect can't recurse into itself."""
+        c2 = ctx.at(ctx.t + (t - ctx.comp_t))
+        parent = el.getparent()
+        root_like = parent is None or ln(parent) in ("composition", "symbol", "symbols", "scene")
+        PM = self.root_matrix if root_like else self.world_matrix(parent, c2)
+        box = (self.doc.width, self.doc.height) if root_like else self.node_size(parent, c2, (self.doc.width, self.doc.height))
+        if not effects:
+            self._skip_effects.add(el)
+        try:
+            return self._render_node_once(el, c2, PM, box, None)
+        finally:
+            self._skip_effects.discard(el)
+
+    def _render_node_once(self, el, ctx: Ctx, PM, box, layout_pos=None, ghost: bool = False) -> Out | None:
+        tag = ln(el)
         shift = self.doc.clock_shift.get(el)
         if shift:
             ctx = replace(ctx, t=ctx.t - shift)
         nctx = self.node_ctx(el, ctx)
         opacity = self.ev.num(el, "opacity", nctx, 1.0)
-        if opacity <= 1e-4:
+        temporal = bool(self.temporal_effects(el))
+        if opacity <= 1e-4 and not temporal:
             return None
         handler = NODES.get(tag)
         if handler is None:
@@ -361,24 +496,65 @@ class RenderContext:
         if abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]) < 1e-12:
             return None  # collapsed to zero area (e.g. scale 0): nothing visible, and cairo can't invert it
         size = self.node_size(el, nctx, box)
-        if el.get("threeD") == "true" and self.hooks.get("camera"):
+        if self.is_threed(el) and self.hooks.get("camera"):
             M = self.hooks["camera"](self, el, M, nctx)
-        buf = handler(self, el, nctx, M, size)
-        if buf is None:
-            return None
-        if isinstance(buf, Out):
-            return buf
-        buf = self.finish_node(el, buf, nctx, M, size, PM, box)
+            if M is None:
+                return None
+        if temporal:
+            # Temporal effects combine renders from several times, so each carries its own opacity
+            # (and a node past its window contributes only its tail): fold opacity into the pixels.
+            buf = Buf.null() if ghost else handler(self, el, nctx, M, size)
+            if isinstance(buf, Out):
+                buf = Buf(buf.buf.px * buf.opacity, buf.buf.x0, buf.buf.y0)
+            if buf is None:
+                buf = Buf.null()
+            buf = Buf(buf.px * opacity, buf.x0, buf.y0)
+            buf = self.finish_node(el, buf, nctx, M, size, PM, box)
+            return None if buf is None or buf.is_null else Out(buf, el.get("blend", "normal"), 1.0)
+        if abs(M[2, 0]) + abs(M[2, 1]) > 1e-12:
+            buf = self._render_projective(el, handler, nctx, M, size, PM, box)
+        else:
+            buf = handler(self, el, nctx, M, size)
+            if isinstance(buf, Out):
+                return buf
+            if buf is not None:
+                buf = self.finish_node(el, buf, nctx, M, size, PM, box)
         if buf is None:
             return None
         return Out(buf, el.get("blend", "normal"), opacity)
 
+    def _render_projective(self, el, handler, ctx, H, size, PM, box) -> Buf | None:
+        """Perspective: draw the node flat at a resolution matching its projected size, run its
+        deform/masks/effects there, then warp the tile through the homography into the frame."""
+        from .raster import projected_scale, warp_projective
+        w, h = max(1.0, size[0]), max(1.0, size[1])
+        k = projected_scale(H, w, h)
+        if k <= 0:
+            return None
+        A = scale(k, k)
+        self._flat_depth += 1
+        try:
+            flat = handler(self, el, ctx, A, size)
+            if isinstance(flat, Out):
+                flat = flat.buf
+            if flat is not None:
+                flat = self.finish_node(el, flat, ctx, A, size, PM, box)
+        finally:
+            self._flat_depth -= 1
+        if flat is None:
+            return None
+        out = warp_projective(flat, H @ np.linalg.inv(A), self.frame_rect)
+        post = self.hooks.get("camera_post")
+        if post is not None and out is not None and not self._flat_depth:
+            out = post(self, el, out, ctx)   # lens distortion of the active camera
+        return out
+
     def finish_node(self, el, buf: Buf, ctx, M, size, PM, box) -> Buf | None:
         """Deform, depth of field, masks, effect stack and track matte, in that order."""
         dh = self.hooks.get("deform")
-        if dh is not None and any(ln(c) == "deform" for c in el):
+        if dh is not None and any(ln(c) in ("deform", "softBody") for c in el):
             buf = dh(self, el, buf, ctx, M, size)
-        if el.get("threeD") == "true" and self.hooks.get("camera"):
+        if self.is_threed(el) and self.hooks.get("camera"):
             from .camera import depth_of_field
             buf = depth_of_field(self, el, buf, ctx, M)
         masks = [m for m in el if ln(m) == "mask"]
@@ -386,7 +562,7 @@ class RenderContext:
             from .masks import apply_masks
             buf = apply_masks(self, masks, buf, ctx, M, size)
         fx = el.get("effects")
-        if fx and ln(el) != "adjustment":
+        if fx and ln(el) != "adjustment" and el not in self._skip_effects:
             buf = self.apply_effects(fx.split(), buf, ctx, el)
         if el.get("matte"):
             from .masks import apply_matte
@@ -492,19 +668,27 @@ class RenderContext:
         if fn is None:
             warn_once("transition", tr.get("type"), "not supported; falling back to crossfade")
             fn = TRANSITIONS.get("crossfade")
-        return Out(fn(self, tr, A, B, p, ctx))
+        # The mixed picture blends onto the backdrop with the members' mode (incoming wins past halfway).
+        lead = b if (b is not None and (p >= 0.5 or a is None)) else a
+        return Out(fn(self, tr, A, B, p, ctx), lead.get("blend", "normal") if lead is not None else "normal")
 
     def _full(self, out: Out | None) -> Buf:
-        if out is None:
-            return Buf.empty(0, 0, self.width, self.height)
+        """A member flattened to a full frame with its opacity (its blend mode applies to the mix)."""
         base = Buf.empty(0, 0, self.width, self.height)
-        return blending.composite(base, out.buf, out.blend, out.opacity, grow=False)
+        if out is None:
+            return base
+        return blending.composite(base, out.buf, "normal", out.opacity, grow=False)
 
     # ------------------------------------------------------------ helpers for handlers
     def canvas_for(self, M, w, h, pad: float = 2.0, clip_to_frame: bool = True):
         from .raster import transformed_rect
         r = transformed_rect(M, 0, 0, w, h, pad)
-        if clip_to_frame:
+        if self._flat_depth:
+            # Flat (pre-perspective) tiles are not frame-aligned; cap their size instead of clipping.
+            r = intersect(r, (-8192, -8192, 8192, 8192))
+            if r is None:
+                return None
+        elif clip_to_frame:
             margin = 64
             r = intersect(r, (-margin, -margin, self.width + margin, self.height + margin))
             if r is None:

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Delivery fixture: an equirectangular (top-bottom stereo) project with HDR, spherical, size-capped,
+     16-bit TIFF and alpha GIF outputs, and publish destinations (URIs patched by the tests). -->
+<scene version="1.1">
+  <project width="128" height="64" fps="10" duration="1" mode="equirectangular" background="#20304080"/>
+  <metadata title="Delivery fixture"/>
+  <colorManagement toneMapping="reinhard"/>
+  <output id="hevc-hdr" path="hevc.mp4" codec="h265" preset="ultrafast" pixelFormat="yuv420p10le" colorSpace="rec2020"
+          transfer="pq" maxCLL="1000" maxFALL="400" masteringDisplay="G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)"/>
+  <output id="vp9-hdr" path="vp9.webm" codec="vp9" preset="ultrafast" pixelFormat="yuv420p10le" colorSpace="rec2020"
+          transfer="hlg" maxCLL="1000" maxFALL="400" masteringDisplay="G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)"/>
+  <output id="mkv-sph" path="sph.mkv" codec="h264" preset="ultrafast"/>
+  <output id="capped" path="capped.mp4" codec="h264" preset="ultrafast" maxFileSize="12000" audio="false"/>
+  <output id="tiff16" path="tiff/f.tif" codec="tiff-sequence" alpha="true"/>
+  <output id="gif-alpha" path="a.gif" codec="gif" alpha="true"/>
+  <output id="published" path="pub.mp4" codec="h264" preset="ultrafast" sphericalMetadata="false">
+    <destination kind="http-put" uri="http://127.0.0.1:65000/up/" credentials="qa-test"/>
+    <destination kind="webhook" uri="http://127.0.0.1:65000/hook" credentials="qa-test"/>
+  </output>
+  <scene360 layout="equirectangular" stereo="top-bottom" width="128" height="64"/>
+  <composition>
+    <shape id="grad" shape="rect" x="0" y="0" width="128" height="64" fill="#4080C0FF">
+      <animate property="x"><key time="0" value="-40"/><key time="1" value="40"/></animate>
+    </shape>
+    <shape id="dot" shape="ellipse" x="40" y="16" width="32" height="32" fill="#FFC23DC0"/>
+  </composition>
+</scene>

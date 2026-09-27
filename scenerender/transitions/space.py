@@ -143,3 +143,72 @@ def page_curl(rc, tr, a, b, p, ctx):
     back_px = np.concatenate([(back[..., :3] * 0.18 + paper * back_a * 0.82) * shade, back_a], -1)
     res = over(back_px * vis, res)
     return out(res)
+
+
+# motion.py contains the historical flat film-roll registration. Import it first
+# so this replacement wins regardless of plugin discovery/import order.
+from . import motion as _motion  # noqa: E402,F401
+
+
+@TRANSITIONS.register("film-roll", level=FULL,
+                      note="cylindrical rolling film strip, sprocket holes/frame lines in color, direction and shutter blur")
+def film_roll(rc,tr,a,b,p,ctx):
+    """Orthographic cylinder unwrap with a traveling two-frame film strip.
+
+    gap=.06 and border=.07 are fractions of frame dimensions; curvature=.85 is
+    max cylinder bend (0 flat, <1 full visible semicylinder), holes=12 per frame.
+    Strip expands to the full picture at endpoints. color supplies the emulsion
+    border/frame lines; sprockets are transparent. Shutter matches motion helpers.
+    """
+    from ..effects import Params
+    from . import color, shutter_px
+    A,B=arrays(rc,a,b)
+    if p <= 0:
+        return out(A.copy())
+    if p >= 1:
+        return out(B.copy())
+    q=Params(rc,tr,ctx)
+    gap=max(0,q.param("gap",.06))
+    border=np.clip(q.param("border",.07),0,.4)
+    bend=np.clip(q.param("curvature",.85),0,.99)
+    holes=max(2,round(q.param("holes",12)))
+    ad=axis_direction(rc,tr,ctx)
+    vertical=ad in ("up","down")
+    sign=1 if ad in ("up","left") else -1
+    if vertical:
+        A,B=A.transpose(1,0,2),B.transpose(1,0,2)
+    h,w=A.shape[:2]
+    yy,xx=np.mgrid[:h,:w].astype(np.float32)
+    xx+=.5;yy+=.5
+    C=color(rc,tr,ctx)
+    length=w*(1+gap)
+    def render(t):
+        strength=math.sin(math.pi*t)
+        k=bend*strength
+        v=(xx/w-.5)*2
+        curved=w*(.5+.5*np.arcsin(np.clip(v*k,-1,1))/max(math.asin(k),1e-7)) if k>1e-7 else xx
+        coord=curved+sign*t*length
+        rail=border*h*strength
+        sy=(yy-rail)/max(h-2*rail,1)*h
+        movie=np.zeros_like(A)
+        for px,origin in ((A,0),(B,sign*length)):
+            u=coord-origin
+            valid=(u>=0)&(u<w)&(yy>=rail)&(yy<h-rail)
+            movie+=sample(px,u,sy)*valid[...,None]
+        interior=(yy>=rail)&(yy<h-rail)
+        in_frame=((coord>=0)&(coord<w))|((coord-sign*length>=0)&(coord-sign*length<w))
+        stock=~(interior&in_frame)
+        movie+=stock[...,None]*C
+        pitch=length/holes
+        hole_x=abs((coord+pitch/2)%pitch-pitch/2)<pitch*.22
+        hole_y=(abs(yy-rail*.5)<rail*.24)|(abs(yy-(h-rail*.5))<rail*.24)
+        movie*= (~(hole_x&hole_y))[...,None]
+        shade=np.sqrt(np.maximum(1-(v*k)**2,0))
+        movie[...,:3]*=(1-.3*strength*(1-shade))[...,None]
+        return movie
+    shutter=shutter_px(rc,tr,ctx,length)/max(length,1) if rc.ev.bool(tr,"motionBlur",ctx,True) else 0
+    samples=max(1,min(32,math.ceil(shutter*length))) if shutter else 1
+    result=np.zeros_like(A)
+    for dt in ((np.arange(samples)+.5)/samples-.5)*shutter:
+        result+=render(float(np.clip(p+dt,0,1)))/samples
+    return out(result.transpose(1,0,2) if vertical else result)

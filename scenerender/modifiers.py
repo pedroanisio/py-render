@@ -2,35 +2,42 @@
 
 Registered per-path handlers follow the registry contract fn(rc, mod_el, cmds, ctx) -> [cmds].
 Modifiers that need every path at once (merge, trim) also expose `fn.apply_all(rc, mod_el,
-paths, ctx) -> paths`; until the core calls it they operate on the subpaths of each path.
+paths, ctx) -> paths`, which nodes/core.shape_paths calls. `region(paths, rule, tol)` builds the exact
+filled region of paths (nonzero/evenodd) as a shapely geometry (also used for rigidBody shape="path").
 
 Attribute meanings (pinned here; the schema only lists names):
   repeater      copies (floor of the value), offset (index shift), offsetX/offsetY px, rotation deg and
                 scale factor per copy, about the shape's anchor point; composite above (later copies
                 on top) | below. start/endOpacity are attached to each returned path as `.opacity`
-                (OpPath) — drawing them needs core support (PARTIAL).
-  offset-path   amount px (> 0 grows closed paths outward), mode = join miter|round|bevel.
+                (OpPath), which nodes/core draws as separate groups.
+  offset-path   amount px: closed subpaths are filled (nonzero) and the region is grown (> 0) or shrunk
+                by |amount| with shapely's buffer (join miter|round|bevel from @mode, miter limit 4 as in
+                After Effects); open subpaths get a parallel curve (> 0 = right of travel on screen).
+                Self-intersections and vanishing parts are resolved exactly.
   pucker-bloat  amount percent, Lottie semantics (> 0 bloat, < 0 pucker).
   zig-zag       size px, ridges per segment, mode corner|smooth.
   twist         amount deg at the farthest point from the path's centre, proportional to distance.
   round-corners amount = corner radius px (corners between straight segments).
   wiggle-path   size px amplitude, detail = points per original segment, frequency wiggles/s, seed.
-  merge         mode add|subtract|intersect|exclude between paths (first path is the base). Computed on
-                a coverage raster (~400 cells across) and traced back to polygons (PARTIAL).
+  merge         mode add|subtract|intersect|exclude between paths (first path is the base; the rest are
+                applied in order: union, difference, intersection, symmetric difference). Each operand
+                is the nonzero-filled region of its path (curves flattened at 0.05 px); exact polygon
+                booleans (shapely/GEOS); one path out, holes as opposite-winding subpaths. A single path
+                uses its subpaths as the operands.
   trim          amount = percent trimmed from the end (amount < 0 trims from the start instead),
-                offset deg (360 = one turn); sequential across all paths.
+                offset deg (360 = one turn); sequential across all paths laid end to end (each path keeps
+                its own piece and opacity), the window wraps around like After Effects' offset.
 """
 from __future__ import annotations
 
 import math
 
-import cairo
 import numpy as np
 
 from . import geometry
 from .document import ln
 from .physics import vnoise
-from .registry import FULL, PARTIAL, SHAPE_MODIFIERS, warn_once
+from .registry import FULL, SHAPE_MODIFIERS, warn_once
 
 KAPPA = geometry.KAPPA
 
@@ -218,65 +225,87 @@ SHAPE_MODIFIERS.register("repeater", level=FULL,
 
 
 # ================================================================== offset-path
-def offset_polyline(pts: np.ndarray, closed: bool, d: float, join: str = "miter", miter_limit: float = 4.0):
-    n = len(pts)
-    if closed and n > 1 and np.allclose(pts[0], pts[-1]):
-        pts = pts[:-1]
-        n -= 1
-    if n < 2:
-        return pts
-    sgn = 1.0 if (not closed or _area(pts) > 0) else -1.0
+def _winding(pt, rings) -> int:
+    x, y = pt
+    w = 0
+    for R in rings:
+        a, b = R, np.roll(R, -1, 0)
+        up = (a[:, 1] <= y) & (b[:, 1] > y)
+        dn = (a[:, 1] > y) & (b[:, 1] <= y)
+        cr = (b[:, 0] - a[:, 0]) * (y - a[:, 1]) - (x - a[:, 0]) * (b[:, 1] - a[:, 1])
+        w += int(np.sum(up & (cr > 0))) - int(np.sum(dn & (cr < 0)))
+    return w
 
-    def nrm(a, b):
-        e = b - a
-        L = math.hypot(*e) or 1.0
-        return np.array([e[1], -e[0]]) / L * sgn
 
-    out = []
-    for i in range(n):
-        if not closed and (i == 0 or i == n - 1):
-            nn = nrm(pts[0], pts[1]) if i == 0 else nrm(pts[-2], pts[-1])
-            out.append(pts[i] + nn * d)
+def region(paths, rule: str = "nonzero", tol: float = 0.05):
+    """Exact filled region of paths (open subpaths are closed, as filling does) as a shapely geometry."""
+    import shapely
+    from shapely.geometry import LineString
+    rings = []
+    for cmds in paths:
+        for pts, _closed in geometry.flatten(cmds, tol):
+            P = np.asarray(pts, np.float64)
+            if len(P) > 1 and np.allclose(P[0], P[-1]):
+                P = P[:-1]
+            if len(P) >= 3 and abs(_area(P)) > 1e-12:
+                rings.append(P)
+    if not rings:
+        return None
+    noded = shapely.unary_union([LineString(np.vstack([R, R[:1]])) for R in rings])
+    keep = []
+    for f in shapely.polygonize([noded]).geoms:
+        if f.area <= 1e-12:
             continue
-        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
-        n1, n2 = nrm(a, b), nrm(b, c)
-        cross = n1[0] * n2[1] - n1[1] * n2[0]
-        mv = n1 + n2
-        ml = math.hypot(*mv)
-        cosh = ml / 2
-        if ml < 1e-9:
-            out += [b + n1 * d, b + n2 * d]
+        w = _winding(tuple(f.representative_point().coords[0]), rings)
+        if (w != 0) if rule != "evenodd" else (w % 2 == 1):
+            keep.append(f)
+    return shapely.unary_union(keep) if keep else None
+
+
+def region_cmds(geom) -> list:
+    """Path commands of a shapely (Multi)Polygon: exteriors and holes with opposite windings."""
+    from shapely.geometry.polygon import orient
+    out: list = []
+    if geom is None or geom.is_empty:
+        return out
+    for g in getattr(geom, "geoms", [geom]):
+        if g.geom_type != "Polygon" or g.is_empty:
             continue
-        miter = mv / ml * (d / max(cosh, 1e-9))
-        outer = cross * sgn * d > 0          # the offset edges open a gap at this corner
-        if not outer or (join == "miter" and 1 / max(cosh, 1e-9) <= miter_limit):
-            out.append(b + miter)
-        elif join == "round":
-            a1, a2 = math.atan2(n1[1], n1[0]), math.atan2(n2[1], n2[0])
-            da = (a2 - a1 + math.pi) % (2 * math.pi) - math.pi
-            k = max(2, int(abs(da) / (math.pi / 12)) + 1)
-            for j in range(k + 1):
-                aa = a1 + da * j / k
-                out.append(b + np.array([math.cos(aa), math.sin(aa)]) * d)
-        else:
-            out += [b + n1 * d, b + n2 * d]
-    return np.array(out)
+        g = orient(g, 1.0)
+        for ring in [g.exterior, *g.interiors]:
+            out += polyline_cmds(np.asarray(ring.coords)[:-1], True)
+    return out
+
+
+_JOINS = {"miter": "mitre", "round": "round", "bevel": "bevel"}
 
 
 def _offset_path(rc, m, cmds, ctx):
+    from shapely.geometry import LineString
     d = rc.ev.num(m, "amount", ctx, 0.0)
     if abs(d) < 1e-9:
         return [cmds]
-    join_ = m.get("mode") or "miter"
-    out = []
-    for pts, closed in _flat(cmds):
-        out += polyline_cmds(offset_polyline(pts, closed, d, join_), closed)
-    return [out]
+    js = _JOINS.get((m.get("mode") or "miter").strip(), "mitre")
+    closed = [join([sp]) for sp in subpaths(cmds) if sp[1]]
+    out: list = []
+    if closed:
+        reg = region(closed)
+        if reg is not None:
+            out += region_cmds(reg.buffer(d, quad_segs=16, join_style=js, mitre_limit=4.0))
+    for pts, cl in _flat(cmds, 0.05):
+        if cl or len(pts) < 2:
+            continue
+        # shapely offsets to the left of travel in its (y-up) frame = the right of travel on a y-down screen
+        oc = LineString(pts).offset_curve(d, quad_segs=16, join_style=js, mitre_limit=4.0)
+        for g in getattr(oc, "geoms", [oc]):
+            if not g.is_empty:
+                out += polyline_cmds(np.asarray(g.coords), False)
+    return [_with_opacity(out, cmds.opacity) if isinstance(cmds, OpPath) else out]
 
 
-SHAPE_MODIFIERS.register("offset-path", level=PARTIAL,
-                         note="flattened polygon offset; self-intersections of large negative offsets are not "
-                              "cleaned")(_offset_path)
+SHAPE_MODIFIERS.register("offset-path", level=FULL,
+                         note="exact region offset (shapely buffer, miter/round/bevel joins); open paths get a "
+                              "parallel curve")(_offset_path)
 
 
 # ================================================================== pucker-bloat
@@ -441,127 +470,6 @@ SHAPE_MODIFIERS.register("wiggle-path", level=FULL, note="seeded value noise, an
 
 
 # ================================================================== merge
-def _raster(cmds, x0, y0, step, W, H) -> np.ndarray:
-    surf = cairo.ImageSurface(cairo.FORMAT_A8, W, H)
-    cr = cairo.Context(surf)
-    cr.scale(1 / step, 1 / step)
-    cr.translate(-x0, -y0)
-    geometry.emit(cr, cmds)
-    cr.set_fill_rule(cairo.FILL_RULE_WINDING)
-    cr.fill()
-    surf.flush()
-    a = np.frombuffer(surf.get_data(), np.uint8).reshape(H, surf.get_stride())[:, :W]
-    return a.astype(np.float32) / 255.0
-
-
-_CASES = {1: [("L", "B")], 2: [("B", "R")], 3: [("L", "R")], 4: [("T", "R")], 6: [("T", "B")], 7: [("T", "L")],
-          8: [("T", "L")], 9: [("T", "B")], 11: [("T", "R")], 12: [("L", "R")], 13: [("B", "R")], 14: [("L", "B")]}
-
-
-def contours(f: np.ndarray, level: float = 0.5) -> list[np.ndarray]:
-    """Closed iso-contours of f (grid coordinates: column, row of sample centres), oriented so the
-    region f >= level lies to the right of travel in y-down coordinates (nonzero-fill friendly)."""
-    f = np.pad(f, 1)
-    ins = f >= level
-    Hh, Ww = f.shape
-    idx = (ins[:-1, :-1] * 8 + ins[:-1, 1:] * 4 + ins[1:, 1:] * 2 + ins[1:, :-1] * 1).astype(np.int32)
-    cells = np.argwhere((idx > 0) & (idx < 15))
-    adj: dict = {}
-
-    def ekey(i, j, e):
-        return {"T": ("h", i, j), "B": ("h", i + 1, j), "L": ("v", i, j), "R": ("v", i, j + 1)}[e]
-
-    for i, j in cells:
-        c = int(idx[i, j])
-        if c in (5, 10):
-            centre = (f[i, j] + f[i, j + 1] + f[i + 1, j] + f[i + 1, j + 1]) / 4 >= level
-            if c == 5:
-                segs = [("L", "T"), ("B", "R")] if centre else [("T", "R"), ("L", "B")]
-            else:
-                segs = [("T", "R"), ("L", "B")] if centre else [("T", "L"), ("B", "R")]
-        else:
-            segs = _CASES[c]
-        for a, b in segs:
-            ka, kb = ekey(i, j, a), ekey(i, j, b)
-            adj.setdefault(ka, []).append(kb)
-            adj.setdefault(kb, []).append(ka)
-
-    def pos(k):
-        kind, i, j = k
-        if kind == "h":
-            a, b = f[i, j], f[i, j + 1]
-            u = (level - a) / (b - a) if b != a else 0.5
-            return (j + u - 1, i - 1)
-        a, b = f[i, j], f[i + 1, j]
-        u = (level - a) / (b - a) if b != a else 0.5
-        return (j - 1, i + u - 1)
-
-    seen = set()
-    loops = []
-    for start in adj:
-        if start in seen:
-            continue
-        loop = [start]
-        seen.add(start)
-        prev, cur = None, start
-        while True:
-            nxt = [k for k in adj[cur] if k != prev and k not in seen]
-            if not nxt:
-                break
-            prev, cur = cur, nxt[0]
-            seen.add(cur)
-            loop.append(cur)
-        if len(loop) >= 3:
-            loops.append(np.array([pos(k) for k in loop], np.float64))
-    fi = f[1:-1, 1:-1]
-
-    def sample(x, y):
-        xi = int(round(min(max(x, 0), fi.shape[1] - 1)))
-        yi = int(round(min(max(y, 0), fi.shape[0] - 1)))
-        return fi[yi, xi]
-
-    out = []
-    for L in loops:
-        # probe: the point just to the right of the first long-enough edge must be inside
-        for k in range(len(L)):
-            a, b = L[k], L[(k + 1) % len(L)]
-            e = b - a
-            n = math.hypot(*e)
-            if n > 0.3:
-                mid = (a + b) / 2
-                right = np.array([-e[1], e[0]]) / n       # right of travel in y-down coords
-                if sample(*(mid + right * 0.75)) < sample(*(mid - right * 0.75)):
-                    L = L[::-1]
-                break
-        out.append(L)
-    return out
-
-
-def _simplify(pts: np.ndarray, tol: float) -> np.ndarray:
-    if len(pts) < 4:
-        return pts
-    keep = np.zeros(len(pts), bool)
-    keep[0] = keep[-1] = True
-    stack = [(0, len(pts) - 1)]
-    while stack:
-        a, b = stack.pop()
-        if b <= a + 1:
-            continue
-        p, q = pts[a], pts[b]
-        d = q - p
-        L = math.hypot(*d)
-        seg = pts[a + 1:b]
-        if L < 1e-12:
-            dist = np.hypot(*(seg - p).T)
-        else:
-            dist = np.abs((seg[:, 0] - p[0]) * d[1] - (seg[:, 1] - p[1]) * d[0]) / L
-        k = int(np.argmax(dist))
-        if dist[k] > tol:
-            keep[a + 1 + k] = True
-            stack += [(a, a + 1 + k), (a + 1 + k, b)]
-    return pts[keep]
-
-
 def merge_paths(rc, m, paths, ctx) -> list:
     """Boolean combination of paths (first = base). Returns one path."""
     paths = [p for p in paths if p]
@@ -573,31 +481,14 @@ def merge_paths(rc, m, paths, ctx) -> list:
     if mode not in ("add", "subtract", "intersect", "exclude"):
         warn_once("shapeModifier", f"merge:{mode}", "unknown merge mode; using add")
         mode = "add"
-    bx = [geometry.bounds(p) for p in paths]
-    x0, y0 = min(b[0] for b in bx), min(b[1] for b in bx)
-    x1, y1 = max(b[2] for b in bx), max(b[3] for b in bx)
-    step = max(0.25, max(x1 - x0, y1 - y0) / 400.0)
-    x0 -= 2 * step
-    y0 -= 2 * step
-    W = int(math.ceil((x1 - x0) / step)) + 3
-    H = int(math.ceil((y1 - y0) / step)) + 3
-    acc = _raster(paths[0], x0, y0, step, W, H)
+    from shapely.geometry import Polygon
+    empty = Polygon()
+    acc = region([paths[0]]) or empty
     for p in paths[1:]:
-        b = _raster(p, x0, y0, step, W, H)
-        if mode == "add":
-            acc = np.maximum(acc, b)
-        elif mode == "intersect":
-            acc = np.minimum(acc, b)
-        elif mode == "subtract":
-            acc = np.minimum(acc, 1 - b)
-        else:
-            acc = np.maximum(np.minimum(acc, 1 - b), np.minimum(b, 1 - acc))
-    out = []
-    for L in contours(acc):
-        L = _simplify(np.vstack([L, L[:1]]), 0.15)[:-1]
-        pts = (L + 0.5) * step + np.array([x0, y0])
-        out += polyline_cmds(pts, True)
-    return [out]
+        b = region([p]) or empty
+        acc = {"add": acc.union, "intersect": acc.intersection, "subtract": acc.difference,
+               "exclude": acc.symmetric_difference}[mode](b)
+    return [region_cmds(acc)]
 
 
 def _merge(rc, m, cmds, ctx):
@@ -605,9 +496,8 @@ def _merge(rc, m, cmds, ctx):
 
 
 _merge.apply_all = merge_paths
-SHAPE_MODIFIERS.register("merge", level=PARTIAL,
-                         note="raster boolean traced back to polygons (~1/400 of the extent); across paths needs "
-                              "the core apply_all call, otherwise across the subpaths of each path")(_merge)
+SHAPE_MODIFIERS.register("merge", level=FULL,
+                         note="exact polygon booleans (shapely) across the shape's paths (apply_all)")(_merge)
 
 
 # ================================================================== trim
@@ -619,11 +509,39 @@ def _trim_range(rc, m, ctx):
 
 
 def trim_paths(rc, m, paths, ctx) -> list:
+    """Sequential trim across all paths laid end to end; each path keeps its own piece (and opacity)."""
     s, e, off = _trim_range(rc, m, ctx)
     if s <= 0 and e >= 1 and off % 1 == 0:
         return paths
-    joined = [c for p in paths for c in p]
-    return [geometry.trim(joined, s, e, off, "sequential")]
+    if e - s <= 1e-9:
+        return []
+    s, e = s + off, e + off
+    k = math.floor(s)
+    s, e = s - k, e - k
+    spans = [(s, e)] if e <= 1 else [(s, 1.0), (0.0, e - 1)]
+    flat = [[(p, geometry._cum(p), cl) for p, cl in geometry.flatten(cmds)] for cmds in paths]
+    total = sum(acc[-1] for f in flat for _, acc, _ in f)
+    if total <= 0:
+        return []
+    out, base = [], 0.0
+    for cmds, f in zip(paths, flat):
+        piece: list = []
+        for pts, acc, cl in f:
+            L = acc[-1]
+            for a, b in spans:
+                a0, b0 = max(a * total - base, 0.0), min(b * total - base, L)
+                if b0 - a0 <= 1e-9:
+                    continue
+                if cl and a0 <= 1e-9 and b0 >= L - 1e-9:
+                    piece += polyline_cmds(pts[:-1], True)
+                    continue
+                seg = geometry._cut(pts, acc, a0, b0)
+                if len(seg) > 1:
+                    piece += polyline_cmds(seg, False)
+            base += L
+        if piece:
+            out.append(_with_opacity(piece, cmds.opacity) if isinstance(cmds, OpPath) else piece)
+    return out
 
 
 def _trim(rc, m, cmds, ctx):
@@ -631,6 +549,5 @@ def _trim(rc, m, cmds, ctx):
 
 
 _trim.apply_all = trim_paths
-SHAPE_MODIFIERS.register("trim", level=PARTIAL,
-                         note="amount = percent trimmed (see modifiers.py); sequential across paths needs the "
-                              "core apply_all call")(_trim)
+SHAPE_MODIFIERS.register("trim", level=FULL,
+                         note="amount = percent trimmed, offset in degrees; sequential across paths (apply_all)")(_trim)

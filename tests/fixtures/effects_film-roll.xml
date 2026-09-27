@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<scene version="1.1">
+  <project width="640" height="360" fps="24" duration="3" background="#142032FF"/>
+  <composition>
+    <group id="pic0" width="640" height="360" end="1.5">
+      <shape id="bg0" shape="rect" width="640" height="360" fill="#254269FF"/>
+      <shape id="s0-0" shape="rect" x="0" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s0-1" shape="rect" x="90" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s0-2" shape="rect" x="180" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s0-3" shape="rect" x="270" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s0-4" shape="rect" x="360" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s0-5" shape="rect" x="450" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s0-6" shape="rect" x="540" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="ball0" shape="ellipse" x="110" y="95" width="140" height="140" fill="#FAD072FF"/>
+    </group>
+    <group id="pic1" width="640" height="360" start="1.5">
+      <shape id="bg1" shape="rect" width="640" height="360" fill="#794D38FF"/>
+      <shape id="s1-0" shape="rect" x="0" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s1-1" shape="rect" x="90" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s1-2" shape="rect" x="180" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s1-3" shape="rect" x="270" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s1-4" shape="rect" x="360" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s1-5" shape="rect" x="450" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="s1-6" shape="rect" x="540" y="0" width="8" height="360" fill="#97B4CFFF"/>
+      <shape id="ball1" shape="ellipse" x="290" y="95" width="140" height="140" fill="#FAD072FF"/>
+    </group>
+    <transition id="tr" type="film-roll" from="pic0" to="pic1" duration="1.5" direction="up" color="#080A10FF"/>
+  </composition>
+</scene>

@@ -1,0 +1,18 @@
+# unit cube centred at the origin, one material, per-face normals via smoothing off
+mtllib cube.mtl
+o cube
+v -0.5 -0.5 -0.5
+v  0.5 -0.5 -0.5
+v  0.5  0.5 -0.5
+v -0.5  0.5 -0.5
+v -0.5 -0.5  0.5
+v  0.5 -0.5  0.5
+v  0.5  0.5  0.5
+v -0.5  0.5  0.5
+usemtl orange
+f 1 4 3 2
+f 5 6 7 8
+f 1 2 6 5
+f 3 4 8 7
+f 2 3 7 6
+f 1 5 8 4

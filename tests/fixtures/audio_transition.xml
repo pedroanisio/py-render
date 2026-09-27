@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- transitionAudio on audioTracks: "dlg" starts inside sceneA and follows it; the music bed
+     does not (role="music"); "dlgB" belongs to sceneB. -->
+<scene version="1.1">
+  <project width="64" height="36" fps="10" duration="4"/>
+  <assets>
+    <audio id="tone" src="media/audio_tone440.wav"/>
+  </assets>
+  <composition>
+    <group id="sceneA" start="0" end="2"/>
+    <group id="sceneB" start="2" end="4"/>
+    <transition type="crossfade" from="sceneA" to="sceneB" duration="0.4" audio="cut"/>
+  </composition>
+  <audioMix sampleRate="48000" channels="1">
+    <audioTrack id="dlg" asset="tone" start="0.5" role="dialogue"/>
+    <audioTrack id="bed" asset="tone" start="0.5" role="music"/>
+    <audioTrack id="dlgB" asset="tone" start="2.5" role="dialogue" clipOut="1"/>
+  </audioMix>
+</scene>

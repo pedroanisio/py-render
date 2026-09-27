@@ -179,7 +179,7 @@ def test_codecs_registered():
 def test_coverage_report():
     from scenerender.coverage import report
     txt = report(DEMO, all_features=True)
-    assert "audioEffect" in txt and "reverb" in txt and "PARTIAL" in txt
+    assert "audioEffect" in txt and "reverb" in txt
     assert "codec" in txt and "h264" in txt
     assert "toneMapping:reinhard" in txt
     lines = txt.splitlines()

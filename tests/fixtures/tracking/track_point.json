@@ -1,0 +1,7 @@
+{"version": 1, "fps": 25, "kind": "point",
+ "tracks": {
+   "eye_left":  {"keys": [{"frame": 0, "x": 100, "y": 200, "rotation": 0, "scale": 1.0},
+                          {"frame": 5, "x": 150, "y": 180, "rotation": 10, "scale": 2.0}]},
+   "eye_right": {"keys": [{"frame": 0, "x": 300, "y": 200},
+                          {"frame": 10, "x": 400, "y": 250, "scaleX": 1.5, "scaleY": 0.5}]}
+ }}

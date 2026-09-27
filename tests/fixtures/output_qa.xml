@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- QA fixture: grey-on-grey text (fails contrast), white text (passes), a "cta" node outside the safe area,
+     a flashing full-frame shape (expression; 5 Hz), required captions and an audio description track. -->
+<scene version="1.1">
+  <project width="320" height="180" fps="10" duration="2" background="#666666FF" safeArea="sa"/>
+  <metadata title="QA fixture">
+    <accessibility flashCheck="error" contrastCheck="error" minContrast="4.5" requireCaptions="true" audioDescription="ad"/>
+  </metadata>
+  <safeAreas>
+    <safeArea id="sa" preset="action-safe" enforce="error"/>
+  </safeAreas>
+  <assets>
+    <text id="t-grey" width="200" height="40" size="28" font="DejaVu Sans" weight="700" color="#777777FF" text="Grey text"/>
+    <text id="t-white" width="200" height="40" size="28" font="DejaVu Sans" weight="700" color="#FFFFFFFF" text="White text"/>
+    <audio id="a-voice" src="media/audio_voice.wav"/>
+  </assets>
+  <composition>
+    <layer id="l-grey" asset="t-grey" x="40" y="30"/>
+    <layer id="l-white" asset="t-white" x="40" y="90"/>
+    <shape id="cta" tags="cta" shape="rect" x="290" y="140" width="60" height="30" fill="#FF0000FF"/>
+    <shape id="flash" shape="rect" x="0" y="0" width="320" height="180" fill="#FFFFFFFF" opacity="0">
+      <expression property="opacity">Math.floor(time * 10) % 2</expression>
+    </shape>
+  </composition>
+  <audioMix>
+    <audioTrack id="ad" asset="a-voice" role="audio-description" mute="true"/>
+  </audioMix>
+</scene>

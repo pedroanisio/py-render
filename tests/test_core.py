@@ -273,3 +273,146 @@ def test_gradient_paint(tmp_path):
     r = Renderer.open(scene(tmp_path, body, head=paints))
     left, mid, right = px(r, 0, 2, 50)[0], px(r, 0, 50, 50)[0], px(r, 0, 97, 50)[0]
     assert left < 12 and 115 < mid < 140 and right > 243
+
+
+# ---------------------------------------------------------------- perspective, motion blur, time-shifted renders
+def test_projective_warp_matches_affine_when_affine():
+    from scenerender.raster import Buf, warp_projective
+    src = Buf(np.zeros((10, 10, 4), np.float32), 0, 0)
+    src.px[2:8, 2:8] = 1.0
+    H = np.array([[2.0, 0, 5], [0, 2.0, 5], [0, 0, 1]])
+    out = warp_projective(src, H, (0, 0, 40, 40))
+    full = out.region((0, 0, 40, 40))
+    assert full[15, 15, 3] == pytest.approx(1.0) and full[3, 3, 3] == 0.0
+
+
+def test_projective_node_path(tmp_path, monkeypatch):
+    body = '<shape id="s" shape="rect" width="40" height="40" x="30" y="30" fill="#FFFFFFFF" threeD="true"/>'
+    r = Renderer.open(scene(tmp_path, body))
+    # A camera hook that returns a keystone (projective) matrix: the top edge shrinks.
+    K = np.array([[1, 0, 0], [0, 1, 0], [0, 0.01, 1.0]])
+    r.rc.hooks["camera"] = lambda rc, el, M, ctx: K @ M
+    img = r.frame_rgb(0)
+    assert img[33, 33, 0] == 255            # centre (50,50) projects to (33.3, 33.3)
+    assert img[60, 60, 0] == 0              # the unwarped box would cover this; the projected one doesn't
+
+
+def test_node_motion_blur_on_and_off(tmp_path):
+    body = """<shape id="s" shape="rect" width="10" height="10" y="45" motionBlur="on" fill="#FFFFFFFF">
+      <animate property="x"><key time="0" value="0"/><key time="1" value="100"/></animate>
+    </shape>"""
+    txt = open(scene(tmp_path, body)).read().replace('linearLight="false"', 'linearLight="false" motionBlurSamples="8"')
+    p = tmp_path / "mb.xml"
+    p.write_text(txt)
+    r = Renderer.open(str(p))
+    row = r.frame_rgb(0.5)[50, :, 0]
+    assert 0 < row[48] < 255 and (row > 0).sum() > 12        # smeared along x
+    p.write_text(txt.replace('motionBlur="on"', 'motionBlur="off"').replace('linearLight="false"', 'linearLight="false" motionBlur="true"'))
+    r2 = Renderer.open(str(p))
+    row2 = r2.frame_rgb(0.5)[50, :, 0]
+    assert (row2 == 255).sum() == 10                          # excluded from the shutter: sharp
+
+
+def test_render_node_at_other_time(tmp_path):
+    body = """<shape id="s" shape="rect" width="10" height="10" fill="#FFFFFFFF">
+      <animate property="x"><key time="0" value="0"/><key time="1" value="80"/></animate>
+    </shape>"""
+    r = Renderer.open(scene(tmp_path, body))
+    out = r.rc.render_node_at(r.doc.ids["s"], 1.0, Ctx(t=0, comp_t=0))
+    assert out.buf.x0 >= 75
+
+
+def test_echo_tail_outlives_window_and_opacity_folds(tmp_path):
+    body = """<shape id="s" shape="rect" width="10" height="10" y="45" end="1" opacity="0.5" effects="fx-echo" fill="#FFFFFFFF">
+      <animate property="x"><key time="0" value="0"/><key time="1" value="90"/></animate>
+    </shape>"""
+    tail = '<effects><effect id="fx-echo" type="echo" samples="5" frequency="10" amount="0.1"/></effects>'
+    p = scene(tmp_path, body)
+    txt = open(p).read().replace("</composition>", "</composition>\n  " + tail)
+    q = tmp_path / "echo.xml"
+    q.write_text(txt)
+    r = Renderer.open(str(q))
+    during = r.frame_rgb(0.95)[50, :, 0]
+    assert 128 in during and during.max() < 200             # 50 % opacity folded into every copy (overlaps stack)
+    after = r.frame_rgb(1.15)[50, :, 0]
+    assert after.max() > 0                                   # tail still visible after end="1"
+    assert r.frame_rgb(1.6)[50, :, 0].max() == 0             # ...but only for (samples-1)/frequency
+
+
+def test_working_primaries_round_trip(tmp_path):
+    body = '<shape id="s" shape="rect" width="100" height="100" fill="#C03020FF"/>'
+    head = '<colorManagement workingSpace="acescg"/>'
+    p = scene(tmp_path, body, head=head)
+    txt = open(p).read().replace('linearLight="false"', 'linearLight="true"')
+    q = tmp_path / "wp.xml"
+    q.write_text(txt)
+    r = Renderer.open(str(q))
+    assert r.rc.working_primaries not in (None, "srgb")
+    finish = r.rc.hooks.pop("finish", None)
+    buf = r.rc.render_frame(0).px[50, 50]          # the composite, before the output transform
+    assert abs(buf[0] - 0.5271) > 0.01            # composited in ACEScg, not in linear sRGB
+    if finish is not None:
+        r.rc.hooks["finish"] = finish
+    assert px(r, 0, 50, 50) == pytest.approx((0xC0, 0x30, 0x20), abs=2)   # and back to the same sRGB colour
+
+
+def test_mesh_gradient_is_bicubic_and_hits_grid_colours(tmp_path):
+    paints = """<paints><meshGradient id="m" rows="3" cols="3" interpolationSpace="srgb">
+      <point row="0" col="0" color="#000000FF"/><point row="0" col="1" color="#000000FF"/><point row="0" col="2" color="#000000FF"/>
+      <point row="1" col="0" color="#000000FF"/><point row="1" col="1" color="#FFFFFFFF"/><point row="1" col="2" color="#000000FF"/>
+      <point row="2" col="0" color="#000000FF"/><point row="2" col="1" color="#000000FF"/><point row="2" col="2" color="#000000FF"/>
+    </meshGradient></paints>"""
+    body = '<shape id="s" shape="rect" width="100" height="100" fill="url(#m)"/>'
+    r = Renderer.open(scene(tmp_path, body, head=paints))
+    img = r.frame_rgb(0)
+    assert img[50, 50, 0] > 245                          # passes through the centre point's colour
+    row = img[50, 50:100, 0].astype(int)
+    assert (np.diff(row) <= 1).all()                     # smooth falloff to the edge
+    # bicubic (Catmull-Rom) is not the bilinear tent: a quarter of the way out it stays brighter
+    assert img[50, 62, 0] > 0.75 * 255 * 1.02
+
+
+def test_param_validation(tmp_path):
+    from scenerender.document import SceneError
+    head = """<parameters>
+      <param id="title" type="string" default="Hi" maxLength="5" pattern="[A-Za-z ]+"/>
+      <param id="tone" type="enum" default="bold" options="calm,bold"/>
+      <param id="speed" type="number" default="1" min="0.5" max="2"/>
+    </parameters>"""
+    p = scene(tmp_path, '<shape id="s" shape="rect" width="1" height="1"/>', head=head)
+    load(p)
+    for bad in ({"title": "Too long"}, {"title": "abc1"}, {"tone": "loud"}, {"speed": "3"}, {"speed": "x"}):
+        with pytest.raises(SceneError):
+            load(p, params=bad)
+    assert load(p, params={"tone": "calm", "speed": "2"}).params["tone"] == "calm"
+
+
+def test_spatial_tangents_and_roving():
+    import types
+    def key(t, v, **a):
+        return anim.Key(t, tuple(map(float, v)), "", "linear", types.SimpleNamespace(get=lambda n, d=None: a.get(n, d)))
+    # A curved path: out tangent up, in tangent up -> the midpoint bulges above the straight line.
+    k = [key(0, (0, 0), spatialOut="0,-100"), key(1, (100, 0), spatialIn="0,-100")]
+    x, y = anim.sample(k, 0.5)
+    assert x == pytest.approx(50, abs=1) and y < -50
+    # Roving: the middle key is retimed so speed is constant (distance 10 then 90 -> time 0.1).
+    r = anim.apply_roving([key(0, (0, 0)), key(0.5, (10, 0), roving="true"), key(1, (100, 0))])
+    assert r[1].time == pytest.approx(0.1)
+
+
+def test_adaptive_motion_blur_skips_still_frames(tmp_path):
+    body = """<shape id="s" shape="rect" width="10" height="10" y="45" fill="#FFFFFFFF">
+      <animate property="x"><key time="1" value="0"/><key time="2" value="100"/></animate>
+    </shape>"""
+    txt = open(scene(tmp_path, body)).read().replace('linearLight="false"', 'linearLight="false" motionBlur="true" motionBlurSamples="8"')
+    q = tmp_path / "amb.xml"
+    q.write_text(txt)
+    r = Renderer.open(str(q))
+    calls = []
+    real = r.rc.render_frame
+    r.rc.render_frame = lambda t, f=0: calls.append(t) or real(t, f)
+    r.frame_rgb(0.3)                      # still: only the shutter's end samples are rendered
+    assert len(calls) == 2
+    calls.clear()
+    r.frame_rgb(1.5)                      # moving: every sample
+    assert len(calls) == 8

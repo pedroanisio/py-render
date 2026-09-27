@@ -31,9 +31,9 @@ scene.xml ─ document.load ─▶ prepared lxml tree ─ RenderContext.render_f
 | `registry.py` | Extension registries + support levels (`full`/`partial`/`none`). Unknown features warn once and are skipped. |
 | `nodes/`, `assets/`, `effects/`, `transitions/` | Handlers, auto-imported by `registry.load_plugins()`: core nodes, particles, 2.5D camera/object3D; all asset kinds; 80 effects; 35 transitions. |
 | `blend.py`, `masks.py`, `layout.py`, `constraints.py` | 35 blend modes; masks and track mattes; group flex layout; transform constraints. |
-| `assets/text.py`, `text_animators.py`, `captions.py` | Pango text layout, range selectors + 24 presets, text on path; caption burn-in and SRT/VTT sidecars. |
+| `assets/text.py`, `text_animators.py`, `captions.py` | Pango text layout, range selectors + 24 presets, text on path; caption burn-in (plain, ASS, TTML/IMSC, SCC/CEA-608), transcription caches, SRT/VTT sidecars; per-letter 3D projects through the camera API. |
 | `modifiers.py`, `deform.py`, `physics.py`, `camera.py` | Shape modifiers; tile deformers (hook `deform`); seekable rigid-body sim (hook `physics`); 2.5D projection (hook `camera`). |
-| `audio/` | Mixer (tracks, buses, ducking, BS.1770 normalisation, true-peak limiter), audio effects, amplitude envelopes for links/expressions. |
+| `audio/` | Mixer (tracks, buses, ducking, BS.1770 / dynamic normalisation, true-peak limiter), audio effects, `spectral.py` (phase vocoder, pitch shift, spectral gate), `spatial.py` (surround VBAP, ambisonics), amplitude envelopes for links/expressions. |
 | `color.py` | Colour management "finish" hook: exposure, looks, tone mapping, output colour space/transfer. |
 | `output.py`, `cli.py`, `coverage.py` | `<output>` rendering via ffmpeg (all codecs, posters, sidecars, parallel/resumable); CLI; support report. |
 
@@ -59,6 +59,22 @@ All signatures are in the `registry.py` docstring. Essentials:
 * **Unsupported cases**: `registry.warn_once(category, name, msg)` and degrade gracefully.
 * Register with a truthful level: `@EFFECTS.register("glow", level=FULL)`; use `PARTIAL`
   with a `note` when something is approximated.
+
+## Core APIs for handlers
+
+* `rc.render_node_at(el, t, ctx, effects=False) -> Out | None`: el rendered at composition time `t`
+  in its own place, its effect stack skipped (temporal effects: echo, pixel-motion-blur, posterize-time).
+* `rc.render_node(el, ctx, PM, box, force=True)`: render any node (sources for mattes, displacement, luma).
+* Projective matrices: a node matrix may be a full 3×3 homography (bottom row ≠ 0 0 1), e.g. from the
+  `camera` hook. The compositor then draws the node flat at a matching resolution, runs its
+  deform/masks/effects there, and warps the tile (`raster.warp_projective`). Hooks may return `None`
+  to cull a node (behind the camera).
+* `scenerender.gl`: one headless moderngl context per process (`gl.context()`, `gl.available()`,
+  texture/framebuffer helpers, `reset_after_fork()` for workers). Raise/handle `gl.GLUnavailable`.
+* Motion blur: `rc.mb_center` is the frame's centre time while the Renderer supersamples; node
+  `motionBlur="off"` nodes are drawn at it, `motionBlur="on"` nodes supersample themselves when the
+  project has motion blur off.
+* `layout` baseline alignment calls `assets.text.first_baseline(rc, asset, ctx) -> float` when present.
 
 ## Pinned rules (schema leaves these open)
 

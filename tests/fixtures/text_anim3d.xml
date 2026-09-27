@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Text animators: variable-font weight wave (Inter wght axis) with continuous advances, and
+     per-letter 3D rotation (rotationY, rotationX, zDepth) through the default camera. -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="3" seed="2" background="#101820FF"/>
+  <assets>
+    <text id="t-var" width="1100" height="120" size="96" font="Inter" weight="300" color="#F2F2F2FF" wrap="none"
+          text="VARIABLE WEIGHT"/>
+    <text id="t-3d" width="1100" height="130" size="110" font="DejaVu Sans" weight="700" color="#FFC94AFF"
+          strokeColor="#7A4B00FF" strokeWidth="3" wrap="none" align="center" text="ROTATE 3D"/>
+    <text id="t-depth" width="1100" height="100" size="72" font="DejaVu Sans" color="#7FD1FFFF" wrap="none"
+          align="center" text="DEPTH WAVE"/>
+  </assets>
+  <composition>
+    <layer id="l-var" asset="t-var" x="90" y="60">
+      <textAnimator unit="character" shape="smooth" start="0" end="40" variation="wght 900">
+        <animate property="offset"><key time="0" value="-40"/><key time="3" value="100"/></animate>
+      </textAnimator>
+    </layer>
+    <layer id="l-3d" asset="t-3d" x="90" y="260">
+      <textAnimator unit="character" shape="ramp-down" start="0" end="100" rotationY="-80">
+        <animate property="offset"><key time="0" value="-100"/><key time="2.5" value="100"/></animate>
+      </textAnimator>
+      <textAnimator unit="character" shape="triangle" start="30" end="70" rotationX="45"/>
+    </layer>
+    <layer id="l-depth" asset="t-depth" x="90" y="480">
+      <textAnimator unit="character" shape="smooth" start="0" end="50" zDepth="-400">
+        <animate property="offset"><key time="0" value="-50"/><key time="3" value="100"/></animate>
+      </textAnimator>
+    </layer>
+  </composition>
+</scene>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- First-order ambisonics (ACN/SN3D): pan -1 = azimuth +30 deg, pan -2 = 180 deg. -->
+<scene version="1.1">
+  <project width="64" height="36" fps="10" duration="1"/>
+  <assets>
+    <audio id="tone" src="media/audio_tone440.wav" channels="1"/>
+  </assets>
+  <composition/>
+  <audioMix sampleRate="48000" channels="4" channelLayout="ambisonic-1">
+    <bus id="spin" pan="1"/>
+    <audioTrack id="a30" asset="tone" pan="-1"/>
+    <audioTrack id="back" asset="tone" pan="-2"/>
+    <audioTrack id="rot" asset="tone" pan="0" bus="spin"/>
+  </audioMix>
+</scene>

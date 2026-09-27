@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- fitToDuration: audio_bars.wav = four 2 s bars at 120 bpm (300, 400, 500, 700 Hz) + a 0.5 s
+     700 Hz ring-out; the project is 13.3 s long (tests/test_audio_full.py). -->
+<scene version="1.1">
+  <project width="64" height="36" fps="10" duration="13.3"/>
+  <assets>
+    <audio id="bars" src="media/audio_bars.wav" bpm="120"/>
+  </assets>
+  <composition/>
+  <audioMix sampleRate="48000" channels="1">
+    <audioTrack id="music" asset="bars" role="music" fitToDuration="true"/>
+  </audioMix>
+</scene>

@@ -114,15 +114,36 @@ class Params:
         extra = f"{self.n('seed', 0)}:{self.ctx.frame if temporal else ''}"
         return np.random.default_rng(self.rc.ev.seed_for(self.el, extra))
 
+    def param(self, name, default=0.0):
+        """Named param default, overridden/animated by a property on the effect.
+
+        The XSD allows animation of arbitrary property names, but param children
+        themselves have no animation children. Both paths use the evaluator.
+        """
+        value = default
+        for child in self.el:
+            if child.tag == "param" and self.rc.ev.str(child, "name", self.ctx) == name:
+                value = self.rc.ev.str(child, "value", self.ctx, str(default))
+        if isinstance(default, str):
+            return self.rc.ev.str(self.el, name, self.ctx, value)
+        try:
+            value = float(value)
+        except (ValueError, TypeError):
+            value = default
+        return self.rc.ev.num(self.el, name, self.ctx, value)
+
 
 def display_rgb(rc, px):
+    """Straight, display-referred sRGB colour of a working-space tile (for display-referred operations)."""
+    from ..raster import from_working_primaries
     rgb, a = straight(px)
-    return (linear_to_srgb(rgb) if rc.linear else rgb), a
+    return (linear_to_srgb(from_working_primaries(rgb)) if rc.linear else rgb), a
 
 
 def from_display(rc, buf, rgb, a):
+    from ..raster import to_working_primaries
     rgb = np.clip(rgb, 0, 1)
-    return Buf(premul(srgb_to_linear(rgb) if rc.linear else rgb, np.clip(a, 0, 1)), buf.x0, buf.y0)
+    return Buf(premul(to_working_primaries(srgb_to_linear(rgb)) if rc.linear else rgb, np.clip(a, 0, 1)), buf.x0, buf.y0)
 
 
 def result(buf, px):
@@ -160,8 +181,9 @@ def sample(px, x, y, mode="transparent"):
         x, y = np.mod(x, w), np.mod(y, h)
     elif mode == "clamp":
         x, y = np.clip(x, 0, w - 1), np.clip(y, 0, h - 1)
-    x0, y0 = np.floor(x).astype(np.int64), np.floor(y).astype(np.int64)
-    fx, fy = x - x0, y - y0
+    x, y = np.asarray(x, np.float32), np.asarray(y, np.float32)
+    x0, y0 = np.floor(x).astype(np.int32), np.floor(y).astype(np.int32)
+    fx, fy = x - x0.astype(np.float32), y - y0.astype(np.float32)
     out = np.zeros(np.broadcast_shapes(np.shape(x), np.shape(y)) + (px.shape[-1],), np.float32)
     for dx, dy, weight in ((0, 0, (1-fx)*(1-fy)), (1, 0, fx*(1-fy)),
                            (0, 1, (1-fx)*fy), (1, 1, fx*fy)):
@@ -174,6 +196,34 @@ def sample(px, x, y, mode="transparent"):
                 weight = weight * ((ix >= 0) & (ix < w) & (iy >= 0) & (iy < h))
         out += v * weight[..., None]
     return out
+
+
+def affine_sample(px, matrix, shape=None):
+    """Native Pillow float bilinear affine sampling, with transparent padding.
+
+    matrix maps output pixel indices to input pixel indices (not pixel centres).
+    Each float channel remains unquantized; this is the same premultiplied
+    bilinear model as sample, but avoids four full-frame NumPy gathers per tap.
+    """
+    return affine_sampler(px)(matrix, shape)
+
+
+def affine_sampler(px):
+    """Prepare immutable float channels once for a multi-tap affine integral."""
+    from PIL import Image
+    channels = [Image.fromarray(np.pad(px[...,c],1)) for c in range(px.shape[-1])]
+
+    def warp(matrix, shape=None):
+        h, w = px.shape[:2] if shape is None else shape
+        m = np.asarray(matrix, np.float64)[:2].copy()
+        m[:, 2] += 1.5-m[:, :2] @ np.array([.5,.5])
+        data = tuple(m.ravel())
+        out = np.empty((h,w,len(channels)),np.float32)
+        for c, channel in enumerate(channels):
+            out[...,c] = np.asarray(channel.transform((w,h),Image.Transform.AFFINE,data,
+                                                       resample=Image.Resampling.BILINEAR,fillcolor=0))
+        return out
+    return warp
 
 
 def shifted(px, dx, dy):
@@ -237,11 +287,7 @@ def value_noise(x, y, seed):
 
 
 def source_buf(rc, e, ctx, node=None):
-    """Render a second-input node at the root transform; reject recursive references.
-
-    Nested parent transforms are intentionally not reconstructed. The caller aligns
-    the resulting tile in frame space. Out opacity is applied to its returned pixels.
-    """
+    """Render a second input in its own parent frame; guard recursive references."""
     sid = rc.ev.str(e, "source", ctx)
     src = rc.doc.ids.get(sid)
     if src is None:
@@ -254,7 +300,13 @@ def source_buf(rc, e, ctx, node=None):
         return None
     active.add(sid)
     try:
-        out = rc.render_node(src, ctx, rc.root_matrix, (rc.doc.width, rc.doc.height))
+        parent = src.getparent()
+        root = parent is None or parent.tag in ("composition", "symbol", "symbols", "scene")
+        pm = rc.root_matrix if root else rc.world_matrix(parent, ctx)
+        box = (rc.doc.width, rc.doc.height)
+        if not root:
+            box = rc.node_size(parent, ctx, box)
+        out = rc.render_node(src, ctx, pm, box, force=True)
         return None if out is None else result(out.buf, out.buf.px * out.opacity)
     finally:
         active.remove(sid)

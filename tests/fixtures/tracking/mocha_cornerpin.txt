@@ -1,0 +1,46 @@
+Adobe After Effects 6.0 Keyframe Data
+
+	Units Per Second	25
+	Source Width	1920
+	Source Height	1080
+	Source Pixel Aspect Ratio	1
+	Comp Pixel Aspect Ratio	1
+
+Effects	CC Power Pin #1	Top Left #2
+	Frame	X pixels	Y pixels	
+	0	800	400	
+	1	801	400	
+	2	802	400	
+
+Effects	CC Power Pin #1	Top Right #3
+	Frame	X pixels	Y pixels	
+	0	1100	400	
+	1	1101	400	
+	2	1102	400	
+
+Effects	CC Power Pin #1	Bottom Left #4
+	Frame	X pixels	Y pixels	
+	0	800	700	
+	1	801	700	
+	2	802	700	
+
+Effects	CC Power Pin #1	Bottom Right #5
+	Frame	X pixels	Y pixels	
+	0	1100	700	
+	1	1101	700	
+	2	1102	700	
+
+Transform	Position
+	Frame	X pixels	Y pixels	Z pixels	
+	0	960	540	0	
+	1	970	545	0	
+	2	980	550	0	
+
+Transform	Anchor Point
+	Frame	X pixels	Y pixels	Z pixels	
+	0	960	540	0	
+	1	960	540	0	
+	2	960	540	0	
+
+
+End of Keyframe Data

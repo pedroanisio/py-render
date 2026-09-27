@@ -7,7 +7,7 @@ import numpy as np
 
 from . import (Params, display_rgb, from_display, luma, morphology, premul, result,
                smoothstep, source_buf, straight)
-from ..registry import EFFECTS, FULL, PARTIAL
+from ..registry import EFFECTS, FULL
 
 
 def _despill(rgb, key, amount):
@@ -40,7 +40,7 @@ def luma_key(rc, e, buf, ctx, node):
     return result(buf, premul(rgb, a*matte))
 
 
-@EFFECTS.register("difference-key", level=PARTIAL, note="soft RGB distance from root-rendered source plate; transparent plate leaves pixels intact")
+@EFFECTS.register("difference-key", level=FULL, note="frame-aligned difference plate in real parent transform; tolerance/softness and plate opacity")
 def difference_key(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
     src = source_buf(rc, e, ctx, node)
@@ -62,17 +62,36 @@ def spill_suppress(rc, e, buf, ctx, node):
     return from_display(rc, buf, _despill(rgb, key, p.n("spill", .5)*p.n("amount", 1)), a)
 
 
-@EFFECTS.register("matte-choke", level=PARTIAL, note="circular alpha erosion; negative amount dilates with diffused interior colours")
+@EFFECTS.register("matte-choke", level=FULL, note="positive choke erodes, negative spreads; gray-level softness and iterative choke/spread")
 def matte_choke(rc, e, buf, ctx, node):
+    """Simple Choker at softness=0; positive amount erodes, negative spreads.
+
+    softness controls preblur sigma (softness*abs(amount)) and the surviving
+    gray-level transition width about 50% alpha; iterations repeats the stage.
+    Zero choke is identity. Spread carries neighbouring straight colour.
+    """
     p = Params(rc, e, ctx)
     amount = p.d("amount", 1)
-    b = buf.pad(math.ceil(-amount+1)) if amount < 0 else buf
+    if amount == 0:
+        return buf.copy()
+    iterations = max(1,min(32,round(p.param("iterations",1))))
+    b = buf.pad(math.ceil(-amount*iterations+1)) if amount < 0 else buf
     rgb, a = straight(b.px)
-    new_alpha = morphology(a[..., 0], abs(amount), amount < 0)[..., None]
+    from . import gaussian
+    new_alpha = a[...,0].copy()
+    softness = np.clip(p.n("softness",.1),0,1)
+    for _ in range(iterations):
+        new_alpha = morphology(new_alpha,abs(amount),amount < 0)
+        # Gray-level softness rounds the choke's hard threshold without moving
+        # the 50% contour. Zero is Simple Choker; one retains all gray levels.
+        if softness:
+            new_alpha = gaussian(new_alpha[...,None],softness*abs(amount))[...,0]
+            new_alpha = np.clip((new_alpha-.5)/max(softness,1e-6)+.5,0,1)
+    new_alpha = new_alpha[...,None]
     if amount < 0:
         # Carry colours into newly grown coverage instead of creating black fringes.
         from . import gaussian
-        spread = gaussian(b.px, max(.3, abs(amount)))
+        spread = gaussian(b.px, max(.3, abs(amount)*iterations))
         spread_rgb, _ = straight(spread)
         rgb = np.where(a > 1e-6, rgb, spread_rgb)
     return result(b, premul(rgb, new_alpha))

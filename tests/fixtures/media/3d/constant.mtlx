@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<materialx version="1.39">
+  <open_pbr_surface name="S" type="surfaceshader">
+    <input name="base_color" type="color3" value="0.1, 0.8, 0.2"/>
+    <input name="base_metalness" type="float" value="0.0"/>
+    <input name="specular_roughness" type="float" value="0.4"/>
+    <input name="emission_color" type="color3" value="0, 0, 0"/>
+  </open_pbr_surface>
+  <surfacematerial name="M" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="S"/>
+  </surfacematerial>
+</materialx>

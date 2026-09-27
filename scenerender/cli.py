@@ -1,4 +1,7 @@
-"""Command line: scenerender {render,still,validate,coverage,info} SCENE [options]."""
+"""Command line: scenerender {render,still,check,validate,coverage} SCENE [options].
+
+Exit status of render: 0 ok, 1 an output failed, 2 nothing to render, 4 an output failed QA
+(accessibility/safe-area checks at level error). check: 0 passed (warnings allowed), 4 errors."""
 from __future__ import annotations
 
 import argparse
@@ -54,6 +57,15 @@ def cmd_render(args) -> int:
     return render_outputs(r, args)
 
 
+def cmd_check(args) -> int:
+    from .qa import EXIT_QA, check
+    findings, text = check(args.scene, scale=args.scale, t0=args.t0, t1=args.t1,
+                           open_kwargs=dict(params=_params(args), variant=args.variant, layout=args.layout,
+                                            assets_dir=args.assets_dir))
+    print(text)
+    return EXIT_QA if any(f.level == "error" for f in findings) else 0
+
+
 def cmd_validate(args) -> int:
     from . import document
     try:
@@ -97,7 +109,17 @@ def main(argv=None) -> int:
     p.add_argument("--jobs", type=int, default=0, help="parallel frame workers (0 = CPU count)")
     p.add_argument("--no-audio", action="store_true")
     p.add_argument("--crf", type=int)
+    p.add_argument("--publish", action="store_true",
+                   help="upload to non-file <destination>s (s3, gcs, azure-blob, http-put, sftp, webhook)")
+    p.add_argument("--no-qa", action="store_true", help="skip accessibility and safe-area checks")
     p.set_defaults(fn=cmd_render)
+
+    p = sub.add_parser("check", help="run the QA checks (flashes, contrast, safe areas, captions) on a quick low-res pass")
+    _common(p)
+    p.set_defaults(scale=0.25)
+    p.add_argument("--from", dest="t0", type=float, default=None)
+    p.add_argument("--to", dest="t1", type=float, default=None)
+    p.set_defaults(fn=cmd_check)
 
     p = sub.add_parser("validate", help="validate against the XSD")
     p.add_argument("scene")

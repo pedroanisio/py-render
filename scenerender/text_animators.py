@@ -37,11 +37,37 @@ Property offsets and combine
 Additive (value · s): x, y, rotation, skew, strokeWidth, blur, baselineShift (px, up),
 tracking (1/1000 em, accumulated along the line like AE tracking and re-aligned),
 lineSpacing (px per line index), characterOffset (shifts letters within a-z / A-Z and
-digits within 0-9), anchorX/anchorY (move the pivot), zDepth (ignored),
-rotationX/rotationY (flat: scale by the cosine).
+digits within 0-9), anchorX/anchorY (move the pivot), zDepth (px, > 0 away from the
+viewer), rotationX / rotationY (degrees; > 0 tilts the unit's top edge / turns its right
+edge away, like threeD layers).
 Factors (1 + (value - 1) · s): scale, scaleX, scaleY, opacity.
 fill / stroke mix the unit's colour towards the value by s; variation interpolates
-font axes from the run's own values (wght from weight, wdth 100) to the value.
+font axes from the run's own values (wght from weight, wdth 100, opsz from the size,
+others 0) to the value.
+
+Variable-font variation: a line with animated axes is reshaped as one Pango layout with
+per-range font variations (attributes), so every unit takes the advance its axes give it
+and the following units move along (continuous advances, no gaps or overlaps); shaping
+and kerning are kept inside every run of equal axes (HarfBuzz cannot kern across two font
+instances). The line keeps its static line break and alignment (start / center / end of
+the reshaped width inside the static line box; justified lines align to the start), as
+After Effects never re-wraps paragraph text for animators.
+
+Per-unit 3D (zDepth, rotationX, rotationY): as in After Effects, a text layer whose
+animators use any of them is a 3D layer. Every unit is a plane in the camera space of
+scenerender.camera (document px, origin at the frame centre, +Y up, +Z toward the viewer):
+its 2D offsets (x, y, rotation, scale, skew) apply first, then the plane is pushed to
+zDepth and rotated about the unit's pivot, X then Y, and projected through the active
+camera (camera.camera_at; with no active camera the default 50 mm camera, which leaves the
+zDepth 0 plane unchanged). Units without 3D offsets form the layer plane at zDepth 0,
+projected the same way. When the layer is itself projected by the compositor (threeD, or
+inside a threeD group) the units use the default camera, i.e. perspective within the
+layer plane, and the compositor then projects that plane. If scenerender.camera offers no
+camera API, a default perspective is used (focal length = frame diagonal, principal point
+at the frame centre, eye at z = f). Each unit is drawn flat on its own tile (fill, stroke,
+shadow, blur) and warped with the exact homography of its plane (raster.warp_projective);
+units reaching behind the camera's near plane are culled. Tiles are composited back to
+front by the camera depth of their pivot (painter's algorithm).
 combine=add sums additive offsets and multiplies factors; multiply multiplies the
 accumulated value of each property by 1 + (value - 1) · s (a mask when value is 0);
 replace moves the accumulated value towards the value by s.
@@ -96,7 +122,7 @@ import numpy as np
 from . import curves
 from .assets import text as T
 from .document import ln
-from .registry import FEATURES, FULL, PARTIAL, TEXT_ANIMATORS, warn_once
+from .registry import FEATURES, FULL, TEXT_ANIMATORS, warn_once
 from .values import paint_ref, parse_color
 
 ADD = {"x", "y", "zDepth", "rotation", "rotationX", "rotationY", "skew", "strokeWidth", "tracking", "lineSpacing",
@@ -149,10 +175,10 @@ for _name in PRESETS:
     TEXT_ANIMATORS.register(_name, level=FULL, note="expansion documented in scenerender/text_animators.py")(None)
 for _sel in ("range", "wiggly", "expression"):
     TEXT_ANIMATORS.register(f"selector:{_sel}", level=FULL)(None)
-TEXT_ANIMATORS.register("property:variation", level=PARTIAL,
-                        note="units with animated axes are laid out on their own (no kerning across the unit edge)")(None)
-TEXT_ANIMATORS.register("property:zDepth", "property:rotationX", "property:rotationY", level=PARTIAL,
-                        note="flat: zDepth ignored, rotationX/Y scale by the cosine")(None)
+TEXT_ANIMATORS.register("property:variation", level=FULL,
+                        note="line reshaped with per-range font variations; continuous advances")(None)
+TEXT_ANIMATORS.register("property:zDepth", "property:rotationX", "property:rotationY", level=FULL,
+                        note="per-unit planes projected by the active camera, drawn with warp_projective")(None)
 FEATURES.declare("textAnimator", FULL)
 FEATURES.declare("textPath", FULL)
 
@@ -432,9 +458,6 @@ def evaluate(rc, block, anims, ctx) -> Anim | None:
                         vals[i] = cur / 100.0
                 base_s = vals
                 sel_q = None
-        for p in ("zDepth", "rotationX", "rotationY"):
-            if p in props:
-                warn_once("textAnimator", f"property:{p}", "drawn flat: zDepth ignored, rotationX/Y scale by the cosine")
         per_unit = {p for p in props if any(ln(c) == "expression" and c.get("property") == p for c in an)}
         static_vals = {p: _prop_value(rc, block, an, p, ctx, preset) for p in props if p not in per_unit}
         if preset_name == "highlight" and an.get("fill"):
@@ -628,10 +651,6 @@ def _sc(sx, sy):
 
 
 # ---------------------------------------------------------------- pieces
-_TRANSFORM_KEYS = ("x", "y", "rotation", "rotationX", "rotationY", "skew", "scale", "scaleX", "scaleY",
-                   "baselineShift", "lineSpacing", "anchorX", "anchorY")
-
-
 def _state_key(st: dict):
     out = []
     for k in sorted(st):
@@ -649,8 +668,11 @@ def _state_key(st: dict):
 def build_pieces(rc, block, states: list[dict] | None, owners=None, placer: _PathPlacer | None = None) -> list:
     """Pieces for per-cluster states (dicts of accumulated properties; None = neutral)."""
     n = len(block.clusters)
-    states = states or [{} for _ in range(n)]
-    owners = owners or [() for _ in range(n)]
+    states = list(states or [{} for _ in range(n)])
+    owners = list(owners or [() for _ in range(n)])
+    for i in range(1, n):
+        if block.is_shy(i):          # the break hyphen moves with the letter before it
+            states[i], owners[i] = states[i - 1], owners[i - 1]
     pieces = []
     baseline0 = next((l_.baseline for l_ in block.lines if not l_.hidden), 0.0)
     align = block.spec.b("align")
@@ -671,6 +693,8 @@ def build_pieces(rc, block, states: list[dict] | None, owners=None, placer: _Pat
             comp = {"center": -tr_total / 2, "end": -tr_total}.get(align, 0.0)
             for i in cl:
                 shifts[i] += comp
+        vx = (T.varied_positions(block, cl, [states[i].get("variation") for i in cl])
+              if any(states[i].get("variation") for i in cl) else None)
         split = has_tr or placer is not None
         groups: list[list[int]] = []
         prev_key = None
@@ -688,28 +712,164 @@ def build_pieces(rc, block, states: list[dict] | None, owners=None, placer: _Pat
             st = states[g[0]]
             a, b = g[0], g[-1]
             x0, x1 = block.span_x(a, b)
+            move = 0.0
+            if vx is not None:           # reshaped line: the unit's own advance and position
+                v0, v1 = min(vx[i][0] for i in g), max(vx[i][1] for i in g)
+                move, x0, x1 = v0 - x0, v0, v1
             px = (x0 + x1) / 2 + st.get("anchorX", 0.0)
             py = line.y + line.h / 2 + st.get("anchorY", 0.0)
             dx = st.get("x", 0.0) + shifts.get(a, 0.0)
             dy = st.get("y", 0.0) - st.get("baselineShift", 0.0) + st.get("lineSpacing", 0.0) * li
             sc = st.get("scale", 1.0)
-            sx = sc * st.get("scaleX", 1.0) * math.cos(math.radians(st.get("rotationY", 0.0)))
-            sy = sc * st.get("scaleY", 1.0) * math.cos(math.radians(st.get("rotationX", 0.0)))
             M = _tr(px + dx, py + dy) @ _rot(st.get("rotation", 0.0))
             if st.get("skew"):
                 M = M @ _skew(st["skew"])
-            M = M @ _sc(sx, sy) @ _tr(-px, -py)
+            M = M @ _sc(sc * st.get("scaleX", 1.0), sc * st.get("scaleY", 1.0)) @ _tr(-px, -py) @ _tr(move, 0.0)
             if placer is not None:
                 cx = (x0 + x1) / 2 + shifts.get(a, 0.0)
                 M = placer.matrix(line, cx, baseline0) @ _tr(-shifts.get(a, 0.0), 0) @ M
             var = st.get("variation")
+            z, rxd, ryd = st.get("zDepth", 0.0), st.get("rotationX", 0.0), st.get("rotationY", 0.0)
+            three = None
+            if abs(z) > 1e-6 or abs(rxd) > 1e-6 or abs(ryd) > 1e-6:
+                piv = M @ np.array([px - move, py, 1.0])        # the pivot where the unit is drawn
+                three = (z, rxd, ryd, float(piv[0]), float(piv[1]))
             pieces.append(T.Piece(
                 li, a, b, M, opacity=max(0.0, min(1.0, st.get("opacity", 1.0))),
                 fill=st.get("fill"), stroke=st.get("stroke"), stroke_add=st.get("strokeWidth", 0.0),
                 blur=max(0.0, st.get("blur", 0.0)), highlight=st.get("highlight"), mask=bool(st.get("mask")),
                 variation=tuple(sorted(var.items())) if var else None,
-                first=(gi == 0), last=(gi == len(groups) - 1)))
+                first=(gi == 0), last=(gi == len(groups) - 1), three_d=three))
     return pieces
+
+
+# ---------------------------------------------------------------- per-unit 3D
+def _in_plane(rc, layer) -> bool:
+    """The layer is itself projected as a plane by the compositor (threeD, in a collapsed 3D group,
+    or flattened into a threeD ancestor)."""
+    try:
+        from . import camera as CAM
+        return bool(CAM.is_threed(rc, layer) or CAM._flattening_ancestor(layer))
+    except (ImportError, AttributeError):
+        p = layer
+        while p is not None and isinstance(p.tag, str):
+            if p.get("threeD") == "true":
+                return True
+            p = p.getparent()
+        return False
+
+
+def _projector(rc, t: float, in_plane: bool = False):
+    """(frame_to_world(q_doc, z), project(P) -> (screen doc px, depth), near) for the camera filming
+    the units: the active camera, or the default camera when the layer is projected as a plane."""
+    try:
+        from . import camera as CAM
+        cam = CAM.build_camera(rc, None, t) if in_plane else CAM.camera_at(rc, t)
+        f2w = CAM.frame_to_world
+
+        def project(P):
+            C = cam.to_cam(P)
+            return cam.project_cam(C), (np.ones(C.shape[:-1]) if cam.ortho else C[..., 2])
+        return (lambda q, z: f2w(rc, q, z)), project, (-np.inf if cam.ortho else cam.near)
+    except (ImportError, AttributeError):
+        W, H = float(rc.doc.width), float(rc.doc.height)
+        f = math.hypot(W, H)
+
+        def f2w_default(q, z):
+            q = np.asarray(q, np.float64)
+            return np.stack([q[..., 0] - W / 2, H / 2 - q[..., 1], np.broadcast_to(-float(z), q.shape[:-1])], -1)
+
+        def project_default(P):
+            d = f - P[..., 2]
+            dd = np.maximum(d, 1e-9)
+            return np.stack([W / 2 + f * P[..., 0] / dd, H / 2 - f * P[..., 1] / dd], -1), d
+        return f2w_default, project_default, 0.1
+
+
+def _plane_rot(rxd: float, ryd: float) -> np.ndarray:
+    """rotationX (> 0: top edge away) then rotationY (> 0: right edge away), world axes."""
+    a = math.radians(-rxd)
+    ca, sa = math.cos(a), math.sin(a)
+    b = math.radians(ryd)
+    cb, sb = math.cos(b), math.sin(b)
+    return np.array([[cb, 0, sb], [0, 1, 0], [-sb, 0, cb]]) @ np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
+
+
+def homography(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    """3x3 H with dst ~ H @ src for 4 point pairs (exact solve)."""
+    A, rhs = [], []
+    for (x, y), (u, v) in zip(src, dst):
+        A += [[x, y, 1, 0, 0, 0, -u * x, -u * y], [0, 0, 0, x, y, 1, -v * x, -v * y]]
+        rhs += [u, v]
+    h = np.linalg.solve(np.array(A, np.float64), np.array(rhs, np.float64))
+    return np.append(h, 1.0).reshape(3, 3)
+
+
+def unit_homography(rc, block, M: np.ndarray, p, t: float, in_plane: bool = False):
+    """(H: flat frame px -> projected frame px, camera depth of the pivot) of a 3D piece, or None
+    when a corner is behind the near plane."""
+    f2w, project, near = _projector(rc, t, in_plane)
+    z, rxd, ryd, pvx, pvy = p.three_d
+    ln_ = block.lines[p.line]
+    x0, x1 = block.span_x(p.a, p.b)
+    x1 = max(x1, x0 + 1.0)
+    y0, y1 = ln_.y, ln_.y + max(ln_.h, 1.0)
+    L = M @ block.O
+    loc = np.array([[x0, y0, 1], [x1, y0, 1], [x1, y1, 1], [x0, y1, 1]], np.float64)
+    fr = loc @ (L @ p.T).T
+    fr = fr[:, :2] / fr[:, 2:3]
+    pv = L @ np.array([pvx, pvy, 1.0])
+    Ri = np.linalg.inv(rc.root_matrix)
+
+    def to_doc(q):
+        d = np.c_[q, np.ones(len(q))] @ Ri.T
+        return d[:, :2] / d[:, 2:3]
+    Pw = f2w(to_doc(fr), z)
+    pw = f2w(to_doc(pv[None, :2] / pv[2]), z)[0]
+    Pw = pw + (Pw - pw) @ _plane_rot(rxd, ryd).T
+    scr, depth = project(Pw)
+    if np.any(depth <= near):
+        return None
+    dp = float(project(pw[None])[1][0])
+    dst = np.c_[scr, np.ones(4)] @ rc.root_matrix.T
+    try:
+        return homography(fr, dst[:, :2] / dst[:, 2:3]), dp
+    except np.linalg.LinAlgError:
+        return None
+
+
+def render_3d(rc, block, M, ctx, pieces, clip, in_plane: bool = False):
+    """The flat pieces as the layer plane (zDepth 0, projected like the 3D units), the 3D pieces
+    warped one by one; composited back to front."""
+    from .blend import composite
+    from .raster import warp_projective
+    t = ctx.comp_t
+    flat = [p for p in pieces if p.three_d is None]
+    items = []
+    base = T.render_block(rc, block, M, ctx, flat, clip)
+    line0 = next((i for i, l_ in enumerate(block.lines) if not l_.hidden), 0)
+    ref = T.Piece(line0, 0, max(0, len(block.clusters) - 1), np.eye(3), three_d=(0.0, 0.0, 0.0, 0.0, 0.0))
+    hd0 = unit_homography(rc, block, M, ref, t, in_plane) if block.clusters else None
+    if base is not None and hd0 is not None:
+        H0 = hd0[0]
+        if not np.allclose(H0, np.eye(3), atol=1e-7):
+            base = warp_projective(base, H0, rc.frame_rect)
+        items.append((hd0[1], 0, base))
+    for i, p in enumerate(q for q in pieces if q.three_d is not None):
+        if p.opacity <= 1e-4:
+            continue
+        hd = unit_homography(rc, block, M, p, t, in_plane)
+        tile = None if hd is None else T.render_block(rc, block, M, ctx, [p], clip, decor=False)
+        if tile is not None:
+            items.append((hd[1], i + 1, warp_projective(tile, hd[0], rc.frame_rect)))
+    out = None
+    for _d, _i, buf in sorted((it for it in items if it[2] is not None), key=lambda it: (-it[0], it[1])):
+        out = buf.copy() if out is None else composite(out, buf, "normal", 1.0)
+    return out
+
+
+def _has_3d(rc, anims) -> bool:
+    return any(an.get(p) is not None or rc.ev._anims(an, p) for an in anims for p in ("zDepth", "rotationX", "rotationY"))
 
 
 def _neutral(A: Anim) -> bool:
@@ -739,7 +899,8 @@ def render_animated(rc, spec, M, ctx, layer, mods, clip):
             b2 = T.get_block(rc, substituted_spec(spec, block, subs), force=block)
             if len(b2.clusters) == len(block.clusters):
                 block = b2
-    if A is None and tp is None:
+    unit3d = bool(anims) and _has_3d(rc, anims)
+    if A is None and tp is None and not unit3d:
         key = ("text-tile", spec, np.round(M, 6).tobytes(), clip)
         hit = rc.cache.get(key)
         if hit is not None:
@@ -749,4 +910,6 @@ def render_animated(rc, spec, M, ctx, layer, mods, clip):
         return None if buf is None else buf.copy()
     placer = _PathPlacer(rc, tp, ctx, block) if tp is not None else None
     pieces = build_pieces(rc, block, A.st if A else None, A.owner if A else None, placer)
+    if unit3d:
+        return render_3d(rc, block, M, ctx, pieces, clip, _in_plane(rc, layer))
     return T.render_block(rc, block, M, ctx, pieces, clip)

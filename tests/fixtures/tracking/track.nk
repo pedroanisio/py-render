@@ -1,0 +1,83 @@
+#! /usr/local/Nuke13.2v5/libnuke-13.2.5.so -nx
+version 13.2 v5
+Root {
+ inputs 0
+ name /shots/sh010/comp/sh010_track_v003.nk
+ first_frame 1
+ last_frame 100
+ fps 24
+ format "1920 1080 0 0 1920 1080 1 HD_1080"
+ proxy_type scale
+}
+Read {
+ inputs 0
+ file_type exr
+ file /shots/sh010/plates/sh010_plate.####.exr
+ format "1920 1080 0 0 1920 1080 1 HD_1080"
+ last 100
+ origlast 100
+ origset true
+ name Read1
+ xpos 0
+ ypos -300
+}
+Tracker3 {
+ track1 {{curve x1 100 102 104} {curve x1 200 201 202}}
+ enable2 true
+ track2 {300 400}
+ name Tracker1
+ xpos 0
+ ypos -200
+}
+Tracker3 {
+ track1 {{curve L x1 0 x5 40 S x9 60 x13 20 R x17 30 x21 50 K x25 50 S x29 10 s-5 t2 u2 v0.5 x33 30} 0}
+ track2 {{curve C x0 0 1 0} {curve l L x1 0 x2 10}}
+ name Mixed
+ xpos 100
+ ypos -200
+}
+set N4f2a1c00 [stack 0]
+Tracker4 {
+ tracks { { 1 31 2 } 
+{ { 5 1 20 enable e 1 } 
+{ 3 1 75 name name 1 } 
+{ 2 1 58 track_x track_x 1 } 
+{ 2 1 58 track_y track_y 1 } 
+{ 2 1 63 offset_x offset_x 1 } 
+{ 2 1 63 offset_y offset_y 1 } 
+} 
+{ 
+ { {curve K x1 1} "track 1" {curve x10 500 510 520} {curve x10 600 590 580} {curve K x1 0} {curve K x1 0} } 
+ { {curve K x1 1} "track 2" {curve x10 700} {curve x10 800} {curve K x1 0} {curve K x1 0} } 
+} 
+}
+ reference_frame 10
+ center {1004 540}
+ selected_tracks 0
+ name Tracker2
+ xpos 0
+ ypos -100
+}
+Transform {
+ translate {{curve x1 0 10 20} {curve x1 0 -5 -10}}
+ rotate {{curve x1 0 15 30}}
+ scale {1.5 2}
+ center {960 540}
+ name Transform1
+ xpos 0
+ ypos 0
+}
+CornerPin2D {
+ to1 {{curve x1 100 110} {curve x1 100 100}}
+ to2 {{curve x1 900 910} 100}
+ to3 {900 700}
+ to4 {100 700}
+ invert false
+ from1 {0 0}
+ from2 {1920 0}
+ from3 {1920 1080}
+ from4 {0 1080}
+ name CornerPin1
+ xpos 0
+ ypos 100
+}

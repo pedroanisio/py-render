@@ -5,6 +5,10 @@ offsets) are scaled except dimensionless radial deformation strengths. The
 schema leaves warp details open: size is noise/wave wavelength, frequency
 multiplies spatial frequency, speed advances phase in cycles per second.
 Distortions retain tile bounds, except displacement which pads its support.
+Fractal controls: noiseType basic/turbulent/smooth/sharp/rocky/strings,
+octaves 1..12, scale (size fallback), evolution degrees plus speed turns/sec.
+Displacement param: turbulent/horizontal/vertical/twist/bulge; pinning 0..1.
+Heat-haze uses vertical anisotropy (.15) and ground falloff power (1).
 """
 from __future__ import annotations
 
@@ -13,7 +17,7 @@ import math
 import numpy as np
 
 from . import Params, center, grid, result, sample, source_buf, straight, value_noise
-from ..registry import EFFECTS, FULL, PARTIAL
+from ..registry import EFFECTS, FULL
 
 
 def _polar(p, buf):
@@ -57,7 +61,7 @@ def tile(rc, e, buf, ctx, node):
     return result(buf, sample(buf.px, sx, sy, "wrap"))
 
 
-@EFFECTS.register("displacement-map", level=PARTIAL, note="root-rendered source channels around neutral 0.5 displace frame-aligned pixels")
+@EFFECTS.register("displacement-map", level=FULL, note="source in its real parent frame, channels around 0.5, transparent map neutral")
 def displacement_map(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
     src = source_buf(rc, e, ctx, node)
@@ -72,34 +76,60 @@ def displacement_map(rc, e, buf, ctx, node):
         dx, dy = rgb[..., 0]-.5, rgb[..., 1]-.5
     else:
         from . import luma
-        v = a[..., 0] if channel == "alpha" else (luma(rgb) if channel == "luma" else rgb[..., {"red":0, "green":1, "blue":2}.get(channel, 0)])
+        v = np.where(a[..., 0] > 0, a[..., 0], .5) if channel == "alpha" else (luma(rgb) if channel == "luma" else rgb[..., {"red":0, "green":1, "blue":2}.get(channel, 0)])
         dx = dy = v-.5
     x, y = grid(b)
     return result(b, sample(b.px, x+dx*2*amount, y+dy*2*amount))
 
 
 def _noise_warp(rc, e, buf, ctx, heat=False):
+    from .fields import fractal
     p = Params(rc, e, ctx)
     x, y = grid(buf)
-    amount, size = p.d("amount", 1), max(.01, p.d("size", 1))
+    amount = p.d("amount", 1)
+    if amount == 0:
+        return buf.copy()
+    size = max(.01, p.param("scale", p.n("size", 1))*rc.scale)
     frequency = p.n("frequency", 1)/size
     seed = rc.ev.seed_for(e, str(p.n("seed", 0)))
-    t = ctx.t*p.n("speed", 1)
+    time = ctx.t*p.n("speed", 1)
+    evolution = p.param("evolution", 0)/360+time
     nx, ny = (x+buf.x0)*frequency, (y+buf.y0)*frequency
-    dx = (value_noise(nx, ny+t, seed)*2-1)*amount
-    dy = (value_noise(nx+37, ny+t, seed+7)*2-1)*amount
+    kind = p.param("noiseType", "basic")
+    octaves = p.param("octaves", 6)
     if heat:
-        dy *= .25
-        dx *= .5+.5*np.sin(ny*.3+t)
+        ny -= time  # rising refractive cells; independent boiling evolution
+    dx = (fractal(nx, ny, seed, octaves, evolution, kind)*2-1)*amount
+    dy = (fractal(nx+37, ny+17, seed+7, octaves, evolution, kind)*2-1)*amount
+    mode = p.param("displacement", "turbulent")
+    if mode == "horizontal" or heat:
+        dy *= p.param("vertical", .15 if heat else 0)
+    elif mode == "vertical":
+        dx *= 0
+    elif mode == "twist":
+        dx, dy = -dy, dx
+    elif mode == "bulge":
+        cx, cy = center(p, buf)
+        r = np.maximum(np.hypot(x-cx,y-cy),1)
+        dx, dy = dx*(x-cx)/r, dx*(y-cy)/r
+    if heat:
+        # Refraction grows towards the hot ground at the bottom of the tile.
+        envelope = np.clip((y+.5)/max(buf.h,1),0,1)**max(0,p.param("falloff", 1))
+        dx, dy = dx*envelope, dy*envelope
+    pin = np.clip(p.param("pinning", 0),0,1)
+    if pin:
+        edge = np.minimum.reduce([x, y, buf.w-1-x, buf.h-1-y])
+        fade = np.clip(edge/max(size,1),0,1)
+        dx, dy = dx*(1-pin+pin*fade), dy*(1-pin+pin*fade)
     return result(buf, sample(buf.px, x+dx, y+dy))
 
 
-@EFFECTS.register("turbulent-displace", level=PARTIAL, note="two smooth seeded lattice-noise displacement fields")
+@EFFECTS.register("turbulent-displace", level=FULL, note="evolving multi-octave fractal displacement; type/octaves/scale/evolution/pinning params")
 def turbulent_displace(rc, e, buf, ctx, node):
     return _noise_warp(rc, e, buf, ctx)
 
 
-@EFFECTS.register("heat-haze", level=PARTIAL, note="animated anisotropic noise refraction; no depth or temperature simulation")
+@EFFECTS.register("heat-haze", level=FULL, note="rising evolving fractal refraction, anisotropy and ground-distance falloff")
 def heat_haze(rc, e, buf, ctx, node):
     return _noise_warp(rc, e, buf, ctx, True)
 
@@ -155,10 +185,26 @@ def bulge(rc, e, buf, ctx, node):
     return result(buf, sample(buf.px, cx+(x-cx)*scale, cy+(y-cy)*scale))
 
 
-@EFFECTS.register("lens-distortion", level=PARTIAL, note="single-coefficient radial barrel/pincushion model normalized to tile size")
+@EFFECTS.register("lens-distortion", level=FULL, note="Brown-Conrady k1/k2/p1/p2; amount/100 default k1; cylindrical param")
 def lens_distortion(rc, e, buf, ctx, node):
+    """Inverse Brown-Conrady sampling; params k1=amount/100, k2=p1=p2=0.
+
+    Coordinates normalized by half max tile extent. cylindrical=1 limits radial
+    bending to x, cylindrical=2 to y. Zero coefficients are exactly identity.
+    """
     p = Params(rc, e, ctx)
-    x, y, cx, cy, r, theta = _polar(p, buf)
-    k = p.n("amount", 1)*.01
-    scale = 1+k*(r/max(buf.w, buf.h)*2)**2
-    return result(buf, sample(buf.px, cx+(x-cx)*scale, cy+(y-cy)*scale))
+    x, y, cx, cy, _, _ = _polar(p, buf)
+    norm = max(buf.w,buf.h)/2
+    u, v = (x-cx)/norm, (y-cy)/norm
+    k1, k2 = p.param("k1", p.n("amount",1)*.01), p.param("k2",0)
+    p1, p2 = p.param("p1",0), p.param("p2",0)
+    cylinder = round(p.param("cylindrical",0))
+    r2 = u*u if cylinder == 1 else v*v if cylinder == 2 else u*u+v*v
+    radial = k1*r2+k2*r2*r2
+    du = u*radial+2*p1*u*v+p2*(r2+2*u*u)
+    dv = v*radial+p1*(r2+2*v*v)+2*p2*u*v
+    if cylinder == 1:
+        dv = 0
+    elif cylinder == 2:
+        du = 0
+    return result(buf, sample(buf.px, x+norm*du, y+norm*dv))

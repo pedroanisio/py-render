@@ -1,20 +1,31 @@
-"""Texture, raster styles, and explicitly spatial temporal approximations.
+"""Raster styles and temporal sampling.
 
-Noise amount is a fraction of full scale (film grain uses 0.05*amount).
-Pixelate/mosaic/halftone size is the cell diameter in document pixels.
-Echo repeats the current tile at offsetX/Y with exponential decay; it never
-reads previous frames. Posterize-time holds only node x/y at frequency Hz,
-because the already-rendered pixels cannot be reconstructed at another time.
+Film grain is linear-light, separate emulsion channels with a bell-shaped
+exposure response (params red/green/blue strength, response exponent).
+Chromatic aberration: amount is lateral red/blue excursion at the far edge;
+longitudinal param is defocus sigma, channelScaleR/G/B and focusR/G/B tune it.
+Glitch: seeded block corruption, tearing, channel delay and quantisation.
+VHS: YIQ chroma bandwidth/delay, timebase jitter, head switching and RF noise.
+Halftone: screen=mono/cmyk, shape=round/line/square, channel angles C/M/Y/K
+(default 15/75/0/45 degrees) plus angle; size is screen period.
+Echo: samples copies including current, interval seconds (default 1/frequency),
+decay (default exp(-amount)), operator over/under/add/maximum/minimum/screen.
+Posterize-time samples all node pixels/properties at floor(t*frequency)/frequency.
+Temporal samples skip the node effect stack, as specified by render_node_at.
+They contain pre-opacity pixels: node opacity/visibility are compositor-level
+operations. Holding node opacity or retaining echoes after current-time culling
+requires the compositor changes described in the work-order return notes.
 """
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 
 from . import (Params, center, display_rgb, from_display, gaussian, grid, luma,
                over, premul, result, sample, shifted, straight)
-from ..registry import EFFECTS, FULL, PARTIAL
+from ..registry import EFFECTS, FULL
 
 
 @EFFECTS.register("noise", level=FULL, note="seeded per-frame uniform RGB or monochrome noise in encoded sRGB")
@@ -26,16 +37,21 @@ def noise(rc, e, buf, ctx, node):
     return from_display(rc, buf, rgb+random*p.n("amount", 1), a)
 
 
-@EFFECTS.register("film-grain", level=PARTIAL, note="seeded Gaussian grain, size-filtered and weighted by midtone luminance")
+@EFFECTS.register("film-grain", level=FULL, note="linear-light emulsion grain, per-channel exposure response, size and deterministic temporal seed")
 def film_grain(rc, e, buf, ctx, node):
+    from . import linear_pixels, working_pixels
     p = Params(rc, e, ctx)
-    rgb, a = display_rgb(rc, buf.px)
-    grain = p.rng().normal(0, 1, rgb.shape[:2]+(1,)).astype(np.float32)
-    sigma = max(0, (p.d("size", 1)-1)/2)
-    grain = gaussian(grain, sigma)
-    grain /= max(float(grain.std()), 1e-6)
-    weight = .25+.75*np.sqrt(np.clip(luma(rgb), 0, 1))[..., None]
-    return from_display(rc, buf, rgb+grain*.05*p.n("amount", 1)*weight, a)
+    rgb, a = straight(linear_pixels(rc,buf.px))
+    grain = p.rng().normal(0,1,rgb.shape).astype(np.float32)
+    sigma = max(0,(p.d("size",1)-1)/2)
+    grain = gaussian(grain,sigma)
+    # Analytic normalization avoids frame-content dependent grain strength.
+    grain *= max(1,2*math.sqrt(math.pi)*sigma)
+    v = np.clip(rgb,0,1)
+    weight = np.maximum(4*v*(1-v),0)**max(.01,p.param("response",.5))
+    strength = np.array([p.param(c,1) for c in ("red","green","blue")])
+    rgb = np.maximum(rgb+grain*.05*p.n("amount",1)*weight*strength,0)
+    return result(buf,working_pixels(rc,premul(rgb,a)))
 
 
 @EFFECTS.register("sharpen", level=FULL, note="Gaussian unsharp residual in straight colour, preserving alpha")
@@ -62,19 +78,24 @@ def rgb_split(rc, e, buf, ctx, node):
     return result(b, px)
 
 
-@EFFECTS.register("chromatic-aberration", level=PARTIAL, note="radial red/blue displacement with union alpha and padded support")
+@EFFECTS.register("chromatic-aberration", level=FULL, note="lateral per-channel radial magnification and longitudinal wavelength defocus")
 def chromatic_aberration(rc, e, buf, ctx, node):
-    p = Params(rc, e, ctx)
-    amount = p.d("amount", 1)
-    pad = math.ceil(abs(amount))
-    b = buf.pad(pad)
-    x, y = grid(b)
-    cx, cy = center(p, buf)
-    dx, dy = x-cx-pad, y-cy-pad
-    norm = np.maximum(np.hypot(dx, dy), 1)
-    dx, dy = dx/norm*amount, dy/norm*amount
-    red, blue = sample(b.px, x+dx, y+dy), sample(b.px, x-dx, y-dy)
-    return result(b, np.stack([red[..., 0], b.px[..., 1], blue[..., 2], np.maximum.reduce([red[..., 3], b.px[..., 3], blue[..., 3]])], -1))
+    p = Params(rc,e,ctx)
+    cx, cy = center(p,buf)
+    reach = max(math.hypot(cx,cy),math.hypot(buf.w-cx,buf.h-cy),1)
+    lateral = p.d("amount",1)/reach
+    longitudinal = max(0,p.param("longitudinal",0)*rc.scale)
+    scales = [p.param("channelScale"+c,1+sign*lateral) for c,sign in zip("RGB",(-1,0,1))]
+    sigmas = [abs(p.param("focus"+c,f))*longitudinal for c,f in zip("RGB",(1,0,.7))]
+    pad = math.ceil(max(abs(v-1) for v in scales)*reach+4*max(sigmas))
+    b=buf.pad(pad)
+    x,y=grid(b);cx,cy=cx+pad,cy+pad
+    channels=[]
+    for scale,sigma in zip(scales,sigmas):
+        src=gaussian(b.px,sigma)
+        channels.append(sample(src,cx+(x-cx)/max(scale,.01),cy+(y-cy)/max(scale,.01)))
+    return result(b,np.stack([channels[i][...,i] for i in range(3)]+
+                            [np.maximum.reduce([c[...,3] for c in channels])],-1))
 
 
 def _glitch(p, buf):
@@ -87,9 +108,28 @@ def _glitch(p, buf):
     return sample(buf.px, x+shifts, y)
 
 
-@EFFECTS.register("glitch", level=PARTIAL, note="seeded horizontal block tearing, preserving premultiplied channels")
+@EFFECTS.register("glitch", level=FULL, note="seeded block swaps, scanline tearing, channel delay and codec quantisation")
 def glitch(rc, e, buf, ctx, node):
-    return result(buf, _glitch(Params(rc, e, ctx), buf))
+    p=Params(rc,e,ctx)
+    amount=p.d("amount",1)
+    if amount == 0:
+        return buf.copy()
+    px=_glitch(p,buf)
+    rng=p.rng()
+    count=max(1,round(p.param("blocks",8)))
+    for _ in range(min(count,256)):
+        w=max(1,min(buf.w,round(rng.uniform(.03,.2)*buf.w)))
+        h=max(1,min(buf.h,round(p.d("size",1)*rng.uniform(1,4))))
+        x,y=rng.integers(0,buf.w-w+1),rng.integers(0,buf.h-h+1)
+        sx,sy=rng.integers(0,buf.w-w+1),rng.integers(0,buf.h-h+1)
+        weight=min(1,abs(p.n("amount",1)))
+        px[y:y+h,x:x+w]=(1-weight)*px[y:y+h,x:x+w]+weight*buf.px[sy:sy+h,sx:sx+w]
+    dx=amount*p.param("channelDelay",.5)
+    red,blue=shifted(px,dx,0),shifted(px,-dx,0)
+    px=np.stack([red[...,0],px[...,1],blue[...,2],np.maximum.reduce([red[...,3],px[...,3],blue[...,3]])],-1)
+    rgb,a=straight(px)
+    levels=max(2,round(p.param("quantization",32)))
+    return result(buf,premul(np.round(rgb*(levels-1))/(levels-1),a))
 
 
 @EFFECTS.register("scanlines", level=FULL, note="frame-aligned periodic dark lines controlled by size/frequency/amount")
@@ -103,16 +143,30 @@ def scanlines(rc, e, buf, ctx, node):
     return result(buf, px)
 
 
-@EFFECTS.register("vhs", level=PARTIAL, note="seeded row jitter, horizontal colour bleed, scanlines and low-amplitude noise")
-def vhs(rc, e, buf, ctx, node):
-    p = Params(rc, e, ctx)
-    px = _glitch(p, buf)
-    rgb, a = display_rgb(rc, px)
-    blurred, _ = display_rgb(rc, gaussian(px, max(.3, p.d("radius", 4)), 0))
-    rgb = rgb*.65+blurred*.35
-    rgb += p.rng().normal(0, .025, rgb.shape)*p.n("amount", 1)
-    b = from_display(rc, buf, rgb, a)
-    return scanlines(rc, e, b, ctx, node)
+@EFFECTS.register("vhs", level=FULL, note="YIQ chroma bandwidth/delay, timebase jitter, head-switching noise and scanlines")
+def vhs(rc,e,buf,ctx,node):
+    p=Params(rc,e,ctx)
+    amount=max(0,p.n("amount",1))
+    if amount == 0:
+        return buf.copy()
+    x,y=grid(buf)
+    rng=p.rng()
+    jitter=rng.normal(0,.4,(buf.h,1))*rc.scale*amount
+    band=((y+ctx.t*p.d("speed",1)*12) % max(buf.h,1)) > .94*buf.h
+    jitter=jitter+band*np.sin(y*1.9)*amount*6*rc.scale
+    px=sample(buf.px,x+jitter,y)
+    rgb,a=display_rgb(rc,px)
+    m=np.array([[.299,.587,.114],[.596,-.274,-.322],[.211,-.523,.312]],np.float32)
+    yiq=rgb@m.T
+    sigma=max(.01,p.d("radius",4))*amount
+    pad=math.ceil(4*sigma)
+    bleed=gaussian(np.pad(yiq,((0,0),(pad,pad),(0,0)),mode="edge"),sigma,0)[:,pad:-pad]
+    delay=p.param("chromaDelay",2)*rc.scale*amount
+    bleed=sample(bleed,x-delay,y,"clamp")
+    yiq[...,1:]=bleed[...,1:]
+    yiq[...,0]+=rng.normal(0,.018,yiq.shape[:2])*amount*(1+3*band)
+    yiq[...,0]*=1-.08*amount*(.5+.5*np.cos((y+buf.y0)*math.pi/max(rc.scale,1e-5)))
+    return from_display(rc,buf,yiq@np.linalg.inv(m).T,a)
 
 
 @EFFECTS.register("pixelate", level=FULL, note="frame-aligned nearest cell-centre sampling with size in document pixels")
@@ -137,20 +191,43 @@ def mosaic(rc, e, buf, ctx, node):
     return result(buf, out[top:top+buf.h, left:left+buf.w])
 
 
-@EFFECTS.register("halftone", level=PARTIAL, note="rotated monochrome dot screen with luminance-controlled dot area")
-def halftone(rc, e, buf, ctx, node):
-    p = Params(rc, e, ctx)
-    rgb, a = display_rgb(rc, buf.px)
-    x, y = grid(buf)
-    size = max(1, p.d("size", 1))
-    angle = math.radians(p.n("angle", 0))
-    dx, dy = x+buf.x0, y+buf.y0
-    u = (dx*math.cos(angle)+dy*math.sin(angle))/size
-    v = (-dx*math.sin(angle)+dy*math.cos(angle))/size
-    d = np.hypot(u % 1-.5, v % 1-.5)
-    radius = np.sqrt(np.clip(1-luma(rgb), 0, 1)/math.pi)
-    dots = (d > radius).astype(np.float32)
-    return from_display(rc, buf, np.repeat(dots[..., None], 3, -1), a)
+@EFFECTS.register("halftone", level=FULL, note="mono/CMYK screens with separate angles; round/line/square area-calibrated dots")
+def halftone(rc,e,buf,ctx,node):
+    p=Params(rc,e,ctx)
+    rgb,a=display_rgb(rc,buf.px)
+    x,y=grid(buf);x,y=x+buf.x0,y+buf.y0
+    size=max(1,p.d("size",1))
+    shape=p.param("shape","round")
+    def screen(ink,angle):
+        angle=math.radians(angle+p.n("angle",0))
+        u=(x*math.cos(angle)+y*math.sin(angle))/size
+        v=(-x*math.sin(angle)+y*math.cos(angle))/size
+        # Sample tone at each rotated screen cell's centre.
+        cu,cv=np.floor(u)+.5,np.floor(v)+.5
+        sx=(cu*math.cos(angle)-cv*math.sin(angle))*size-buf.x0
+        sy=(cu*math.sin(angle)+cv*math.cos(angle))*size-buf.y0
+        tone=sample(ink[...,None],sx,sy,"clamp")[...,0]
+        uu,vv=abs(u%1-.5),abs(v%1-.5)
+        if shape == "line":
+            distance=uu;radius=tone/2
+        elif shape == "square":
+            distance=np.maximum(uu,vv);radius=np.sqrt(tone)/2
+        else:
+            # High coverages invert the remaining round paper holes.
+            distance=np.where(tone<=.5,np.hypot(uu,vv),np.hypot(.5-uu,.5-vv))
+            radius=np.sqrt(np.minimum(tone,1-tone)/math.pi)
+        coverage=np.clip((radius-distance)*size+.5,0,1)
+        coverage = np.where(tone>.5,1-coverage,coverage) if shape == "round" else coverage
+        return np.where(tone <= 1e-6, 0, np.where(tone >= 1-1e-6, 1, coverage))
+    if p.param("screen","mono") == "cmyk":
+        black=1-rgb.max(-1)
+        cmy=(1-rgb-black[...,None])/np.maximum(1-black[...,None],1e-6)
+        inks=[screen(cmy[...,i],p.param("angle"+c,d)) for i,(c,d) in enumerate(zip("CMY",(15,75,0)))]
+        k=screen(black,p.param("angleK",45))
+        out=(1-np.stack(inks,-1))*(1-k[...,None])
+    else:
+        out=np.repeat((1-screen(1-luma(rgb),0))[...,None],3,-1)
+    return from_display(rc,buf,out,a)
 
 
 @EFFECTS.register("emboss", level=FULL, note="directional luminance derivative about middle grey, retaining alpha")
@@ -164,29 +241,57 @@ def emboss(rc, e, buf, ctx, node):
     return from_display(rc, buf, np.repeat(.5+diff*p.n("amount", 1), 3, -1), a)
 
 
-@EFFECTS.register("echo", level=PARTIAL, note="translated copies of current tile with exponential decay; no temporal history")
-def echo(rc, e, buf, ctx, node):
-    p = Params(rc, e, ctx)
-    n = max(1, min(128, round(p.n("samples", 16))))
-    dx, dy = p.d("offsetX", 8), p.d("offsetY", 8)
-    b = buf.pad(math.ceil(max(abs(dx), abs(dy))*(n-1)))
-    out = np.zeros_like(b.px)
-    for i in range(n-1, -1, -1):
-        fade = math.exp(-i*max(0, p.n("amount", 1))/max(1, n-1))
-        out = over(shifted(b.px, dx*i, dy*i)*fade, out)
-    return result(b, out)
-
-
-@EFFECTS.register("posterize-time", level=PARTIAL, note="hold node x/y translation at frequency Hz; pixel content and other transforms stay current")
-def posterize_time(rc, e, buf, ctx, node):
-    p = Params(rc, e, ctx)
-    frequency = max(1e-6, p.n("frequency", 1))
+@EFFECTS.register("echo", level=FULL, note="true pre-opacity temporal samples via render_node_at, interval/decay and six compositing operators")
+def echo(rc,e,buf,ctx,node):
+    from ..raster import Buf, union
+    p=Params(rc,e,ctx)
     if node is None:
         return buf.copy()
-    held = ctx.at(math.floor(ctx.t*frequency)/frequency)
-    dx, dy = [(rc.ev.num(node, key, held, 0)-rc.ev.num(node, key, ctx, 0))*rc.scale for key in ("x", "y")]
-    b = buf.pad(math.ceil(max(abs(dx), abs(dy))))
-    return result(b, shifted(b.px, dx, dy))
+    n=max(1,min(128,round(p.n("samples",16))))
+    interval=p.param("interval",1/max(abs(p.n("frequency",1)),1e-6))
+    decay=np.clip(p.param("decay",math.exp(-max(0,p.n("amount",1)))),0,1)
+    operator=p.param("operator","over")
+    copies=[(buf,1.)]
+    rect=buf.rect
+    for i in range(1,n):
+        time=ctx.comp_t-i*interval
+        sampled=replace(ctx,frame=round(time*float(rc.doc.fps)))
+        if not rc.active(node,sampled.at(ctx.t-i*interval)):
+            continue
+        out=rc.render_node_at(node,time,sampled)
+        if out is not None:
+            copies.append((out.buf,decay**i))
+            rect=union(rect,out.buf.rect)
+    acc=np.zeros((rect[3]-rect[1],rect[2]-rect[0],4),np.float32)
+    for b,weight in reversed(copies):
+        px=b.region(rect)*weight
+        if operator == "under":
+            acc=over(acc,px)
+        elif operator == "add":
+            acc+=px;acc[...,3]=np.clip(acc[...,3],0,1)
+        elif operator == "maximum":
+            acc=np.maximum(acc,px)
+        elif operator == "minimum":
+            acc=px if b is copies[-1][0] else np.minimum(acc,px)
+        elif operator == "screen":
+            acc=acc+px-acc*px
+        else:
+            acc=over(px,acc)
+    return Buf(acc,rect[0],rect[1])
+
+
+@EFFECTS.register("posterize-time", level=FULL, note="render_node_at holds pixels/transforms/child properties at quantized local time; compositor opacity remains separate")
+def posterize_time(rc,e,buf,ctx,node):
+    from ..raster import Buf
+    p=Params(rc,e,ctx)
+    if node is None:
+        return buf.copy()
+    frequency=max(1e-6,p.n("frequency",1))
+    held=math.floor(ctx.t*frequency)/frequency
+    time=ctx.comp_t+(held-ctx.t)
+    sampled=replace(ctx,frame=round(time*float(rc.doc.fps)))
+    out=rc.render_node_at(node,time,sampled)
+    return out.buf.copy() if out is not None else Buf.empty(buf.x0,buf.y0,buf.w,buf.h)
 
 
 @EFFECTS.register("letterbox", level=FULL, note="colour bars at frame top/bottom, size in document pixels")
@@ -199,3 +304,15 @@ def letterbox(rc, e, buf, ctx, node):
     px = buf.px.copy()
     px[bar] = np.r_[c[:3]*c[3], c[3]]
     return result(buf, px)
+
+
+def _echo_lookback(rc, e, ctx) -> float:
+    """How long after a node's window ends its echo tail stays visible."""
+    p = Params(rc, e, ctx)
+    n = max(1, min(128, round(p.n("samples", 16))))
+    return (n - 1) * p.param("interval", 1 / max(abs(p.n("frequency", 1)), 1e-6))
+
+
+echo.temporal = True
+echo.lookback = _echo_lookback
+posterize_time.temporal = True

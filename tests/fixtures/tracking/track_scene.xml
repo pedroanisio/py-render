@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tracking fixture for tests/test_tracking.py: one trackData per sample format/kind.
+     Composition 1280x720 @ 30 fps; the plate asset is 1920x1080 @ 24 fps (never decoded). -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="4"/>
+  <assets>
+    <video id="plate" src="plate.mp4" width="1920" height="1080" fps="24" duration="4"/>
+  </assets>
+  <tracking>
+    <trackData id="td-json" src="track_point.json" kind="point"/>
+    <trackData id="td-json-plate" src="track_point.json" kind="point" footage="plate"/>
+    <trackData id="td-json-offset" src="track_point.json" kind="point" timeOffset="1.5"/>
+    <trackData id="td-planar" src="track_planar.json" kind="planar"/>
+    <trackData id="td-mask" src="track_mask.json" kind="mask"/>
+    <trackData id="td-face" src="track_face.json" kind="face"/>
+    <trackData id="td-csv" src="two_tracks.csv" kind="point" format="csv"/>
+    <trackData id="td-csv-sniff" src="two_tracks.csv" kind="point"/>
+    <trackData id="td-nk" src="track.nk" kind="point" format="nuke" footage="plate"/>
+    <trackData id="td-chan" src="camera.chan" kind="camera" format="nuke"/>
+    <trackData id="td-ae" src="ae_keyframes.txt" kind="point" format="after-effects"/>
+    <trackData id="td-mocha-tr" src="mocha_transform.txt" kind="planar" format="mocha"/>
+    <trackData id="td-mocha-pin" src="mocha_cornerpin.txt" kind="planar" format="mocha"/>
+    <trackData id="td-fbx" src="sample_7400.fbx" kind="camera" format="fbx"/>
+    <trackData id="td-fbx-ascii" src="sample_ascii.fbx" kind="point" format="fbx"/>
+    <trackData id="td-bad-sha" src="track_point.json" kind="point"
+               sha256="0000000000000000000000000000000000000000000000000000000000000000"/>
+    <trackData id="td-missing" src="does_not_exist.json" kind="point"/>
+  </tracking>
+  <composition>
+    <shape id="dot" shape="ellipse" x="0" y="0" width="20" height="20" fill="#FF0000FF"/>
+  </composition>
+</scene>

@@ -17,7 +17,7 @@ from scenerender.render import Renderer
 NS = {"xs": "http://www.w3.org/2001/XMLSchema"}
 XSD = etree.parse(str(Path(__file__).parents[1]/"schema/scene-render-1.1.xsd"))
 NAMES = XSD.xpath('//xs:complexType[@name="effectType"]/xs:attribute[@name="type"]//xs:enumeration/@value', namespaces=NS)
-ADDITIVE = {"exposure", "bloom", "halation", "lens-flare", "light-leak", "light-sweep", "god-rays"}
+ADDITIVE = {"lens-blur", "film-grain", "white-balance", "lighting", "echo", "exposure", "bloom", "halation", "lens-flare", "light-leak", "light-sweep", "god-rays"}
 CTX = Ctx(t=0, comp_t=0)
 
 
@@ -83,10 +83,10 @@ def test_registry_exactly_matches_schema():
     for name, entry in EFFECTS.entries.items():
         assert entry.note
         assert entry.level in ("full", "partial", "none")
-        assert (entry.fn is None) == (name == "shader")
-    assert EFFECTS.entries["shader"].level == "none"
+        if name != "shader":
+            assert entry.fn is not None
     for name in ("echo", "pixel-motion-blur", "posterize-time"):
-        assert EFFECTS.entries[name].level == "partial"
+        assert EFFECTS.entries[name].level == "full"
 
 
 @pytest.mark.parametrize("kind", NAMES)

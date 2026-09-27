@@ -14,7 +14,7 @@ import scenerender.transitions.wipes  # noqa: F401
 from scenerender import document
 from scenerender.compositor import RenderContext
 from scenerender.evaluator import Evaluator
-from scenerender.registry import NONE, TRANSITIONS
+from scenerender.registry import FULL, TRANSITIONS
 
 SCHEMA_TYPES = [
     "cut", "crossfade", "additive-dissolve", "dip-to-color", "wipe", "slide", "push", "cover",
@@ -75,7 +75,7 @@ def test_every_schema_type_is_known():
     assert len(SCHEMA_TYPES) == 35
     for t in HANDLED:
         assert TRANSITIONS.get(t) is not None, t
-    assert TRANSITIONS.level("shader") == NONE and TRANSITIONS.get("shader") is None
+    assert TRANSITIONS.level("shader") == FULL and TRANSITIONS.get("shader") is not None  # tests/test_shaders.py
 
 
 @pytest.mark.parametrize("typ", HANDLED)

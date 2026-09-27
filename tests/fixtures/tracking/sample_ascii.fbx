@@ -1,0 +1,75 @@
+; FBX 7.4.0 project file
+; Copyright (C) 1997-2015 Autodesk Inc. and/or its licensors.
+; All rights reserved.
+; ----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+	Creator: "FBX SDK/FBX Plugins version 2020.2"
+}
+GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "TimeMode", "enum", "", "",11
+	}
+}
+Objects:  {
+	Model: 501, "Model::Tracker_Null", "Null" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",1.5,2.5,3.5
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",0.5,0.5,0.5
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	Model: 502, "Model::Static", "Null" {
+		Version: 232
+	}
+	AnimationStack: 601, "AnimStack::Take 001", "" {
+	}
+	AnimationLayer: 602, "AnimLayer::BaseLayer", "" {
+	}
+	AnimationCurveNode: 701, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+	AnimationCurve: 801, "AnimCurve::", "" {
+		Default: 0
+		KeyVer: 4009
+		KeyTime: *3 {
+			a: 0,46186158000,
+			92372316000
+		}
+		KeyValueFloat: *3 {
+			a: 0,90,180
+		}
+		;key 0: cubic | user | weighted right + next-left (weights 3333/9999 = 1/3), slopes 0 / 180
+		;keys 1-2: linear
+		KeyAttrFlags: *2 {
+			a: 50332680,24836
+		}
+		KeyAttrDataFloat: *8 {
+			a: 0,180,218434821,0,0,0,218434821,0
+		}
+		KeyAttrRefCount: *2 {
+			a: 1,2
+		}
+	}
+}
+Connections:  {
+	;Model::Tracker_Null, Model::RootNode
+	C: "OO",501,0
+	C: "OO",502,0
+	C: "OO",602,601
+	C: "OO",701,602
+	;AnimCurveNode::R, Model::Tracker_Null
+	C: "OP",701,501, "Lcl Rotation"
+	;AnimCurve::, AnimCurveNode::R
+	C: "OP",801,701, "d|Z"
+}

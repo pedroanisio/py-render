@@ -204,10 +204,60 @@ def _params(doc: Document, cli: dict[str, str], variant: str | None) -> None:
             doc.variant = variant
             for s in var.iter("set"):
                 doc.params[s.get("param")] = s.get("value")
+    supplied = {}
+    if sec is not None and variant:
+        supplied.update({s.get("param"): "variant " + variant for s in doc.ids[variant].iter("set")})
     for k, v in cli.items():
         if k not in doc.params:
             log.warning("--param %s is not declared in <parameters>", k)
         doc.params[k] = v
+        supplied[k] = "--param"
+    if sec is not None:
+        for p in sec.iter("param"):
+            _validate_param(doc, p, doc.params.get(p.get("id"), ""), supplied.get(p.get("id")))
+
+
+def _validate_param(doc: Document, p, value: str, source: str | None) -> None:
+    """Check a resolved parameter value against its declaration (type, min/max, maxLength, pattern,
+    options, required). A value supplied by a variant or --param that breaks the template's contract
+    stops the load (SceneError); a non-conforming declared default only warns."""
+    pid, typ = p.get("id"), p.get("type")
+    problems = []
+    if p.get("required") == "true" and value == "":
+        problems.append("is required")
+    if value != "":
+        if typ in ("number", "time"):
+            try:
+                x = float(value)
+            except ValueError:
+                problems.append(f"{value!r} is not a number")
+            else:
+                if p.get("min") is not None and x < float(p.get("min")):
+                    problems.append(f"{x:g} is below min {p.get('min')}")
+                if p.get("max") is not None and x > float(p.get("max")):
+                    problems.append(f"{x:g} is above max {p.get('max')}")
+        elif typ == "boolean" and value not in ("true", "false", "1", "0"):
+            problems.append(f"{value!r} is not a boolean")
+        elif typ == "color":
+            from .values import parse_color
+            if parse_color(value, doc.tokens, (-1, -1, -1, -1))[0] < 0:
+                problems.append(f"{value!r} is not a colour")
+        elif typ == "asset" and value not in doc.ids:
+            problems.append(f"no asset with id {value!r}")
+        if typ == "enum" or (p.get("options") and typ in ("string", "enum")):
+            opts = [o.strip() for o in (p.get("options") or "").split(",") if o.strip()]
+            if opts and value not in opts:
+                problems.append(f"{value!r} is not one of {', '.join(opts)}")
+        if p.get("maxLength") and len(value) > int(p.get("maxLength")):
+            problems.append(f"is longer than maxLength {p.get('maxLength')}")
+        if p.get("pattern") and re.fullmatch(p.get("pattern"), value) is None:
+            problems.append(f"{value!r} does not match pattern {p.get('pattern')!r}")
+    if not problems:
+        return
+    msg = f"parameter {pid!r} " + "; ".join(problems)
+    if source:
+        raise SceneError(f"{msg} (from {source})")
+    log.warning("%s (declared default)", msg)
 
 
 def _load_data(doc: Document, d) -> list:
@@ -309,7 +359,8 @@ def _fonts(doc: Document) -> None:
         if not ok:
             log.warning("font %s: cannot load %s; falling back to system fonts", f.get("id"), path)
         doc.fonts[f.get("id")] = {"family": f.get("family"), "weight": int(f.get("weight", 400)),
-                                  "style": f.get("fontStyle", "normal"), "path": path, "ok": ok}
+                                  "style": f.get("fontStyle", "normal"), "path": path, "ok": ok,
+                                  "collectionIndex": int(f.get("collectionIndex", 0))}
 
 
 # ------------------------------------------------------------ includes

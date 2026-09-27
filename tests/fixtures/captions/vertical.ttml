@@ -1,0 +1,5 @@
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xml:lang="ja">
+  <head><layout><region xml:id="r" tts:origin="80% 10%" tts:extent="15% 80%" tts:writingMode="tbrl"
+     tts:backgroundColor="#00000080"/></layout></head>
+  <body region="r"><div><p begin="0s" end="2s" tts:fontFamily="Noto Sans CJK JP">縦書き字幕のテスト</p>
+  <p begin="0s" end="2s" tts:fontFamily="Noto Sans CJK JP">二つ目の段落</p></div></body></tt>

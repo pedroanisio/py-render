@@ -1,0 +1,31 @@
+{
+ "labels": [
+  "2022",
+  "2023",
+  "2024",
+  "2025"
+ ],
+ "categoryTitle": "Year",
+ "valueTitle": "Renders (k)",
+ "series": [
+  {
+   "name": "Scenes",
+   "values": [
+    12,
+    30,
+    71,
+    140
+   ]
+  },
+  {
+   "name": "Templates",
+   "values": [
+    2,
+    6,
+    15,
+    33
+   ],
+   "color": "#FF6B6BFF"
+  }
+ ]
+}

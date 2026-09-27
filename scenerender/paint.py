@@ -18,7 +18,7 @@ from .values import linear_to_srgb, paint_ref, parse_color, srgb_to_linear
 
 for _n in ("linearGradient", "radialGradient", "conicGradient", "pattern"):
     FEATURES.declare(f"paint:{_n}", FULL)
-FEATURES.declare("paint:meshGradient", PARTIAL, "bilinear patches between grid colours")
+FEATURES.declare("paint:meshGradient", FULL, "bicubic Catmull-Rom surface for positions and colours in @interpolationSpace")
 
 _SUBDIV = 12
 
@@ -201,29 +201,89 @@ def _conic(rc, el, w, h, ctx):
 
 
 def _mesh(rc, el, w, h, ctx):
+    """Freeform mesh gradient: a bicubic (Catmull-Rom tensor-product) surface through the grid points,
+    for both positions and colours, colours interpolated in @interpolationSpace. Each grid cell is drawn
+    as SUB x SUB cairo patches, so colour is C1-smooth across cell edges. A missing grid point takes
+    its default position (the regular grid) and the colour of the nearest defined point."""
     ev = rc.ev
     rows, cols = int(el.get("rows", 2)), int(el.get("cols", 2))
-    grid = {}
+    space = el.get("interpolationSpace", "oklab")
+    pts = np.zeros((rows, cols, 2), np.float64)
+    col = np.zeros((rows, cols, 4), np.float64)
+    known = np.zeros((rows, cols), bool)
+    for r in range(rows):
+        for c in range(cols):
+            pts[r, c] = (c / (cols - 1), r / (rows - 1))
     for p in el:
-        if ln(p) == "point":
-            r, c = int(p.get("row")), int(p.get("col"))
-            x = ev.num(p, "x", ctx, c / (cols - 1)) if p.get("x") is not None or _animated(p, "x") else c / (cols - 1)
-            y = ev.num(p, "y", ctx, r / (rows - 1)) if p.get("y") is not None or _animated(p, "y") else r / (rows - 1)
-            grid[(r, c)] = (x, y, ev.color(p, "color", ctx, (0, 0, 0, 1)))
+        if ln(p) != "point":
+            continue
+        r, c = int(p.get("row")), int(p.get("col"))
+        if not (0 <= r < rows and 0 <= c < cols):
+            continue
+        if p.get("x") is not None or _animated(p, "x"):
+            pts[r, c, 0] = ev.num(p, "x", ctx, pts[r, c, 0])
+        if p.get("y") is not None or _animated(p, "y"):
+            pts[r, c, 1] = ev.num(p, "y", ctx, pts[r, c, 1])
+        col[r, c] = _to_space(ev.color(p, "color", ctx, (0, 0, 0, 1)), space)
+        known[r, c] = True
+    if not known.any():
+        return None
+    kr, kc = np.nonzero(known)
+    for r in range(rows):
+        for c in range(cols):
+            if not known[r, c]:
+                k = int(np.argmin((kr - r) ** 2 + (kc - c) ** 2))
+                col[r, c] = col[kr[k], kc[k]]
+    SUB = 8
+    fr = np.linspace(0, rows - 1, (rows - 1) * SUB + 1)
+    fc = np.linspace(0, cols - 1, (cols - 1) * SUB + 1)
+    P = _catmull_grid(pts, fr, fc)
+    C = _catmull_grid(col, fr, fc)
     pat = cairo.MeshPattern()
-    for r in range(rows - 1):
-        for c in range(cols - 1):
-            corners = [grid.get(k) for k in ((r, c), (r, c + 1), (r + 1, c + 1), (r + 1, c))]
-            if any(k is None for k in corners):
-                continue
+    for i in range(len(fr) - 1):
+        for j in range(len(fc) - 1):
+            quad = ((i, j), (i, j + 1), (i + 1, j + 1), (i + 1, j))
             pat.begin_patch()
-            pat.move_to(*corners[0][:2])
-            for k in corners[1:]:
-                pat.line_to(*k[:2])
-            for i, k in enumerate(corners):
-                pat.set_corner_color_rgba(i, *k[2])
+            pat.move_to(*P[quad[0]])
+            for q in quad[1:]:
+                pat.line_to(*P[q])
+            for k, q in enumerate(quad):
+                pat.set_corner_color_rgba(k, *_from_space(C[q], space))
             pat.end_patch()
     return _with_matrix(pat, cairo.Matrix(xx=w, yy=h))
+
+
+def _catmull_grid(g: np.ndarray, fr: np.ndarray, fc: np.ndarray) -> np.ndarray:
+    """Evaluate a Catmull-Rom tensor-product surface through grid g (rows, cols, k) at fractional
+    row/column coordinates (edge rows/cols are repeated as end tangents)."""
+    def weights(t: np.ndarray, n: int):
+        i = np.clip(np.floor(t).astype(int), 0, n - 2)
+        u = t - i
+        w = np.stack([(-u ** 3 + 2 * u ** 2 - u) / 2, (3 * u ** 3 - 5 * u ** 2 + 2) / 2,
+                      (-3 * u ** 3 + 4 * u ** 2 + u) / 2, (u ** 3 - u ** 2) / 2], -1)
+        idx = np.clip(i[:, None] + np.arange(-1, 3), 0, n - 1)
+        return idx, w
+    ri, rw = weights(fr, g.shape[0])
+    ci, cw = weights(fc, g.shape[1])
+    rows = np.einsum("ak,akcd->acd", rw, g[ri])                 # interpolate along rows
+    return np.einsum("bk,abkd->abd", cw, rows[:, ci])            # then along columns
+
+
+def _to_space(c, space: str) -> np.ndarray:
+    if space == "oklab":
+        return np.array([*_to_oklab(c), c[3]])
+    if space == "linear":
+        return np.array([srgb_to_linear(v) for v in c[:3]] + [c[3]])
+    return np.array(c, np.float64)
+
+
+def _from_space(v: np.ndarray, space: str):
+    a = float(min(1.0, max(0.0, v[3])))
+    if space == "oklab":
+        return (*_from_oklab(*v[:3]), a)
+    if space == "linear":
+        return tuple(min(1.0, max(0.0, linear_to_srgb(max(0.0, float(x))))) for x in v[:3]) + (a,)
+    return tuple(min(1.0, max(0.0, float(x))) for x in v[:3]) + (a,)
 
 
 def _animated(el, prop):

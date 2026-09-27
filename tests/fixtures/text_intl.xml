@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Vertical writing modes (upright CJK, sideways Latin), dictionary hyphenation (English,
+     German) and emoji presentation (colour vs text). System fonts: Noto Sans CJK JP,
+     DejaVu Sans, Noto Color Emoji, Noto Sans Symbols2. -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="2" seed="1" background="#F4F1EAFF"/>
+  <styles>
+    <textStyle id="jp" font="Noto Sans CJK JP" size="34" color="#1B1B1BFF" lineHeight="1.3"/>
+    <textStyle id="body" font="DejaVu Sans" size="22" color="#1B1B1BFF" lineHeight="1.25"/>
+  </styles>
+  <assets>
+    <text id="t-vrl" width="220" height="420" style="jp" size="34" writingMode="vertical-rl" language="ja"
+          background="#FFFFFFFF" backgroundMode="block"
+          text="縦書きの日本語テキストにLatin文字とNumbers 2024が混ざる。「かぎ括弧」ー長音も縦向き。"/>
+    <text id="t-vlr" width="160" height="420" style="jp" size="34" writingMode="vertical-lr" language="ja"
+          background="#FFFFFFFF" backgroundMode="line"
+          text="左から右へ進む列。二列目、三列目。"/>
+    <text id="t-hy-en" width="150" height="330" style="body" size="22" hyphenate="true" language="en-US"
+          background="#FFFFFFFF"
+          text="Internationalization requires comprehensive typographical considerations everywhere."/>
+    <text id="t-nohy-en" width="150" height="330" style="body" size="22" hyphenate="false" language="en-US"
+          background="#FFFFFFFF"
+          text="Internationalization requires comprehensive typographical considerations everywhere."/>
+    <text id="t-hy-de" width="150" height="330" style="body" size="22" hyphenate="true" language="de-DE"
+          background="#FFFFFFFF"
+          text="Donaudampfschifffahrtsgesellschaft und Rechtsschutzversicherungsgesellschaften."/>
+    <text id="t-emoji-color" width="380" height="60" style="body" size="34" emoji="color"
+          text="Colour: &#x1F600; &#x2764; &#x1F44D; &#x2600; 1&#x20E3;"/>
+    <text id="t-emoji-text" width="380" height="60" style="body" size="34" emoji="text" color="#C0392BFF"
+          text="Text: &#x1F600; &#x2764;&#xFE0F; &#x1F44D; &#x2600; &#x1FAE0;"/>
+  </assets>
+  <composition>
+    <layer id="l-vrl" asset="t-vrl" x="40" y="40"/>
+    <layer id="l-vlr" asset="t-vlr" x="290" y="40"/>
+    <layer id="l-hy-en" asset="t-hy-en" x="490" y="40"/>
+    <layer id="l-nohy-en" asset="t-nohy-en" x="670" y="40"/>
+    <layer id="l-hy-de" asset="t-hy-de" x="850" y="40"/>
+    <layer id="l-emoji-color" asset="t-emoji-color" x="40" y="520"/>
+    <layer id="l-emoji-text" asset="t-emoji-text" x="40" y="600"/>
+  </composition>
+</scene>

@@ -16,11 +16,12 @@ from . import document
 from .compositor import RenderContext
 from .evaluator import Evaluator
 from .raster import working_to_rgb8
-from .registry import FEATURES, PARTIAL, load_plugins
+from .registry import FEATURES, FULL, load_plugins
 from .values import paint_ref, parse_color
 
 log = logging.getLogger("scenerender")
-FEATURES.declare("motionBlur", PARTIAL, "temporal supersampling of the whole frame; per-node motionBlur flags are ignored")
+FEATURES.declare("motionBlur", FULL, "shutter supersampling (angle, phase, samples, adaptive skip of still frames); "
+                                     "node motionBlur on/off/inherit honoured")
 
 
 @dataclass
@@ -58,8 +59,9 @@ class Renderer:
             return None
         c = parse_color(bg, self.doc.tokens, (0, 0, 0, 1))
         if self.rc.linear:
-            from .raster import srgb_to_linear
-            c = tuple(float(v) for v in srgb_to_linear(np.array(c[:3], np.float32))) + (c[3],)
+            from .raster import color_to_working
+            self.rc.install_working_primaries()
+            c = color_to_working(c, True)
         return c
 
     def frame_linear(self, t: float, frame: int = 0) -> np.ndarray:
@@ -69,13 +71,29 @@ class Renderer:
         if not rc.motion_blur:
             return rc.render_frame(t, frame).px
         n = max(1, int(p.get("motionBlurSamples", 16)))
-        shutter = float(p.get("shutterAngle", 180)) / 360.0 / self.fps
+        base = float(p.get("shutterAngle", 180))
+        sa = rc.hooks.get("shutter_angle")
+        shutter = (sa(rc, t, base) if sa else base) / 360.0 / self.fps   # active camera may override
         phase = float(p.get("shutterPhase", -90)) / 360.0 / self.fps
-        acc = None
-        for i in range(n):
-            ts = t + phase + shutter * (i + 0.5) / n
-            px = rc.render_frame(ts, frame).px
-            acc = px if acc is None else acc + px
+        times = [t + phase + shutter * (i + 0.5) / n for i in range(n)]
+        rc.mb_center = t
+        try:
+            if n > 2 and p.get("adaptiveMotionBlur", "true") != "false":
+                # Adaptive: when nothing moves between the shutter's first and last sample, the frame is
+                # the same at every sample, so the remaining samples are skipped.
+                first, last = rc.render_frame(times[0], frame).px, rc.render_frame(times[-1], frame).px
+                if first.shape == last.shape and float(np.abs(first - last).max(initial=0.0)) < 0.5 / 255:
+                    return (first + last) / 2
+                acc = first + last
+                for ts in times[1:-1]:
+                    acc = acc + rc.render_frame(ts, frame).px
+                return acc / n
+            acc = None
+            for ts in times:
+                px = rc.render_frame(ts, frame).px
+                acc = px if acc is None else acc + px
+        finally:
+            rc.mb_center = None
         return acc / n
 
     def graded_background(self):

@@ -9,6 +9,10 @@ expression audioAmplitude(id[, band])): the RMS envelope (100 Hz, 20 ms windows,
 amplitude) of an audioTrack (post-fader, pre-bus), a bus, "master", or an asset id (the sum of
 the tracks that play it, else the raw asset from t = 0). Bands: low < 250 Hz, mid 250-4000 Hz,
 high > 4 kHz (Butterworth 24 dB/oct). The mix is computed lazily on first use.
+
+Modules: mix (signal flow, fitToDuration, transition/layer audio), effects (audioEffect types),
+dsp (filters, dynamics, BS.1770 / EBU R128 loudness, limiter), spectral (phase vocoder,
+pitch-shift, formants, spectral gate), spatial (layouts, VBAP, ambisonics), io (decode, WAV).
 """
 from __future__ import annotations
 

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scene version="1.1">
+  <project width="640" height="360" fps="24" duration="4" background="#0B0E14FF"/>
+  <assets>
+    <text id="txt" text="2.5D in camera space" width="420" height="60" size="44" color="#FFFFFFFF"/>
+  </assets>
+  <materials>
+    <material id="m-red" baseColor="#E8452CFF" roughness="0.4"/>
+  </materials>
+  <composition>
+    <camera id="cam" x="120" y="60" z="700" fov="55" depthOfField="true" fStop="1.4" focusDistance="700" apertureBlades="6"
+            lensDistortion="-0.08">
+      <shake amplitude="3" frequency="1.5" seed="9" start="2" end="4"/>
+    </camera>
+    <shape id="grid" shape="rect" x="120" y="60" width="400" height="240" fill="#1E90FF80" threeD="true" rotationX="60" zDepth="0"/>
+    <layer id="label" asset="txt" x="100" y="40" threeD="true" rotationY="-35" zDepth="-150"/>
+    <group id="card" x="320" y="180" width="200" height="120" anchorX="100" anchorY="60" threeD="true" rotationY="40"
+           zDepth="200" collapse="true">
+      <shape id="card-bg" shape="rounded-rect" width="200" height="120" radius="12" fill="#FFC23DFF"/>
+      <shape id="card-dot" shape="ellipse" x="70" y="30" width="60" height="60" fill="#101010FF" threeD="true" zDepth="-40"/>
+    </group>
+    <object3D id="ball" primitive="sphere" material="m-red" radius="50" x="-150" y="-40" z="100"/>
+  </composition>
+</scene>

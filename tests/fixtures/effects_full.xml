@@ -1,0 +1,545 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<scene version="1.1">
+  <project width="1440" height="1320" fps="24" duration="3" seed="43" background="#111826FF"/>
+  <assets>
+    <text id="label-0" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="01  radial-blur"/>
+    <text id="label-1" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="02  zoom-blur"/>
+    <text id="label-2" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="03  lens-blur"/>
+    <text id="label-3" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="04  tilt-shift"/>
+    <text id="label-4" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="05  pixel-motion-blur"/>
+    <text id="label-5" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="06  white-balance"/>
+    <text id="label-6" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="07  tonemap"/>
+    <text id="label-7" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="08  gradient-map"/>
+    <text id="label-8" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="09  gradient-overlay"/>
+    <text id="label-9" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="10  selective-color"/>
+    <text id="label-10" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="11  displacement-map"/>
+    <text id="label-11" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="12  turbulent-displace"/>
+    <text id="label-12" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="13  heat-haze"/>
+    <text id="label-13" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="14  lens-distortion"/>
+    <text id="label-14" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="15  fractal-noise"/>
+    <text id="label-15" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="16  difference-key"/>
+    <text id="label-16" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="17  matte-choke"/>
+    <text id="label-17" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="18  halation"/>
+    <text id="label-18" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="19  lighting"/>
+    <text id="label-19" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="20  lens-flare"/>
+    <text id="label-20" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="21  light-leak"/>
+    <text id="label-21" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="22  god-rays"/>
+    <text id="label-22" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="23  bevel"/>
+    <text id="label-23" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="24  long-shadow"/>
+    <text id="label-24" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="25  film-grain"/>
+    <text id="label-25" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="26  chromatic-aberration"/>
+    <text id="label-26" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="27  glitch"/>
+    <text id="label-27" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="28  vhs"/>
+    <text id="label-28" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="29  halftone"/>
+    <text id="label-29" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="30  echo"/>
+    <text id="label-30" width="340" height="26" font="DejaVu Sans" size="18" color="#DCE6FFFF" text="31  posterize-time"/>
+  </assets>
+  <paints>
+    <linearGradient id="ramp" interpolationSpace="srgb">
+      <stop offset="0" color="#132040FF"/>
+      <stop offset=".35" color="#653CABFF"/>
+      <stop offset=".7" color="#F98251FF"/>
+      <stop offset="1" color="#FFF3CEFF"/>
+    </linearGradient>
+  </paints>
+  <composition>
+    <layer id="caption-0" asset="label-0" x="12" y="10"/>
+    <shape id="panel-0" shape="rect" x="9" y="40" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-0" x="18" y="45" width="320" height="100" effects="fx-0" clip="true">
+      <shape id="base-0" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-0-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-0-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-0-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-0-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-0-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-0-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-0-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-0-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-0-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-1" asset="label-1" x="372" y="10"/>
+    <shape id="panel-1" shape="rect" x="369" y="40" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-1" x="378" y="45" width="320" height="100" effects="fx-1" clip="true">
+      <shape id="base-1" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-1-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-1-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-1-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-1-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-1-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-1-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-1-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-1-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-1-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-2" asset="label-2" x="732" y="10"/>
+    <shape id="panel-2" shape="rect" x="729" y="40" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-2" x="738" y="45" width="320" height="100" effects="fx-2" clip="true">
+      <shape id="base-2" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-2-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-2-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-2-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-2-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-2-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-2-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-2-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-2-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-2-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-3" asset="label-3" x="1092" y="10"/>
+    <shape id="panel-3" shape="rect" x="1089" y="40" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-3" x="1098" y="45" width="320" height="100" effects="fx-3" clip="true">
+      <shape id="base-3" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-3-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-3-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-3-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-3-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-3-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-3-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-3-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-3-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-3-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-4" asset="label-4" x="12" y="175"/>
+    <shape id="panel-4" shape="rect" x="9" y="205" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-4" x="18" y="210" width="320" height="100" effects="fx-4" clip="true">
+      <animate property="x">
+        <key time="0" value="18"/>
+        <key time="3" value="158"/>
+      </animate>
+      <shape id="base-4" shape="rect" x="15" y="24" width="70" height="48" fill="url(#ramp)"/>
+      <shape id="spot-4-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-4-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-4-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-4-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-4-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-4-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-4-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-4-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-4-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-5" asset="label-5" x="372" y="175"/>
+    <shape id="panel-5" shape="rect" x="369" y="205" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-5" x="378" y="210" width="320" height="100" effects="fx-5" clip="true">
+      <shape id="base-5" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-5-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-5-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-5-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-5-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-5-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-5-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-5-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-5-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-5-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-6" asset="label-6" x="732" y="175"/>
+    <shape id="panel-6" shape="rect" x="729" y="205" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-6" x="738" y="210" width="320" height="100" effects="fx-6" clip="true">
+      <shape id="base-6" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-6-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-6-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-6-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-6-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-6-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-6-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-6-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-6-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-6-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-7" asset="label-7" x="1092" y="175"/>
+    <shape id="panel-7" shape="rect" x="1089" y="205" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-7" x="1098" y="210" width="320" height="100" effects="fx-7" clip="true">
+      <shape id="base-7" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-7-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-7-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-7-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-7-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-7-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-7-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-7-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-7-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-7-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-8" asset="label-8" x="12" y="340"/>
+    <shape id="panel-8" shape="rect" x="9" y="370" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-8" x="18" y="375" width="320" height="100" effects="fx-8" clip="true">
+      <shape id="base-8" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-8-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-8-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-8-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-8-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-8-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-8-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-8-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-8-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-8-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-9" asset="label-9" x="372" y="340"/>
+    <shape id="panel-9" shape="rect" x="369" y="370" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-9" x="378" y="375" width="320" height="100" effects="fx-9" clip="true">
+      <shape id="base-9" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-9-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-9-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-9-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-9-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-9-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-9-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-9-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-9-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-9-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-10" asset="label-10" x="732" y="340"/>
+    <shape id="panel-10" shape="rect" x="729" y="370" width="342" height="117" fill="#202C40FF"/>
+    <shape id="displace-plate" shape="rect" x="748" y="392" width="280" height="64" fill="url(#ramp)"/>
+    <group id="motif-10" x="738" y="375" width="320" height="100" effects="fx-10" clip="true">
+      <shape id="base-10" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-10-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-10-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-10-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-10-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-10-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-10-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-10-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-10-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-10-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-11" asset="label-11" x="1092" y="340"/>
+    <shape id="panel-11" shape="rect" x="1089" y="370" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-11" x="1098" y="375" width="320" height="100" effects="fx-11" clip="true">
+      <shape id="base-11" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-11-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-11-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-11-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-11-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-11-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-11-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-11-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-11-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-11-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-12" asset="label-12" x="12" y="505"/>
+    <shape id="panel-12" shape="rect" x="9" y="535" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-12" x="18" y="540" width="320" height="100" effects="fx-12" clip="true">
+      <shape id="base-12" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-12-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-12-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-12-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-12-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-12-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-12-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-12-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-12-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-12-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-13" asset="label-13" x="372" y="505"/>
+    <shape id="panel-13" shape="rect" x="369" y="535" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-13" x="378" y="540" width="320" height="100" effects="fx-13" clip="true">
+      <shape id="base-13" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-13-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-13-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-13-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-13-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-13-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-13-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-13-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-13-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-13-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-14" asset="label-14" x="732" y="505"/>
+    <shape id="panel-14" shape="rect" x="729" y="535" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-14" x="738" y="540" width="320" height="100" effects="fx-14" clip="true">
+      <shape id="base-14" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-14-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-14-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-14-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-14-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-14-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-14-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-14-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-14-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-14-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-15" asset="label-15" x="1092" y="505"/>
+    <shape id="panel-15" shape="rect" x="1089" y="535" width="342" height="117" fill="#202C40FF"/>
+    <shape id="difference-plate" shape="rect" x="1108" y="557" width="280" height="64" fill="#31CAB6FF"/>
+    <group id="motif-15" x="1098" y="540" width="320" height="100" effects="fx-15" clip="true">
+      <shape id="base-15" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-15-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-15-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-15-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-15-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-15-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-15-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-15-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-15-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-15-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-16" asset="label-16" x="12" y="670"/>
+    <shape id="panel-16" shape="rect" x="9" y="700" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-16" x="18" y="705" width="320" height="100" effects="fx-16" clip="true">
+      <shape id="base-16" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-16-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-16-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-16-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-16-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-16-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-16-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-16-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-16-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-16-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-17" asset="label-17" x="372" y="670"/>
+    <shape id="panel-17" shape="rect" x="369" y="700" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-17" x="378" y="705" width="320" height="100" effects="fx-17" clip="true">
+      <shape id="base-17" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-17-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-17-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-17-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-17-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-17-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-17-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-17-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-17-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-17-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-18" asset="label-18" x="732" y="670"/>
+    <shape id="panel-18" shape="rect" x="729" y="700" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-18" x="738" y="705" width="320" height="100" effects="fx-18" clip="true">
+      <shape id="base-18" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-18-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-18-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-18-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-18-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-18-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-18-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-18-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-18-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-18-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-19" asset="label-19" x="1092" y="670"/>
+    <shape id="panel-19" shape="rect" x="1089" y="700" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-19" x="1098" y="705" width="320" height="100" effects="fx-19" clip="true">
+      <shape id="base-19" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-19-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-19-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-19-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-19-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-19-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-19-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-19-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-19-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-19-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-20" asset="label-20" x="12" y="835"/>
+    <shape id="panel-20" shape="rect" x="9" y="865" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-20" x="18" y="870" width="320" height="100" effects="fx-20" clip="true">
+      <shape id="base-20" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-20-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-20-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-20-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-20-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-20-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-20-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-20-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-20-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-20-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-21" asset="label-21" x="372" y="835"/>
+    <shape id="panel-21" shape="rect" x="369" y="865" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-21" x="378" y="870" width="320" height="100" effects="fx-21" clip="true">
+      <shape id="base-21" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-21-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-21-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-21-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-21-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-21-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-21-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-21-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-21-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-21-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-22" asset="label-22" x="732" y="835"/>
+    <shape id="panel-22" shape="rect" x="729" y="865" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-22" x="738" y="870" width="320" height="100" effects="fx-22" clip="true">
+      <shape id="base-22" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-22-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-22-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-22-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-22-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-22-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-22-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-22-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-22-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-22-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-23" asset="label-23" x="1092" y="835"/>
+    <shape id="panel-23" shape="rect" x="1089" y="865" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-23" x="1098" y="870" width="320" height="100" effects="fx-23" clip="true">
+      <shape id="base-23" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-23-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-23-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-23-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-23-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-23-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-23-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-23-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-23-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-23-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-24" asset="label-24" x="12" y="1000"/>
+    <shape id="panel-24" shape="rect" x="9" y="1030" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-24" x="18" y="1035" width="320" height="100" effects="fx-24" clip="true">
+      <shape id="base-24" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-24-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-24-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-24-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-24-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-24-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-24-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-24-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-24-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-24-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-25" asset="label-25" x="372" y="1000"/>
+    <shape id="panel-25" shape="rect" x="369" y="1030" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-25" x="378" y="1035" width="320" height="100" effects="fx-25" clip="true">
+      <shape id="base-25" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-25-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-25-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-25-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-25-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-25-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-25-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-25-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-25-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-25-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-26" asset="label-26" x="732" y="1000"/>
+    <shape id="panel-26" shape="rect" x="729" y="1030" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-26" x="738" y="1035" width="320" height="100" effects="fx-26" clip="true">
+      <shape id="base-26" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-26-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-26-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-26-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-26-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-26-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-26-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-26-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-26-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-26-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-27" asset="label-27" x="1092" y="1000"/>
+    <shape id="panel-27" shape="rect" x="1089" y="1030" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-27" x="1098" y="1035" width="320" height="100" effects="fx-27" clip="true">
+      <shape id="base-27" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-27-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-27-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-27-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-27-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-27-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-27-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-27-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-27-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-27-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-28" asset="label-28" x="12" y="1165"/>
+    <shape id="panel-28" shape="rect" x="9" y="1195" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-28" x="18" y="1200" width="320" height="100" effects="fx-28" clip="true">
+      <shape id="base-28" shape="rect" x="15" y="24" width="200" height="48" fill="url(#ramp)"/>
+      <shape id="spot-28-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-28-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-28-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-28-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-28-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-28-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-28-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-28-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-28-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-29" asset="label-29" x="372" y="1165"/>
+    <shape id="panel-29" shape="rect" x="369" y="1195" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-29" x="378" y="1200" width="320" height="100" effects="fx-29" clip="true">
+      <animate property="x">
+        <key time="0" value="378"/>
+        <key time="3" value="518"/>
+      </animate>
+      <shape id="base-29" shape="rect" x="15" y="24" width="70" height="48" fill="url(#ramp)"/>
+      <shape id="spot-29-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-29-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-29-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-29-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-29-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-29-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-29-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-29-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-29-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+    <layer id="caption-30" asset="label-30" x="732" y="1165"/>
+    <shape id="panel-30" shape="rect" x="729" y="1195" width="342" height="117" fill="#202C40FF"/>
+    <group id="motif-30" x="738" y="1200" width="320" height="100" effects="fx-30" clip="true">
+      <animate property="x">
+        <key time="0" value="738"/>
+        <key time="3" value="878"/>
+      </animate>
+      <shape id="base-30" shape="rect" x="15" y="24" width="70" height="48" fill="url(#ramp)"/>
+      <shape id="spot-30-0" shape="ellipse" x="35" y="10" width="50" height="50" fill="#31CAB6FF"/>
+      <shape id="spot-30-1" shape="ellipse" x="90" y="20" width="50" height="50" fill="#FF603EFF"/>
+      <shape id="spot-30-2" shape="ellipse" x="145" y="30" width="50" height="50" fill="#FDF3CEFF"/>
+      <shape id="bar-30-0" shape="rect" x="240" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-30-1" shape="rect" x="250" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-30-2" shape="rect" x="260" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-30-3" shape="rect" x="270" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-30-4" shape="rect" x="280" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+      <shape id="bar-30-5" shape="rect" x="290" y="10" width="4" height="80" fill="#F0F6FFFF"/>
+    </group>
+  </composition>
+  <lights>
+    <light id="lamp" type="point" x="820" y="705" z="120" range="450" intensity="1.8" colorTemperature="5000" castShadow="true"/>
+  </lights>
+  <effects>
+    <effect id="fx-0" type="radial-blur" angle="30" samples="24"/>
+    <effect id="fx-1" type="zoom-blur" amount="35"/>
+    <effect id="fx-2" type="lens-blur" radius="7" intensity="1" threshold="0.5">
+      <param name="blades" value="6"/>
+    </effect>
+    <effect id="fx-3" type="tilt-shift" radius="8" size="25" softness="0.5"/>
+    <effect id="fx-4" type="pixel-motion-blur" amount="10" samples="24"/>
+    <effect id="fx-5" type="white-balance" temperature="3600"/>
+    <effect id="fx-6" type="tonemap" tonemapper="agx"/>
+    <effect id="fx-7" type="gradient-map" source="ramp"/>
+    <effect id="fx-8" type="gradient-overlay" paint="url(#ramp)" angle="30" intensity="0.65"/>
+    <effect id="fx-9" type="selective-color">
+      <param name="family" value="reds"/>
+      <param name="cyan" value="0.7"/>
+    </effect>
+    <effect id="fx-10" type="displacement-map" source="displace-plate" amount="15"/>
+    <effect id="fx-11" type="turbulent-displace" amount="12" size="30"/>
+    <effect id="fx-12" type="heat-haze" amount="18" size="35" speed="1.3"/>
+    <effect id="fx-13" type="lens-distortion" amount="35"/>
+    <effect id="fx-14" type="fractal-noise" size="50" contrast="2" samples="6"/>
+    <effect id="fx-15" type="difference-key" source="difference-plate" tolerance="0.12"/>
+    <effect id="fx-16" type="matte-choke" amount="3" softness="0.8"/>
+    <effect id="fx-17" type="halation" radius="10" intensity="3" threshold="0.3"/>
+    <effect id="fx-18" type="lighting" lights="lamp" relief="12" samples="12"/>
+    <effect id="fx-19" type="lens-flare" radius="9" intensity="0.7"/>
+    <effect id="fx-20" type="light-leak" radius="20" intensity="0.7"/>
+    <effect id="fx-21" type="god-rays" radius="35" samples="32" threshold="0.3"/>
+    <effect id="fx-22" type="bevel" radius="6" size="6" relief="12" position="inside" angle="135">
+      <param name="soften" value="1"/>
+    </effect>
+    <effect id="fx-23" type="long-shadow" radius="45" angle="45" color="#030713FF" compositeOriginal="on-top"/>
+    <effect id="fx-24" type="film-grain" amount="2" size="2"/>
+    <effect id="fx-25" type="chromatic-aberration" amount="5">
+      <param name="longitudinal" value="1.5"/>
+    </effect>
+    <effect id="fx-26" type="glitch" amount="14" size="6"/>
+    <effect id="fx-27" type="vhs" amount="2" size="3" radius="5"/>
+    <effect id="fx-28" type="halftone" size="6">
+      <param name="screen" value="cmyk"/>
+    </effect>
+    <effect id="fx-29" type="echo" samples="4">
+      <param name="interval" value="0.15"/>
+      <param name="decay" value="0.6"/>
+    </effect>
+    <effect id="fx-30" type="posterize-time" frequency="2"/>
+  </effects>
+</scene>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 5.1 panning (tests/test_audio_full.py): mono 440 Hz tone and a stereo 500/700 Hz source. -->
+<scene version="1.1">
+  <project width="64" height="36" fps="10" duration="2"/>
+  <assets>
+    <audio id="tone" src="media/audio_tone440.wav" channels="1"/>
+    <audio id="st" src="media/audio_stereo.wav" channels="2"/>
+  </assets>
+  <composition/>
+  <audioMix sampleRate="48000" channels="6" channelLayout="5.1">
+    <bus id="fx">
+      <audioEffect type="reverb" roomSize="0.3" amount="0.2"/>
+    </bus>
+    <audioTrack id="left" asset="tone" pan="-1"/>
+    <audioTrack id="centre" asset="tone" pan="0"/>
+    <audioTrack id="rear" asset="tone" pan="2" bus="fx"/>
+    <audioTrack id="wide" asset="st"/>
+  </audioMix>
+</scene>

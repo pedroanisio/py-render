@@ -171,9 +171,101 @@ def sample(keys: Sequence[Key], t: float, default_interp: str = "linear",
                 m0, m1 = _tcb_tangents(keys, i, kind == "catmull-rom")
                 v = _hermite(k0.value, k1.value, m0, m1, u, dt)
             else:
+                e = _ease_for(k0, k1, default_interp, dt)(u)
+                sp = spatial_curve(k0, k1)
                 # Overshooting curves (back, elastic) may leave colours outside [0,1]; consumers clamp.
-                v = _mix(k0.value, k1.value, _ease_for(k0, k1, default_interp, dt)(u))
+                v = sp.at(e) if sp is not None else _mix(k0.value, k1.value, e)
             break
     else:
         v = keys[-1].value
     return _add(v, cycle_offset) if cycle_offset is not None else v
+
+
+# ---------------------------------------------------------------- spatial keys (motion-path tangents)
+class _Bezier:
+    """Cubic Bezier between two vector keys, parameterised by arc-length fraction (AE spatial keys:
+    the temporal ease says how far along the path the value is)."""
+
+    def __init__(self, p0, p1, p2, p3, n: int = 64):
+        self.p = [tuple(map(float, q)) for q in (p0, p1, p2, p3)]
+        ts = [i / n for i in range(n + 1)]
+        pts = [self._pt(t) for t in ts]
+        acc = [0.0]
+        for a, b in zip(pts, pts[1:]):
+            acc.append(acc[-1] + math.dist(a, b))
+        self.ts, self.acc, self.length = ts, acc, acc[-1]
+
+    def _pt(self, t: float):
+        mt = 1 - t
+        return tuple(mt ** 3 * a + 3 * mt * mt * t * b + 3 * mt * t * t * c + t ** 3 * d for a, b, c, d in zip(*self.p))
+
+    def at(self, u: float):
+        if self.length <= 0:
+            return self.p[0]
+        d = u * self.length
+        import bisect
+        i = min(len(self.acc) - 2, max(0, bisect.bisect_right(self.acc, d) - 1))
+        seg = (self.acc[i + 1] - self.acc[i]) or 1e-12
+        t = self.ts[i] + (self.ts[i + 1] - self.ts[i]) * (d - self.acc[i]) / seg
+        return self._pt(min(1.0, max(0.0, t))) if 0 <= u <= 1 else self._pt(u)
+
+
+def _tangent(el, name: str, n: int):
+    raw = el.get(name) if el is not None else None
+    if not raw:
+        return None
+    v = [float(x) for x in re.split(r"[\s,]+", raw.strip()) if x]
+    return tuple((v + [0.0] * n)[:n])
+
+
+def spatial_curve(k0: Key, k1: Key) -> _Bezier | None:
+    """The spatial path between two vector keys when either carries spatialOut/spatialIn tangents."""
+    if not (isinstance(k0.value, tuple) and isinstance(k1.value, tuple) and len(k0.value) == len(k1.value)):
+        return None
+    n = len(k0.value)
+    out = _tangent(k0.el, "spatialOut", n)
+    inn = _tangent(k1.el, "spatialIn", n)
+    if out is None and inn is None:
+        return None
+    out = out or (0.0,) * n
+    inn = inn or (0.0,) * n
+    cache = getattr(k0, "_spatial", None)
+    if cache is not None and cache[0] is k1:
+        return cache[1]
+    curve = _Bezier(k0.value, _add(k0.value, out), _add(k1.value, inn), k1.value)
+    object.__setattr__(k0, "_spatial", (k1, curve))
+    return curve
+
+
+def _span_length(k0: Key, k1: Key) -> float:
+    sp = spatial_curve(k0, k1)
+    if sp is not None:
+        return sp.length
+    a, b = k0.value, k1.value
+    if isinstance(a, tuple) and isinstance(b, tuple) and len(a) == len(b):
+        return math.dist(a, b)
+    if isinstance(a, float) and isinstance(b, float):
+        return abs(b - a)
+    return 0.0
+
+
+def apply_roving(keys: list[Key]) -> list[Key]:
+    """Roving keys (AE): between two fixed keys, roving keys are retimed so the value moves at constant
+    speed along the (spatial) path; the first and last keys never rove."""
+    if not any(k.el is not None and k.el.get("roving") == "true" for k in keys[1:-1]):
+        return keys
+    i = 0
+    while i < len(keys) - 1:
+        j = i + 1
+        while j < len(keys) - 1 and keys[j].el is not None and keys[j].el.get("roving") == "true":
+            j += 1
+        if j > i + 1:
+            lens = [_span_length(keys[k], keys[k + 1]) for k in range(i, j)]
+            total = sum(lens)
+            t0, t1 = keys[i].time, keys[j].time
+            acc = 0.0
+            for k in range(i + 1, j):
+                acc += lens[k - i - 1]
+                keys[k].time = t0 + (t1 - t0) * (acc / total if total > 0 else (k - i) / (j - i))
+        i = j
+    return keys

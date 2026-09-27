@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scene version="1.1">
+  <project width="640" height="360" fps="24" duration="4" background="#101418FF" antialias3d="2"/>
+  <materials>
+    <material id="m-floor" baseColor="#8A8F99FF" roughness="0.8"/>
+    <material id="m-chrome" baseColor="#E8ECF2FF" metallic="1" roughness="0.15" clearcoat="0.5"/>
+    <material id="m-paint" baseColor="#FF5A36FF" roughness="0.35" clearcoat="1" clearcoatRoughness="0.05" iridescence="0.3"/>
+    <material id="m-glass" baseColor="#FFFFFFFF" roughness="0.02" transmission="1" ior="1.5" thickness="0.3"
+              attenuationColor="#3DD6D0FF" attenuationDistance="0.6" dispersion="0.3"/>
+    <material id="m-velvet" baseColor="#1A2340FF" roughness="0.9" sheenColor="#6B4BFFFF" sheenRoughness="0.4"/>
+    <material id="m-neon" baseColor="#000000FF" emissive="#FFC23DFF" emissiveStrength="4"/>
+    <material id="m-brushed" baseColor="#C9CED6FF" metallic="1" roughness="0.35" anisotropy="0.8" anisotropyRotation="0"/>
+  </materials>
+  <composition>
+    <camera id="cam" x="0" y="160" z="900" focalLength="35" target="tgt" depthOfField="true" fStop="1.4" apertureBlades="7"/>
+    <object3D id="tgt" primitive="sphere" radius="1" y="-20" visible="false"/>
+    <object3D id="floor" primitive="plane" material="m-floor" width="3000" height="3000" y="-150" rotationX="-90" castShadow="false"/>
+    <object3D id="chrome" primitive="sphere" material="m-chrome" radius="90" x="-300" y="-60" segments="64"/>
+    <object3D id="paint" primitive="box" material="m-paint" width="150" height="150" x="260" y="-75" rotationY="30" bevel="12"/>
+    <object3D id="glass" primitive="torus" material="m-glass" radius="85" height="50" x="0" y="0" z="120" rotationX="70" segments="96"/>
+    <object3D id="velvet" primitive="capsule" material="m-velvet" radius="45" height="220" x="-520" y="-40" z="-250"/>
+    <object3D id="brushed" primitive="cylinder" material="m-brushed" radius="60" height="140" x="520" y="-80" z="-250" bevel="8"/>
+    <object3D id="neon" primitive="text" material="m-neon" text="3D" font="Sans Bold" depth="30" bevel="4" x="0" y="170" z="-300" height="160"/>
+    <object3D id="cone" primitive="cone" material="m-paint" radius="50" height="120" x="130" y="-90" z="-420"/>
+  </composition>
+  <lights>
+    <light id="dome" type="dome" environment="media/3d/env_sky.npy" intensity="0.8" environmentVisible="true"/>
+    <light id="key" type="spot" x="-500" y="800" z="600" pitch="-45" yaw="35" spotAngle="50" innerConeAngle="30"
+           colorTemperature="5600" intensity="700" castShadow="true" shadowSoftness="0.3" shadowMapSize="2048"/>
+    <light id="rim" type="rect-area" x="600" y="300" z="-500" yaw="-130" width="300" height="150" color="#3DD6D0FF" intensity="200"/>
+  </lights>
+</scene>

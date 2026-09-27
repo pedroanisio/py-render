@@ -19,6 +19,33 @@ _SRGB_TO_LIN = np.array([(c / 255 / 12.92) if c / 255 <= 0.04045 else ((c / 255 
                          for c in range(256)], np.float32)
 
 
+# Working primaries: cairo, 8-bit images and colours arrive in sRGB/Rec.709 primaries. When the document
+# composites in other primaries (colorManagement/@workingSpace), linear values are converted with _WM
+# on the way in and _WM_INV on the way back out to display-referred sRGB. Set per RenderContext.
+_WM: np.ndarray | None = None
+_WM_INV: np.ndarray | None = None
+
+
+def set_working_matrix(m: np.ndarray | None) -> None:
+    """Install the sRGB-linear -> working-linear matrix (None = working primaries are Rec.709)."""
+    global _WM, _WM_INV
+    if m is None or np.allclose(m, np.eye(3), atol=1e-7):
+        _WM = _WM_INV = None
+    else:
+        _WM = np.asarray(m, np.float32)
+        _WM_INV = np.linalg.inv(m).astype(np.float32)
+
+
+def to_working_primaries(rgb: np.ndarray) -> np.ndarray:
+    """Linear sRGB-primaries RGB (last axis 3; premultiplied is fine) -> working primaries."""
+    return rgb if _WM is None else rgb @ _WM.T
+
+
+def from_working_primaries(rgb: np.ndarray) -> np.ndarray:
+    """Linear working-primaries RGB -> linear sRGB primaries (before sRGB encoding for display ops)."""
+    return rgb if _WM_INV is None else rgb @ _WM_INV.T
+
+
 def srgb_to_linear(a: np.ndarray) -> np.ndarray:
     a = np.clip(a, 0.0, None)
     return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4).astype(np.float32)
@@ -51,6 +78,15 @@ class Buf:
     def empty(x0: int, y0: int, w: int, h: int) -> "Buf":
         return Buf(np.zeros((max(1, h), max(1, w), 4), np.float32), x0, y0)
 
+    @staticmethod
+    def null() -> "Buf":
+        """A zero-size tile: an empty accumulator that grows to exactly what is composited into it."""
+        return Buf(np.zeros((0, 0, 4), np.float32), 0, 0)
+
+    @property
+    def is_null(self) -> bool:
+        return self.px.size == 0
+
     def copy(self) -> "Buf":
         return Buf(self.px.copy(), self.x0, self.y0)
 
@@ -61,6 +97,8 @@ class Buf:
 
     def expand_to(self, rect: tuple[int, int, int, int]) -> "Buf":
         """Return a buffer covering the union of this tile and rect."""
+        if self.is_null:
+            return Buf.empty(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1])
         x0, y0 = min(self.x0, rect[0]), min(self.y0, rect[1])
         x1, y1 = max(self.x0 + self.w, rect[2]), max(self.y0 + self.h, rect[3])
         if (x0, y0, x1, y1) == self.rect:
@@ -147,6 +185,8 @@ def bgra_to_working(raw: np.ndarray, linear: bool) -> np.ndarray:
     for dst, src in ((0, 2), (1, 1), (2, 0)):
         out[..., dst] = _PREMUL_LIN[alpha, raw[..., src]]
     out[..., 3] = a
+    if _WM is not None:
+        out[..., :3] = out[..., :3] @ _WM.T
     return out
 
 
@@ -174,6 +214,8 @@ def rgba8_to_working(rgba: np.ndarray, linear: bool, premultiplied: bool = False
     out = np.empty(f.shape, np.float32)
     out[..., :3] = rgb * a
     out[..., 3:] = a
+    if linear and _WM is not None:
+        out[..., :3] = out[..., :3] @ _WM.T
     return out
 
 
@@ -208,4 +250,67 @@ def color_to_working(c, linear: bool) -> tuple[float, float, float, float]:
     r, g, b, a = c
     if linear:
         r, g, b = (float(srgb_to_linear(np.float32(v))) for v in (r, g, b))
+        if _WM is not None:
+            r, g, b = (float(v) for v in _WM @ np.array([r, g, b], np.float32))
     return r, g, b, a
+
+
+# ---------------------------------------------------------------- perspective
+def projected_scale(H: np.ndarray, w: float, h: float, limit: float = 4.0) -> float:
+    """Resolution for drawing a w x h box flat so that warping it by H loses no detail:
+    the largest local magnification of H over the box corners (capped)."""
+    best = 0.0
+    for x, y in ((0, 0), (w, 0), (0, h), (w, h), (w / 2, h / 2)):
+        d = H[2, 0] * x + H[2, 1] * y + H[2, 2]
+        if d <= 1e-9:
+            continue
+        px = (H[0, 0] * x + H[0, 1] * y + H[0, 2]) / d
+        py = (H[1, 0] * x + H[1, 1] * y + H[1, 2]) / d
+        # Jacobian of the projective map at (x, y).
+        jx = ((H[0, 0] - px * H[2, 0]) / d, (H[1, 0] - py * H[2, 0]) / d)
+        jy = ((H[0, 1] - px * H[2, 1]) / d, (H[1, 1] - py * H[2, 1]) / d)
+        best = max(best, math.hypot(*jx), math.hypot(*jy))
+    return min(limit, best) if best > 0 else 0.0
+
+
+def warp_projective(src: Buf, H: np.ndarray, frame_rect, margin: int = 64) -> Buf | None:
+    """Warp a premultiplied tile by the projective map H (tile-space pixels -> frame pixels),
+    bilinear, points behind the projection centre dropped."""
+    x0, y0 = src.x0, src.y0
+    corners = np.array([[x0, y0, 1], [x0 + src.w, y0, 1], [x0, y0 + src.h, 1], [x0 + src.w, y0 + src.h, 1]], np.float64)
+    q = corners @ H.T
+    if (q[:, 2] <= 1e-9).all():
+        return None
+    ok = q[:, 2] > 1e-9
+    xs, ys = q[ok, 0] / q[ok, 2], q[ok, 1] / q[ok, 2]
+    fr = (frame_rect[0] - margin, frame_rect[1] - margin, frame_rect[2] + margin, frame_rect[3] + margin)
+    if not ok.all():
+        rect = fr
+    else:
+        rect = (int(math.floor(xs.min())) - 1, int(math.floor(ys.min())) - 1, int(math.ceil(xs.max())) + 1, int(math.ceil(ys.max())) + 1)
+        rect = intersect(rect, fr)
+    if rect is None:
+        return None
+    Hi = np.linalg.inv(H)
+    gy, gx = np.mgrid[rect[1]:rect[3], rect[0]:rect[2]].astype(np.float64)
+    gx += 0.5
+    gy += 0.5
+    d = Hi[2, 0] * gx + Hi[2, 1] * gy + Hi[2, 2]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        sx = (Hi[0, 0] * gx + Hi[0, 1] * gy + Hi[0, 2]) / d - x0 - 0.5
+        sy = (Hi[1, 0] * gx + Hi[1, 1] * gy + Hi[1, 2]) / d - y0 - 0.5
+    # A pixel is visible only if its source point projects in front of the camera.
+    wsrc = H[2, 0] * (sx + x0 + 0.5) + H[2, 1] * (sy + y0 + 0.5) + H[2, 2]
+    valid = np.isfinite(sx) & np.isfinite(sy) & (wsrc > 1e-9)
+    sx = np.where(valid, sx, -10.0)
+    sy = np.where(valid, sy, -10.0)
+    ix, iy = np.floor(sx).astype(np.int64), np.floor(sy).astype(np.int64)
+    fx, fy = (sx - ix).astype(np.float32), (sy - iy).astype(np.float32)
+    out = np.zeros(gx.shape + (4,), np.float32)
+    h, w = src.h, src.w
+    for dx, dy, wt in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
+        jx, jy = ix + dx, iy + dy
+        inside = (jx >= 0) & (jx < w) & (jy >= 0) & (jy < h)
+        v = src.px[np.clip(jy, 0, h - 1), np.clip(jx, 0, w - 1)]
+        out += v * (wt * inside)[..., None]
+    return Buf(out, rect[0], rect[1])

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Burns tests/fixtures/captions/sample.ass with its own styling over a plain backdrop. -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="7" seed="1" background="#3A4A5AFF"/>
+  <composition>
+    <shape id="stripe" shape="rect" width="1280" height="240" y="240" fill="#6A7A8AFF"/>
+  </composition>
+  <captions>
+    <captionTrack id="cap" language="en" src="sample.ass" format="ass" mode="both"/>
+  </captions>
+</scene>

@@ -81,9 +81,14 @@ def decode(path: str, sr: int, channels: int = 2, stream: int | None = None) -> 
     return np.frombuffer(p.stdout, np.float32).reshape(-1, channels).copy()
 
 
-def write_wav(path: str, x: np.ndarray, sr: int, bits: int = 24, dither: bool = True, seed: int = 0) -> None:
-    """Write float (n, ch) as integer PCM WAV (16/24/32-bit) with optional TPDF dither."""
+def write_wav(path: str, x: np.ndarray, sr: int, bits: int = 24, dither: bool = True, seed: int = 0,
+              channel_mask: int | None = None) -> None:
+    """Write float (n, ch) as integer PCM WAV (16/24/32-bit) with optional TPDF dither.
+    More than two channels (or an explicit `channel_mask`) are written as WAVE_FORMAT_EXTENSIBLE
+    with dwChannelMask = channel_mask (default: the ffmpeg default layout for the channel count;
+    pass 0 for ambisonics / unassigned channels, see spatial.Layout.wav_mask)."""
     from .dsp import quantize
+    from .spatial import AUTO, Layout
     bits = bits if bits in (16, 24, 32) else 24
     q = quantize(np.clip(x, -1.0, 1.0), bits, dither and bits < 32, seed)
     if bits == 16:
@@ -94,8 +99,22 @@ def write_wav(path: str, x: np.ndarray, sr: int, bits: int = 24, dither: bool = 
         raw = np.ascontiguousarray(b).tobytes()
     else:
         raw = q.astype("<i4").tobytes()
-    with wave.open(path, "wb") as w:
-        w.setnchannels(x.shape[1])
-        w.setsampwidth(bits // 8)
-        w.setframerate(int(sr))
-        w.writeframes(raw)
+    ch = int(x.shape[1])
+    if channel_mask is None and ch <= 2:
+        with wave.open(path, "wb") as w:
+            w.setnchannels(ch)
+            w.setsampwidth(bits // 8)
+            w.setframerate(int(sr))
+            w.writeframes(raw)
+        return
+    if channel_mask is None:
+        channel_mask = Layout(AUTO[ch]).wav_mask if ch in AUTO else 0
+    import struct
+    block = ch * bits // 8
+    guid_pcm = bytes.fromhex("0100000000001000800000aa00389b71")
+    fmt = struct.pack("<HHIIHHHHI", 0xFFFE, ch, int(sr), int(sr) * block, block, bits, 22, bits,
+                      int(channel_mask)) + guid_pcm
+    data = raw + (b"\0" if len(raw) % 2 else b"")
+    body = b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt + b"data" + struct.pack("<I", len(raw)) + data
+    with open(path, "wb") as f:
+        f.write(b"RIFF" + struct.pack("<I", len(body)) + body)

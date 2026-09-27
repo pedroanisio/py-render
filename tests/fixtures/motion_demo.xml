@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Motion demo for scenerender (tests/test_particles.py, test_modifiers.py, test_physics.py):
      particle presets, shape modifiers, a 2.5D card under an animated camera, object3D fallbacks,
-     deformers and rigid bodies. 1280x720, 4 s. -->
+     deformers, rigid bodies (box, circle, capsule) and a soft jelly. 1280x720, 4 s.
+     tests/fixtures/motion_sim.xml exercises the remaining simulation features. -->
 <scene version="1.1">
   <project width="1280" height="720" fps="30" duration="4" seed="7" background="#0B0F1AFF"/>
   <materials>
@@ -82,6 +83,12 @@
     </shape>
     <shape id="ground" shape="rect" x="760" y="600" width="300" height="20" fill="#2A3350FF">
       <rigidBody type="static" shape="box"/>
+    </shape>
+    <shape id="pill" shape="rounded-rect" x="960" y="200" width="70" height="26" radius="13" rotation="30" fill="#2EC4B6FF">
+      <rigidBody type="dynamic" shape="capsule" activateAt="0.3"/>
+    </shape>
+    <shape id="jelly" shape="rounded-rect" x="780" y="420" width="90" height="70" radius="18" fill="#6B4BFFFF">
+      <softBody kind="jelly" rows="3" cols="4" stiffness="300" damping="0.3" pressure="200"/>
     </shape>
   </composition>
   <physics gravityY="-9.80665" pixelsPerMeter="100" bounds="frame">

@@ -1,0 +1,72 @@
+Adobe After Effects 8.0 Keyframe Data
+
+	Units Per Second	24
+	Source Width	1920
+	Source Height	1080
+	Source Pixel Aspect Ratio	1
+	Comp Pixel Aspect Ratio	1
+
+Motion Trackers	Tracker #1	Track Point #1	Feature Center
+	Frame	X pixels	Y pixels	
+	0	960	540	
+	1	964	538	
+	2	968	536	
+	3	972	534	
+
+Motion Trackers	Tracker #1	Track Point #1	Confidence
+	Frame	percent	
+	0	99	
+	1	99	
+	2	99	
+	3	99	
+
+Motion Trackers	Tracker #1	Track Point #2	Attach Point
+	Frame	X pixels	Y pixels	
+	0	10	20	
+	2	30	40	
+
+Transform	Anchor Point
+	Frame	X pixels	Y pixels	Z pixels	
+	0	50	50	0	
+
+Transform	Position
+	Frame	X pixels	Y pixels	Z pixels	
+	0	100	200	0	
+	2	120	220	0	
+
+Transform	Rotation
+	Frame	degrees	
+	0	0	
+	4	10	
+
+Transform	Scale
+	Frame	X percent	Y percent	Z percent	
+	0	100	100	100	
+	4	150	200	100	
+
+Transform	Opacity
+	Frame	percent	
+	0	100	
+
+Effects	Corner Pin #1	Upper Left #2
+	Frame	X pixels	Y pixels	
+	0	0	0	
+	4	8	4	
+
+Effects	Corner Pin #1	Upper Right #3
+	Frame	X pixels	Y pixels	
+	0	400	0	
+	4	408	4	
+
+Effects	Corner Pin #1	Lower Left #4
+	Frame	X pixels	Y pixels	
+	0	0	300	
+	4	8	304	
+
+Effects	Corner Pin #1	Lower Right #5
+	Frame	X pixels	Y pixels	
+	0	400	300	
+	4	408	304	
+
+
+End of Keyframe Data

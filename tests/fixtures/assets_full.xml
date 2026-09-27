@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Asset kinds at FULL level: lottie (json + .lottie, slots, segments, text layers), formula (LaTeX),
+     charts with data-file titles and legends, colour-managed 10-bit video with frame mix.
+     Media: tests/fixtures/media/make_media_assets.py -->
+<scene version="1.1">
+  <project width="1280" height="720" fps="30" duration="3" seed="3" background="#12161CFF"/>
+  <styles>
+    <textStyle id="ts" font="DejaVu Sans" size="14" color="#E8ECF2FF"/>
+    <textStyle id="ts-big" font="DejaVu Sans" weight="700" color="#FFFFFFFF" shadowColor="#00000099" shadowOffsetY="2" shadowBlur="4"/>
+  </styles>
+  <assets>
+    <lottie id="lt" src="media/lottie_demo.json" width="300" height="225"/>
+    <lottie id="lt-slots" src="media/lottie_demo.json" width="300" height="225" segment="outro">
+      <slot id="accent" value="#30C0FFFF"/>
+      <slot id="title" value="Slots!"/>
+      <slot id="panel" value="#402060FF"/>
+    </lottie>
+    <lottie id="lt-zip" src="media/lottie_demo.lottie" width="300" height="225" segment="10,50"/>
+    <formula id="fx" tex="x = \frac{-b \pm \sqrt{b^2-4ac}}{2a} \qquad \sum_{k=1}^{n} k^2 = \frac{n(n+1)(2n+1)}{6}" width="600" height="110" size="30" color="#FFD166FF"/>
+    <chart id="ch-json" kind="column" width="400" height="240" src="media/chart_data.json" textStyle="ts" showValues="true" progress="0">
+      <animate property="progress"><key time="0" value="0"/><key time="1.5" value="1" interpolation="ease-out"/></animate>
+    </chart>
+    <chart id="ch-donut" kind="donut" width="300" height="200" labels="Video,Audio,Text" textStyle="ts" showValues="true" progress="0">
+      <series name="share" values="50 30 20"/>
+      <animate property="progress"><key time="0" value="0"/><key time="1.5" value="1"/></animate>
+    </chart>
+    <chart id="ch-count" kind="counter" width="260" height="110" textStyle="ts-big" format="#,##0" labels="frames" progress="0">
+      <series name="n" values="0 5400" color="#3DD6D0FF"/>
+      <animate property="progress"><key time="0" value="0"/><key time="2" value="1"/></animate>
+    </chart>
+    <video id="v-log" src="media/log10.mkv" width="64" height="16" fps="10" duration="0.5" colorSpace="rec2020" transfer="slog3" timecodeStart="01:00:00:00"/>
+    <video id="v-hlg" src="media/hlg10.mkv" width="64" height="36" fps="10" duration="1" colorSpace="rec2020" transfer="hlg"/>
+  </assets>
+  <composition>
+    <layer id="L-lt" asset="lt"/>
+    <layer id="L-lt-slots" asset="lt-slots" x="310" loop="5"/>
+    <layer id="L-lt-zip" asset="lt-zip" x="620" scaleX="1.3" scaleY="1.3"/>
+    <layer id="L-fx" asset="fx" x="20" y="240"/>
+    <layer id="L-ch" asset="ch-json" x="640" y="300"/>
+    <layer id="L-donut" asset="ch-donut" x="1000" y="20" scaleX="0.9" scaleY="0.9"/>
+    <layer id="L-count" asset="ch-count" x="1010" y="220"/>
+    <layer id="L-log" asset="v-log" x="20" y="380" boxWidth="300" boxHeight="75" fit="fill"/>
+    <layer id="L-hlg" asset="v-hlg" x="340" y="380" boxWidth="256" boxHeight="144" fit="contain" frameBlend="frame-mix" speed="0.5"/>
+  </composition>
+</scene>

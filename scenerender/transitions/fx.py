@@ -122,22 +122,28 @@ def light_leak(rc, tr, a, b, p, ctx):
     return out(res)
 
 
-@TRANSITIONS.register("morph", level=PARTIAL,
-                      note="no feature correspondence: crossfade with a smooth displacement warp and a light blur peaking at the midpoint")
-def morph(rc, tr, a, b, p, ctx):
-    A, B = arrays(rc, a, b)
-    xs, ys = grid(rc)
-    W, H = rc.width, rc.height
-    k = math.sin(math.pi * p)
-    amp = 0.02 * max(W, H) * k
-    g = rng(rc, tr, ctx, "morph", temporal=False)
-    ph = g.uniform(0, 2 * math.pi, 4)
-    dx = amp * (np.sin(2 * math.pi * ys / H * 1.3 + ph[0]) + 0.5 * np.sin(2 * math.pi * xs / W * 2.1 + ph[1]))
-    dy = amp * (np.sin(2 * math.pi * xs / W * 1.1 + ph[2]) + 0.5 * np.sin(2 * math.pi * ys / H * 1.7 + ph[3]))
-    sigma = 0.004 * max(W, H) * k
-    A2 = gaussian(sample(A, xs + dx * p, ys + dy * p, clamp=True), sigma, clamp=True) if p < 1 else A * 0
-    B2 = gaussian(sample(B, xs - dx * (1 - p), ys - dy * (1 - p), clamp=True), sigma, clamp=True) if p > 0 else B * 0
-    return out(mix(A2, B2, sstep(0.0, 1.0, p)))
+@TRANSITIONS.register("morph", level=FULL,
+                      note="bidirectional dense pyramidal block correspondence and trajectory warps, linear crossfade")
+def morph(rc,tr,a,b,p,ctx):
+    """Classic flow morph. Params flowSize (384 analysis pixels), iterations (4),
+    window (9 matching pixels). RGBA matching includes coverage; disocclusions
+    crossfade. Identical inputs and endpoints remain exactly unchanged.
+    """
+    from ..effects import Params
+    from ..effects.fields import optical_flow, flow_warp
+    A,B=arrays(rc,a,b)
+    if p <= 0 or np.array_equal(A,B):
+        return out(A.copy())
+    if p >= 1:
+        return out(B.copy())
+    q=Params(rc,tr,ctx)
+    size=max(32,min(1024,round(q.param("flowSize",384))))
+    iterations=max(1,min(16,round(q.param("iterations",4))))
+    window=max(3,min(31,round(q.param("window",9)))) | 1
+    # No id-only cache: each frame can contain different animated pixels.
+    ab=optical_flow(A,B,size,iterations,window)
+    ba=optical_flow(B,A,size,iterations,window)
+    return out(mix(flow_warp(A,ab,p),flow_warp(B,ba,1-p),p))
 
 
 TRANSITIONS.declare("shader", NONE, "GLSL shaders are not executed; rendered as a crossfade")

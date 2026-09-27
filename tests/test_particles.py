@@ -167,6 +167,98 @@ def test_collide_with_floor(tmp_path):
     assert max(ys) <= 200.5
 
 
+def doc_with_assets(tmp_path, assets: str, body: str, extra: str = "", name="pa.xml", w=200, h=200) -> str:
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<scene version="1.1">
+  <project width="{w}" height="{h}" fps="10" duration="6" seed="3" background="#000000FF" linearLight="false"/>
+  <assets>{assets}</assets>
+  <composition>
+{textwrap.indent(body, '    ')}
+  </composition>
+  {extra}
+</scene>"""
+    p = tmp_path / name
+    p.write_text(xml)
+    return str(p)
+
+
+def test_collide_with_rigid_body_alpha(tmp_path):
+    body = """<shape id="dome" shape="ellipse" x="50" y="100" width="100" height="100" fill="#FFFFFFFF">
+  <rigidBody type="static"/>
+</shape>
+<particleEmitter id="e" x="100" y="20" emitterShape="line" emitterWidth="60" rate="0" lifetime="10" speed="0"
+                 gravityY="400" collide="true" bounce="0.3" seed="2">
+  <burst time="0" count="40"/>
+</particleEmitter>"""
+    r = Renderer.open(scene(tmp_path, body, extra='<physics gravityY="0"/>'))
+    for t in np.arange(0.1, 3.0, 0.1):
+        s = live(r, "e", t)
+        d = np.hypot(s["x"] - 100, s["y"] - 150)
+        assert d.min() > 50 - 1.5                          # never inside the dome's alpha
+    s = live(r, "e", 3.0)
+    assert (np.hypot(s["x"] - 100, s["y"] - 150) < 60).any() or (s["y"] > 190).any()   # deflected, not stopped above
+
+
+def test_directional_force_y_is_up(tmp_path):
+    body = """<particleEmitter id="e" x="100" y="100" emitterShape="point" rate="0" lifetime="10" speed="0" seed="1">
+  <burst time="0" count="1"/>
+</particleEmitter>"""
+    extra = '<physics><forceField id="ff" type="directional" forceY="100" affects="particles"/></physics>'
+    r = Renderer.open(scene(tmp_path, body, extra=extra))
+    assert float(live(r, "e", 1.0)["y"][0]) == pytest.approx(100 - 50, abs=2.0)
+
+
+def test_path_emitter_uniform_by_arc_length_without_bridging(tmp_path):
+    body = """<particleEmitter id="e" x="0" y="0" emitterShape="path" emitterPath="M0 50 L100 50 M0 150 L300 150"
+                 rate="0" lifetime="10" speed="0" seed="5"><burst time="0" count="4000"/></particleEmitter>"""
+    r = Renderer.open(scene(tmp_path, body, w=400))
+    s = live(r, "e", 0.05)
+    on_a = np.isclose(s["y"], 50)
+    on_b = np.isclose(s["y"], 150)
+    assert (on_a | on_b).all()                            # nothing on the jump between subpaths
+    assert on_b.mean() == pytest.approx(0.75, abs=0.03)   # 300 of 400 px of length
+
+
+def test_trail_follows_recorded_trajectory(tmp_path):
+    from scenerender.nodes import particles as P
+    body = """<particleEmitter id="e" x="20" y="20" emitterShape="point" rate="0" lifetime="10" speed="100" direction="0"
+                 gravityY="400" trail="0.3" seed="1"><burst time="0" count="1"/></particleEmitter>"""
+    r = Renderer.open(scene(tmp_path, body))
+    s = live(r, "e", 1.0)
+    pts, taus = P._trail_points(float(s["x"][0]), float(s["y"][0]), s["hx"][0], s["hy"][0], float(s["frac"][0]), 0.3)
+    assert taus[-1] == pytest.approx(0.3)
+    past = live(r, "e", 0.7)
+    assert pts[-1] == pytest.approx((float(past["x"][0]), float(past["y"][0])), abs=0.5)
+    mid = live(r, "e", 0.85)                              # curved: the midpoint is not on the chord
+    chord_mid = (np.array(pts[0]) + np.array(pts[-1])) / 2
+    assert np.hypot(*(chord_mid - [mid["x"][0], mid["y"][0]])) > 2
+
+
+def test_sprite_tinted_by_colour(tmp_path):
+    from PIL import Image
+    Image.new("RGBA", (16, 16), (255, 255, 255, 255)).save(tmp_path / "spr.png")
+    body = """<particleEmitter id="e" x="100" y="100" emitterShape="point" rate="0" lifetime="10" speed="0" size="40"
+                 shape="sprite" sprite="spr" color="#FF8000FF" seed="1"><burst time="0" count="1"/></particleEmitter>"""
+    r = Renderer.open(doc_with_assets(tmp_path, '<image id="spr" src="spr.png" width="16" height="16"/>', body))
+    px = r.frame_rgb(0.5)[100, 100]
+    assert px[0] > 240 and 110 < px[1] < 145 and px[2] < 10
+
+
+def test_asset_alpha_sampled_at_emission_time(tmp_path):
+    from PIL import Image
+    for k, half in ((1, 0), (2, 1)):
+        im = Image.new("RGBA", (40, 20), (0, 0, 0, 0))
+        im.paste((255, 255, 255, 255), (half * 20, 0, half * 20 + 20, 20))
+        im.save(tmp_path / f"f_{k:04d}.png")
+    body = """<particleEmitter id="e" x="100" y="100" emitterShape="asset-alpha" emitterAsset="seq" rate="0" lifetime="10"
+                 speed="0" seed="1"><burst time="0.2" count="200"/><burst time="1.2" count="200"/></particleEmitter>"""
+    r = Renderer.open(doc_with_assets(tmp_path, '<imageSequence id="seq" src="f_%04d.png" first="1" last="2" fps="1" '
+                                                'width="40" height="20"/>', body))
+    s = live(r, "e", 1.25)
+    early, late = s["pid"] < 200, s["pid"] >= 200
+    assert (s["x"][early] < 100 + 0.6).all() and (s["x"][late] > 100 - 0.6).all()
+
+
 # ---------------------------------------------------------------- camera / 3D
 def test_threed_without_camera_is_identity(tmp_path):
     from scenerender.camera import camera_hook

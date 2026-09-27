@@ -60,11 +60,29 @@ def flex_layout(rc, group, ctx, box, mode: str) -> dict:
         elif justify == "space-evenly":
             lead, between = free / (n + 1), gap + free / (n + 1)
     pos = pad + lead
-    for k, m, c in zip(kids, main, cross):
-        cpos = pad + (_cross(align, cross_avail, c) if cross_avail > 0 else 0.0)
+    baselines = [_baseline(rc, k, ctx, box, c) for k, c in zip(kids, cross)] if align == "baseline" and horizontal else None
+    top = max(baselines) if baselines else 0.0
+    for i, (k, m, c) in enumerate(zip(kids, main, cross)):
+        if baselines:
+            cpos = pad + top - baselines[i]
+        else:
+            cpos = pad + (_cross(align, cross_avail, c) if cross_avail > 0 else 0.0)
         out[k] = (pos, cpos) if horizontal else (cpos, pos)
         pos += m + between
     return out
+
+
+def _baseline(rc, node, ctx, box, height: float) -> float:
+    """Distance from the top of a child's box to its first baseline: a text layer's first line,
+    else the bottom edge (flexbox convention for boxes without text)."""
+    if ln(node) == "layer":
+        asset = rc.layer_asset(node, ctx)
+        if asset is not None and ln(asset) == "text":
+            from .assets import text as text_asset
+            fn = getattr(text_asset, "first_baseline", None)
+            if fn is not None:
+                return fn(rc, asset, ctx) * abs(rc.ev.num(node, "scaleY", ctx, 1.0))
+    return height
 
 
 def _cross(align: str, avail: float, size: float) -> float:

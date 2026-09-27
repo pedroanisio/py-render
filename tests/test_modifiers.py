@@ -261,11 +261,18 @@ def test_mesh_warp_and_puppet(tmp_path):
                                       '<point row="0" col="0" x="10" y="0"/><point row="0" col="1" x="10" y="0"/></modifier>')
     f, _ = deform.build_maps(r.rc, el, C0, (100, 100), M)[0]
     assert f(np.array([0.0, 50.0]), np.array([0.0, 100.0]))[0].tolist() == pytest.approx([10, 50])
+    # one moved pin (plus starch, which stiffens but does not hold): ARAP translates rigidly
     r, el, M = deform_setup(tmp_path, '<modifier type="puppet"><pin restX="50" restY="0" x="0" y="-20"/>'
                                       '<pin kind="starch" restX="50" restY="100"/></modifier>')
     f, _ = deform.build_maps(r.rc, el, C0, (100, 100), M)[0]
     x, y = f(np.array([50.0, 50.0]), np.array([0.0, 100.0]))
-    assert y[0] == pytest.approx(-20, abs=0.5) and y[1] == pytest.approx(100, abs=0.5)
+    assert y[0] == pytest.approx(-20, abs=0.1) and y[1] == pytest.approx(80, abs=0.1)
+    # a second (held) position pin anchors the bottom
+    r, el, M = deform_setup(tmp_path, '<modifier type="puppet"><pin restX="50" restY="0" x="0" y="-20"/>'
+                                      '<pin restX="50" restY="100"/></modifier>')
+    f, _ = deform.build_maps(r.rc, el, C0, (100, 100), M)[0]
+    x, y = f(np.array([50.0, 50.0]), np.array([0.0, 100.0]))
+    assert y[0] == pytest.approx(-20, abs=0.1) and y[1] == pytest.approx(100, abs=0.1)
 
 
 def test_skin_follows_bones(tmp_path):

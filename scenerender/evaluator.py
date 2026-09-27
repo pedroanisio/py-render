@@ -242,6 +242,7 @@ class Evaluator:
                 k.append(anim.Key(t, anim.parse_value(r.get("value"), kind, self.doc.tokens), r.get("value"),
                                   r.get("interpolation"), r))
             k.sort(key=lambda x: x.time)
+            k = anim.apply_roving(k)
             self._keys[a] = k
         return k
 

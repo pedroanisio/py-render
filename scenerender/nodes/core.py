@@ -56,7 +56,7 @@ def _repeat_vars(el, ctx: Ctx) -> Ctx:
 @NODES.register("group", "sequence", level=FULL)
 def render_group(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     cctx = _repeat_vars(el, child_ctx(rc, el, ctx))
-    dst = Buf.empty(0, 0, 1, 1)
+    dst = Buf.null()
     dst = rc.render_children(el, dst, cctx, M, size, 1.0)
     if el.get("clip") == "true":
         c = rc.canvas_for(M, size[0], size[1], 0)
@@ -262,7 +262,11 @@ def render_layer(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
         box_clip = box
     else:
         box_clip = None
-    src_t = media_time(rc, el, ctx, float(asset.get("duration")) if asset.get("duration") else None)
+    src_dur = float(asset.get("duration")) if asset.get("duration") else None
+    if src_dur is None and kind == "lottie":
+        from ..assets.lottie import segment_duration
+        src_dur = segment_duration(rc, asset, ctx)
+    src_t = media_time(rc, el, ctx, src_dur)
     buf = None
     if mode == "contain-blur":
         Fc = fit_matrix(rc, el, ctx, aw, ah, box, "cover")
@@ -337,7 +341,7 @@ def render_instance(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     SM = M
     if el.get("boxWidth") and mode != "none":
         SM = M @ fit_matrix(rc, el, ctx, sw, sh, size, mode)
-    dst = Buf.empty(0, 0, 1, 1)
+    dst = Buf.null()
     bg = sym.get("background")
     if bg and paint.paint_ref(bg) is None and paint.parse_color(bg, rc.doc.tokens)[3] > 0 or (bg and paint.paint_ref(bg)):
         c = rc.canvas_for(SM, sw, sh, 1)

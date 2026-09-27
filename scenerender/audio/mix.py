@@ -1,47 +1,92 @@
 """The audio mix: audioTrack -> bus -> ... -> master, plus the audio of video layers.
 
 Signal flow per audioTrack (all pinned here; the schema leaves the order open):
-    source region (clipIn/clipOut, speed, reverse, loop, fitToDuration)
+    source region (clipIn/clipOut) -> reverse -> speed (preservePitch: phase-locked phase-vocoder
+        time-stretch, spectral.time_stretch; else band-limited resampling, pitch follows speed)
+    -> loop (loop + 1 plays, sample-exact tiling) or fitToDuration (bar-aligned edit, below)
     -> fadeIn/fadeOut (fadeCurve)                 on the placed region
-    -> audioEffect chain (document order)         with room for reverb/delay tails
-    -> fader: volume (unit) x gain (dB)           automation sampled every 10 ms
-    -> pan (constant power, unity at centre)
+    -> audioEffect chain (document order)         in the source's channels, with room for tails
+    -> fader: volume (unit) x gain (dB) x mute x transition gain (transitionAudio)
+    -> pan / spatialisation into the audioMix layout (spatial.py)
     -> ducking (duckUnder sources vs duckThreshold, slewed at duckAmount/duckAttack|duckRelease dB/s)
     -> bus (or master)
+Automation of volume/gain/pan/mute (the audio automation of the XSD) is sampled every 10 ms and
+interpolated per sample; the other track attributes are read once at the track start.
 A bus sums its tracks and child buses, then effects -> fader -> pan -> ducking -> its output bus.
-The master sums everything unrouted, then effects -> volume -> normalize (BS.1770-4 integrated,
-static gain to @loudness) -> true-peak limiter at @truePeak (when normalizing or limiter="true").
-Dither is applied when the mix is quantised (io.write_wav).
+The master sums everything unrouted, then effects -> volume -> normalize -> true-peak limiter at
+@truePeak (4x oversampled; whenever normalizing or limiter="true").  Dither: io.write_wav.
+
+normalize="integrated": ITU-R BS.1770-4 integrated loudness of the full mix, static gain to
+@loudness, re-measured after the limiter (up to 3 passes, +6 dB) so the result meets the target.
+normalize="dynamic": EBU R128 / broadcast AGC (dsp.dynamic_gain_db): the gain follows @loudness -
+gated short-term loudness (3 s window centred on the time = offline look-ahead; only 100 ms blocks
+above max(-70, loudness - 30) LUFS count, and windows with < 0.5 s of programme hold the gain, so
+pauses are neither pumped up nor dilute the measurement), gain range -30..+20 dB, one-pole
+smoothing in dB with 0.5 s attack (gain falling) / 2 s release (gain rising), then the true-peak
+limiter at @truePeak.
+
+fitToDuration (music edit, pinned): the bar length B = beatsPerBar x 60 / bpm (asset @bpm, else the
+bpm of a beatGrid whose @source is the asset, else of the first beatGrid; beatsPerBar from that
+grid, else 4), divided by speed.  Bars are counted from the start of the played region (clipIn is
+a downbeat) and the output bar grid starts at the track start, so every edit lands on a bar line
+of both the source and the output.  With M whole output bars before the project end, output bars
+0..M-2 play source bars 0, 1, ..., nb-2 (the body; looping back to bar 0 when exhausted, or
+dropping the bars after bar M-2 when the source is longer) and output bar M-1 plays the source's
+last bar followed by its ring-out (the audio after the last whole bar), truncated at the project
+end with a 10 ms fade when it is longer.  Every non-contiguous splice is a 20 ms equal-power
+crossfade centred on the bar line.  The region always ends exactly on the project's last sample.
+Without a tempo the whole region is looped with crossfaded seams and trimmed at the end.
+
+transitionAudio for audioTracks (pinned ownership rule): a track follows node N when N is the
+from/to of a transition, the track's start (startMarker/start) lies in N's window [start, end),
+and the track's role is not "music" (music beds span scenes).  When several nodes qualify, the one
+that starts latest owns it.  @audio crossfade / equal-power fade the owning track over the
+transition window (from: out, to: in; a from-track is silent after the window, a to-track before
+it), cut switches at the cut point, none leaves it alone.  The gain applies at the fader.
+
+Video-layer audio (volume, mute, audioBus, transitions @audio) plays on the layer's own clock,
+including layers inside symbols reached through instances: every ancestor's window, visibility,
+condition, sequence clock shift, group timeOffset/timeScale and instance clock (speed, clipIn/
+clipOut, loop, reverse, timeRemap, overrides) is applied as the compositor does, then the layer's
+media_time (speed/loop/reverse/timeRemap/freezeAt) maps to the source (varispeed resampling).
+
+Surround / ambisonics: see spatial.py (layouts, channel order, pan -> azimuth, VBAP, ACN/SN3D).
+`Mixer.layout.ffmpeg` / `.wav_mask` give the ffmpeg layout name and the WAV channel mask.
 """
 from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
+import subprocess
+import wave
+from dataclasses import dataclass, replace
 
 import numpy as np
 
 from ..document import ln
 from ..evaluator import ANIM_TAGS, Ctx
-from ..registry import FEATURES, FULL, PARTIAL, warn_once
-from . import dsp
+from ..registry import FEATURES, FULL, warn_once
+from . import dsp, spectral
 from .effects import FxContext, process_chain, tail_seconds
-from .io import decode
+from .io import decode, ffmpeg_exe
+from .spatial import Layout, balance_gains, pan_to_azimuth, rotate_ambisonic
 
 log = logging.getLogger("scenerender")
 
-FEATURES.declare("audio:mix", FULL, "tracks, buses, master; volume/gain/pan automation at 100 Hz")
+FEATURES.declare("audio:mix", FULL, "tracks, buses, master; volume/gain/pan/mute automation at 100 Hz")
 FEATURES.declare("audio:ducking", FULL, "RMS (10 ms) key vs duckThreshold; gain slews duckAmount dB over duckAttack/duckRelease")
 FEATURES.declare("audio:normalize-integrated", FULL, "ITU-R BS.1770-4 gated integrated loudness, static gain, 4x-oversampled true-peak limiter")
-FEATURES.declare("audio:normalize-dynamic", PARTIAL, "treated as integrated normalisation plus the true-peak limiter")
-FEATURES.declare("audio:fitToDuration", PARTIAL, "loops whole bars of the asset (bpm, 4/4 or the first beatGrid's beatsPerBar) and trims at the project end with a 50 ms fade")
-FEATURES.declare("audio:preservePitch", PARTIAL, "speed changes resample (pitch follows speed); no time-stretching")
-FEATURES.declare("audio:surround", PARTIAL, "channel layouts above stereo are mixed as stereo")
-FEATURES.declare("audio:layerAudio", PARTIAL, "video layer audio (volume, mute, audioBus, transitions @audio); layers inside symbols/instances are skipped")
-FEATURES.declare("transitionAudio", PARTIAL, "crossfade/equal-power/cut/none apply to video-layer audio; audioTrack elements are not affected")
+FEATURES.declare("audio:normalize-dynamic", FULL, "EBU R128 gated short-term (3 s, centred) loudness AGC toward @loudness, 0.5 s/2 s attack/release, pause hold, true-peak limiter")
+FEATURES.declare("audio:fitToDuration", FULL, "bar-aligned edit (asset bpm / beatGrid): body bars looped or trimmed, the last bar + ring-out ends on the project's last sample; 20 ms equal-power seams")
+FEATURES.declare("audio:preservePitch", FULL, "speed != 1 time-stretches with a phase-locked phase vocoder (pitch kept); preservePitch=false resamples")
+FEATURES.declare("audio:surround", FULL, "mono/stereo/5.1/7.1/7.1.4 (2D VBAP, ffmpeg channel order) and ambisonic-1/3 (ACN/SN3D encoding); pan -> azimuth")
+FEATURES.declare("audio:layerAudio", FULL, "video layer audio (volume, mute, audioBus, transitions) incl. layers in symbols on the instance clock")
+FEATURES.declare("transitionAudio", FULL, "crossfade/equal-power/cut/none on video-layer audio and on the audioTracks the transitioned nodes own")
 
 CTRL_HZ = 100.0      # automation control rate
 ENV_HZ = 100.0       # audio_amplitude envelope rate
+SEAM = 0.02          # fitToDuration crossfade (s)
+END_FADE = 0.01      # fitToDuration truncation fade (s)
 
 
 @dataclass
@@ -58,6 +103,76 @@ def _has_anim(el, prop: str) -> bool:
     return any(ln(c) in ANIM_TAGS and c.get("property") == prop for c in el)
 
 
+def probe_channels(path: str, stream: int | None = None) -> int | None:
+    """Channel count of a file's audio (WAV header, else ffmpeg's stream info)."""
+    if stream is None and path.lower().endswith((".wav", ".wave")):
+        try:
+            with wave.open(path, "rb") as w:
+                return w.getnchannels()
+        except (wave.Error, EOFError, OSError):
+            pass
+    try:
+        p = subprocess.run([ffmpeg_exe(), "-hide_banner", "-nostdin", "-i", path], capture_output=True, text=True)
+    except OSError:
+        return None
+    k = 0
+    for line in p.stderr.splitlines():
+        if "Audio:" not in line:
+            continue
+        if stream is not None and k != stream:
+            k += 1
+            continue
+        parts = [s.strip() for s in line.split("Audio:", 1)[1].split(",")]
+        for s in parts[1:4]:
+            s = s.split("(")[0].strip()
+            if s == "mono":
+                return 1
+            if s == "stereo":
+                return 2
+            if s.endswith("channels") and s.split()[0].isdigit():
+                return int(s.split()[0])
+            try:
+                return Layout(s).n
+            except KeyError:
+                continue
+        return None
+    return None
+
+
+def transition_window(doc, tr) -> tuple[float, float, float] | None:
+    """(start, end, cut) of a transition (the compositor's rule, usable without a RenderContext)."""
+    a = doc.ids.get(tr.get("from")) if tr.get("from") else None
+    b = doc.ids.get(tr.get("to")) if tr.get("to") else None
+    if a is None and b is None:
+        return None
+    dur = float(tr.get("duration", 0.5))
+    cut = doc.window(b)[0] if b is not None else (doc.window(a)[1] if doc.window(a)[1] is not None else doc.duration)
+    al = tr.get("alignment", "center")
+    s0 = cut - dur / 2 if al == "center" else cut if al == "start" else cut - dur
+    return s0, s0 + dur, cut
+
+
+def transition_gain(tt: np.ndarray, trs) -> np.ndarray:
+    """Gain over times tt for [(window, mode, role)] (role 'from' fades out, 'to' fades in)."""
+    g = np.ones(len(tt))
+    for (w0, w1, cut), mode, role in trs:
+        if mode == "none":
+            continue
+        if mode == "cut":
+            g[(tt >= cut) if role == "from" else (tt < cut)] = 0.0
+            continue
+        p = np.clip((tt - w0) / max(1e-9, w1 - w0), 0.0, 1.0)
+        if mode == "equal-power":
+            g *= np.where(p >= 1, 0.0, np.cos(p * math.pi / 2)) if role == "from" else np.sin(p * math.pi / 2)
+        else:
+            g *= (1 - p) if role == "from" else p
+    return g
+
+
+def _in_symbol(el) -> bool:
+    return any(isinstance(a.tag, str) and ln(a) in ("symbol", "symbols") for a in el.iterancestors())
+
+
 class Mixer:
     def __init__(self, doc, ev, rc=None, representation: str | None = None, sample_rate: int | None = None):
         self.doc, self.ev, self.rc = doc, ev, rc
@@ -67,15 +182,17 @@ class Mixer:
         sr = int(am.get("sampleRate", 48000)) if am is not None else 48000
         self.sr = int(sample_rate or sr)
         ch = int(am.get("channels", 2)) if am is not None else 2
-        layout = am.get("channelLayout", "auto") if am is not None else "auto"
-        if ch > 2 or layout not in ("auto", "mono", "stereo"):
-            warn_once("audio", "surround", f"channels={ch} channelLayout={layout}: mixed as stereo")
-        self.nch = 1 if (ch == 1 or layout == "mono") else 2
+        self.layout, warn = Layout.resolve(am.get("channelLayout", "auto") if am is not None else "auto", ch)
+        if warn:
+            warn_once("audio", "channelLayout", warn)
+        self.nch = self.layout.n
+        self.spatial = self.nch > 2
         self.bits = int(am.get("bitDepth", 24)) if am is not None else 24
         self.n = int(math.ceil(doc.duration * self.sr))
-        self.tracks = {t.get("id"): t for t in (am if am is not None else []) if ln(t) == "audioTrack"}
-        self.buses = {b.get("id"): b for b in (am if am is not None else []) if ln(b) == "bus"}
-        self.master_el = next((m for m in (am if am is not None else []) if ln(m) == "master"), None)
+        kids = list(am) if am is not None else []
+        self.tracks = {t.get("id"): t for t in kids if ln(t) == "audioTrack"}
+        self.buses = {b.get("id"): b for b in kids if ln(b) == "bus"}
+        self.master_el = next((m for m in kids if ln(m) == "master"), None)
         self._decoded: dict = {}
         self._track_out: dict = {}
         self._bus_out: dict = {}
@@ -89,6 +206,10 @@ class Mixer:
     @property
     def seed(self) -> int:
         return int(self.doc.seed)
+
+    @property
+    def ffmpeg_layout(self) -> str:
+        return self.layout.ffmpeg
 
     def ctx(self, t: float, s: float = 0.0, e: float | None = None) -> Ctx:
         return Ctx(t=t, comp_t=t, frame=int(t * float(self.doc.fps)), node_start=s, node_end=e)
@@ -138,24 +259,51 @@ class Mixer:
             return self.asset_path(asset), None
         return None, None
 
+    def source_channels(self, asset, path: str | None, stream: int | None) -> int:
+        """Channels a source is processed in: the output's for mono/stereo mixes; for surround and
+        ambisonic mixes 1 (mono), 2 (stereo, also the downmix of other layouts) or the output's own
+        count (discrete pass-through)."""
+        if not self.spatial:
+            return self.nch
+        native = int(asset.get("channels")) if asset.get("channels") else (probe_channels(path, stream) if path else None)
+        if native == self.nch:
+            return native
+        return 1 if native == 1 else 2
+
     def decode_asset(self, asset, stream: int | None = None):
         key = asset.get("id")
         hit = self._decoded.get(key)
         if hit is None:
             path, stream = self.source_path(asset)
+            ch = self.source_channels(asset, path, stream)
             if path is None:
                 warn_once("audio-asset", asset.get("id"), "no audio source (missing file, no audio stream or unverified cache)")
-                hit = np.zeros((0, self.nch), np.float32)
+                hit = np.zeros((0, ch), np.float32)
             else:
                 try:
-                    hit = decode(path, self.sr, self.nch, stream)
+                    hit = decode(path, self.sr, ch, stream)
                 except (OSError, ValueError) as e:
                     warn_once("audio-asset", asset.get("id"), f"cannot decode {path}: {e}")
-                    hit = np.zeros((0, self.nch), np.float32)
+                    hit = np.zeros((0, ch), np.float32)
             self._decoded[key] = hit
         return hit
 
-    def fx_ctx_maker(self, t0: float):
+    def tempo(self, asset) -> tuple[float | None, int]:
+        """(bpm, beatsPerBar) for an asset: @bpm, else a beatGrid with @source = asset, else the first grid."""
+        grids = []
+        mk = self.doc.section("markers")
+        if mk is not None:
+            grids = [g for g in mk if ln(g) == "beatGrid"]
+        own = next((g for g in grids if asset is not None and g.get("source") == asset.get("id")), None)
+        grid = own if own is not None else (grids[0] if grids else None)
+        bpm = float(asset.get("bpm")) if asset is not None and asset.get("bpm") else (float(grid.get("bpm")) if grid is not None else None)
+        per_bar = int(grid.get("beatsPerBar", 4)) if grid is not None else 4
+        return bpm, per_bar
+
+    def fx_ctx_maker(self, t0: float, layout: Layout | None = None, bpm: float | None = None):
+        if bpm is None:
+            bpm = self.tempo(None)[0]
+
         def make(el):
             def get(name, default):
                 for p in el:
@@ -179,12 +327,12 @@ class Mixer:
                 if sig is None:
                     return None
                 i0 = int(round(t0 * self.sr))
-                out = np.zeros((n, self.nch), np.float32)
+                out = np.zeros((n, sig.shape[1]), np.float32)
                 a, b = max(0, i0), min(self.n, i0 + n)
                 if b > a:
                     out[a - i0:b - i0] = sig[a:b]
                 return out
-            return FxContext(el, self.sr, t0, get, curve, key, self.seed)
+            return FxContext(el, self.sr, t0, get, curve, key, self.seed, bpm, layout)
         return make
 
     # ------------------------------------------------------------ tracks
@@ -213,45 +361,112 @@ class Mixer:
             return None
         plays = int(self.value(el, "loop", start, 0.0)) + 1
         dur = plays * span / speed
-        fit_fade = 0.0
-        if el.get("fitToDuration") == "true":
-            target = self.doc.duration - start
-            bpm = float(asset.get("bpm", 0) or 0)
-            per_bar = self.doc.beat_grids[0][2] if self.doc.beat_grids else 4
-            if bpm > 0:
-                bar = per_bar * 60.0 / bpm
-                nb = max(1, int(math.floor(span * (1 + 1e-9) / bar)))
-                span = min(span, nb * bar)
-            plays = max(1, int(math.ceil(target * speed / span - 1e-9)))
-            dur = target
-            fit_fade = 0.05
-        if el.get("preservePitch", "true") != "false" and abs(speed - 1.0) > 1e-9:
-            warn_once("audio", "preservePitch", "speed != 1 resamples the track (pitch follows speed)")
+        fit = el.get("fitToDuration") == "true"
+        if fit:
+            dur = (self.n - int(round(start * self.sr))) / self.sr
+            if dur <= 0:
+                return None
         return {"src": src, "start": start, "clip_in": clip_in, "span": span, "speed": speed, "reverse": reverse,
-                "plays": plays, "dur": dur, "fit_fade": fit_fade}
+                "plays": plays, "dur": dur, "fit": fit, "pitch": el.get("preservePitch", "true") != "false"}
 
-    def _read_region(self, g) -> np.ndarray:
+    def _one_play(self, g) -> np.ndarray:
+        """One pass over the region: clipIn..clipOut, reversed, at speed (stretched or resampled)."""
         src, sr = g["src"], self.sr
-        n = int(round(g["dur"] * sr))
-        if n <= 0:
-            return np.zeros((0, self.nch), np.float32)
-        span_n = g["span"] * sr
-        ci = g["clip_in"] * sr
-        if abs(g["speed"] - 1.0) < 1e-9 and abs(ci - round(ci)) < 1e-6 and abs(span_n - round(span_n)) < 1e-6:
-            ci, span_i = int(round(ci)), int(round(span_n))
-            one = src[ci:ci + span_i]
-            if g["reverse"]:
-                one = one[::-1]
-            reps = int(math.ceil(n / max(1, len(one))))
-            out = np.tile(one, (reps, 1))[:n] if reps > 1 else one[:n]
-            if out.shape[0] < n:
-                out = np.concatenate([out, np.zeros((n - out.shape[0], self.nch), np.float32)])
-            return np.ascontiguousarray(out, np.float32)
-        u = (np.arange(n) / sr * g["speed"]) % g["span"]
+        ci, span_n = g["clip_in"] * sr, g["span"] * sr
+        if abs(ci - round(ci)) < 1e-6 and abs(span_n - round(span_n)) < 1e-6:
+            a, b = int(round(ci)), int(round(ci + span_n))
+            one = src[a:b]
+            if one.shape[0] < b - a:
+                one = np.concatenate([one, np.zeros((b - a - one.shape[0], src.shape[1]), np.float32)])
+        else:
+            one = dsp.interp_positions(src, ci + np.arange(int(round(span_n))), cutoff=1.0)
         if g["reverse"]:
-            u = g["span"] - u
-        pos = (g["clip_in"] + u) * sr
-        return dsp.interp_positions(src, pos, cutoff=min(1.0, 1.0 / g["speed"]) * 0.98)
+            one = one[::-1]
+        sp = g["speed"]
+        if abs(sp - 1.0) > 1e-9:
+            if g["pitch"]:
+                one = spectral.time_stretch(one, sp, sr)
+            else:
+                m = int(round(one.shape[0] / sp))
+                one = dsp.interp_positions(one, np.arange(m) * sp, cutoff=min(1.0, 1.0 / sp) * 0.98)
+        return np.ascontiguousarray(one, np.float32)
+
+    def _read_region(self, g, asset=None) -> np.ndarray:
+        n = int(round(g["dur"] * self.sr))
+        one = self._one_play(g)
+        ch = one.shape[1]
+        if n <= 0 or one.shape[0] == 0:
+            return np.zeros((max(0, n), ch), np.float32)
+        if g["fit"]:
+            return self._fit(one, n, asset, g["speed"])
+        reps = int(math.ceil(n / one.shape[0]))
+        out = np.tile(one, (reps, 1))[:n] if reps > 1 else one[:n]
+        if out.shape[0] < n:
+            out = np.concatenate([out, np.zeros((n - out.shape[0], ch), np.float32)])
+        return np.ascontiguousarray(out, np.float32)
+
+    def _fit(self, P: np.ndarray, n: int, asset, speed: float) -> np.ndarray:
+        """fitToDuration: assemble exactly n samples from bars of P (see the module docstring)."""
+        sr = self.sr
+        bpm, per_bar = self.tempo(asset)
+        Bs = per_bar * 60.0 / bpm / speed * sr if bpm else 0.0
+        L = P.shape[0]
+        nb = int(math.floor(L / Bs + 1e-6)) if Bs > 0 else 0
+        # pieces: (output start, source start, length) in samples
+        pieces: list[list[int]] = []
+        if nb < 1:
+            if bpm is None:
+                warn_once("audio", "fit-no-bpm", "fitToDuration without asset @bpm or beatGrid: region looped with crossfades and trimmed")
+            o = 0
+            while o < n:
+                pieces.append([o, 0, min(L, n - o)])
+                o += L
+        else:
+            bar = lambda k: int(round(k * Bs))  # noqa: E731
+            M = int(math.floor(n / Bs + 1e-9))
+            if M == 0:
+                pieces.append([0, 0, min(L, n)])
+            else:
+                body = list(range(max(1, nb - 1)))
+                seq = [body[j % len(body)] for j in range(M - 1)] + [nb - 1]
+                for j, b in enumerate(seq):
+                    o0, o1 = bar(j), bar(j + 1)
+                    s0 = bar(b)
+                    if j == M - 1:
+                        o1 = n                       # the ending runs on into its ring-out
+                    ln_ = min(o1 - o0, L - s0)
+                    if pieces and pieces[-1][0] + pieces[-1][2] == o0 and pieces[-1][1] + pieces[-1][2] == s0:
+                        pieces[-1][2] += ln_
+                    else:
+                        pieces.append([o0, s0, ln_])
+        out = np.zeros((n, P.shape[1]), np.float32)
+        X = max(2, int(round(SEAM * sr)))
+        h = X // 2
+        for i, (o, s, ln_) in enumerate(pieces):
+            pre = h if i > 0 else 0                              # seam before this piece
+            post = h if i + 1 < len(pieces) else 0               # seam after it
+            a_src, b_src = s - pre, s + ln_ + post
+            a_out = o - pre
+            seg = np.zeros((b_src - a_src, P.shape[1]), np.float32)
+            lo, hi = max(0, a_src), min(L, b_src)
+            if hi > lo:
+                seg[lo - a_src:hi - a_src] = P[lo:hi]
+            w = np.ones(seg.shape[0])
+            if pre:
+                w[:X] = np.sin(np.linspace(0, 1, X, endpoint=False) * math.pi / 2 + math.pi / (4 * X))
+            if post:
+                w[-X:] = np.cos(np.linspace(0, 1, X, endpoint=False) * math.pi / 2 + math.pi / (4 * X))
+            seg = seg * w[:, None].astype(np.float32)
+            oa, ob = max(0, a_out), min(n, a_out + seg.shape[0])
+            if ob > oa:
+                out[oa:ob] += seg[oa - a_out:ob - a_out]
+        # trimmed at the project end: short fade when source audio continues past it
+        last_o, last_s, last_l = pieces[-1]
+        if last_s + last_l < L:
+            f = min(n, max(1, int(round(END_FADE * sr))))
+            out[n - f:] *= (1 - (np.arange(f) + 1) / f)[:, None].astype(np.float32)
+        self.stats.setdefault("fit", {})[asset.get("id") if asset is not None else "?"] = pieces
+        return out
 
     def track(self, tid: str) -> Segment | None:
         if tid in self._track_out:
@@ -274,13 +489,13 @@ class Mixer:
         if g is None:
             return None
         sr = self.sr
-        x = self._read_region(g)
+        x = self._read_region(g, asset)
         n_region = x.shape[0]
         i0 = int(round(g["start"] * sr))
         s, e = g["start"], g["start"] + g["dur"]
         # fades on the placed region
         fi = self.value(el, "fadeIn", s, 0.0, s, e)
-        fo = max(self.value(el, "fadeOut", s, 0.0, s, e), g["fit_fade"])
+        fo = self.value(el, "fadeOut", s, 0.0, s, e)
         curve = el.get("fadeCurve", "linear")
         if (fi > 0 or fo > 0) and n_region:
             tt = np.arange(n_region) / sr
@@ -292,14 +507,44 @@ class Mixer:
             x = x * f[:, None].astype(np.float32)
         # effects, with room for their tails
         effects = [c for c in el if ln(c) == "audioEffect"]
+        bpm = self.tempo(asset)[0]
         if effects:
-            tail = sum(tail_seconds(fx) for fx in effects if fx.get("enabled", "true") != "false")
+            tail = sum(tail_seconds(fx, bpm) for fx in effects if fx.get("enabled", "true") != "false")
             pad = max(0, min(int(tail * sr), self.n - (i0 + n_region)))
             if pad:
-                x = np.concatenate([x, np.zeros((pad, self.nch), np.float32)])
-            x = process_chain(effects, x, self.fx_ctx_maker(g["start"]))
-        seg = self._fader(el, Segment(i0, x), s, e)
+                x = np.concatenate([x, np.zeros((pad, x.shape[1]), np.float32)])
+            x = process_chain(effects, x, self.fx_ctx_maker(g["start"], None, bpm))
+        trs = self.track_transitions(el, s)
+        seg = self._fader(el, Segment(i0, x), s, e, source=True, trs=trs)
         return self._clip(seg)
+
+    def track_transitions(self, el, start: float) -> list:
+        """[(window, mode, role)] of the transitions whose node owns this track (module docstring)."""
+        if el.get("role") == "music":
+            return []
+        best = None
+        for tr in self.doc.root.iter("transition"):
+            if _in_symbol(tr):
+                continue
+            for role in ("from", "to"):
+                node = self.doc.ids.get(tr.get(role)) if tr.get(role) else None
+                if node is None:
+                    continue
+                s, e = self.doc.window(node)
+                e = self.doc.duration if e is None else e
+                if s - 1e-9 <= start < e - 1e-9 and (best is None or s > best[0]):
+                    best = (s, node)
+        if best is None:
+            return []
+        node = best[1]
+        out = []
+        for tr in self.doc.root.iter("transition"):
+            for role in ("from", "to"):
+                if tr.get(role) == node.get("id") and not _in_symbol(tr):
+                    w = transition_window(self.doc, tr)
+                    if w is not None:
+                        out.append((w, tr.get("audio", "crossfade"), role))
+        return out
 
     def _clip(self, seg: Segment | None) -> Segment | None:
         if seg is None:
@@ -309,7 +554,9 @@ class Mixer:
             return None
         return Segment(a, seg.data[a - seg.i0:b - seg.i0])
 
-    def _fader(self, el, seg: Segment, s: float = 0.0, e: float | None = None) -> Segment | None:
+    # ------------------------------------------------------------ fader / pan / spatialisation
+    def _fader(self, el, seg: Segment, s: float = 0.0, e: float | None = None, source: bool = False,
+               trs=None) -> Segment | None:
         if el.get("mute") == "true" and not _has_anim(el, "mute"):
             return None
         n = seg.data.shape[0]
@@ -319,22 +566,74 @@ class Mixer:
         if _has_anim(el, "mute"):
             m = self.curve(el, "mute", 0.0, seg.i0, n, s, e)
             g = g * (1.0 - (np.asarray(m) > 0.5))
-        x = seg.data
+        if trs:
+            g = g * transition_gain((seg.i0 + np.arange(n)) / self.sr, trs)
         pan = self.curve(el, "pan", 0.0, seg.i0, n, s, e)
-        if self.nch == 2 and (not np.isscalar(pan) or abs(pan) > 1e-9):
-            pan = np.asarray(pan, np.float64)
-            if np.max(np.abs(pan)) > 1.0 + 1e-9:
-                warn_once("audio", "pan-range", "pan outside -1..1 clamped")
-            gl, gr = dsp.pan_gains(pan)
-            gm = np.stack([np.broadcast_to(gl, (n,)), np.broadcast_to(gr, (n,))], 1) * np.reshape(g, (-1, 1))
-            x = (x * gm).astype(np.float32)
-        elif np.isscalar(g) or np.ndim(g) == 0:
-            if abs(float(g) - 1.0) > 1e-12:
-                x = (x * np.float32(g)).astype(np.float32)
-        else:
-            x = (x * g[:, None]).astype(np.float32)
+        x = self._spatialize(seg.data, pan, g) if source else self._bus_pan(seg.data, pan, g)
         x = self._duck(el, x, seg.i0)
         return Segment(seg.i0, x)
+
+    @staticmethod
+    def _gain(x: np.ndarray, g) -> np.ndarray:
+        if np.ndim(g) == 0:
+            return x if abs(float(g) - 1.0) < 1e-12 else (x * np.float32(g)).astype(np.float32)
+        return (x * np.asarray(g, np.float32)[:, None]).astype(np.float32)
+
+    def _stereo_balance(self, x, pan, g):
+        if not np.isscalar(pan) or abs(pan) > 1e-9:
+            pan = np.asarray(pan, np.float64)
+            if np.max(np.abs(pan)) > 1.0 + 1e-9:
+                warn_once("audio", "pan-range", "pan outside -1..1 clamped (stereo)")
+            gl, gr = dsp.pan_gains(pan)
+            n = x.shape[0]
+            gm = np.stack([np.broadcast_to(gl, (n,)), np.broadcast_to(gr, (n,))], 1) * np.reshape(g, (-1, 1))
+            return (x * gm).astype(np.float32)
+        return self._gain(x, g)
+
+    def _gains_over(self, fn, pan, n: int) -> np.ndarray:
+        """Per-sample (n, nch) gains fn(pan) for a scalar or per-sample pan (evaluated at 100 Hz)."""
+        if np.ndim(pan) == 0:
+            return np.broadcast_to(fn(float(pan))[0], (n, self.nch))
+        step = max(1, int(round(self.sr / CTRL_HZ)))
+        idx = np.arange(0, n + step, step)
+        pk = np.asarray(pan)[np.minimum(idx, n - 1)]
+        G = fn(pk)
+        return np.stack([np.interp(np.arange(n), idx, G[:, c]) for c in range(self.nch)], 1)
+
+    def _spatialize(self, x: np.ndarray, pan, g) -> np.ndarray:
+        """A track/layer signal (source channels) -> the output layout, with gain g."""
+        if self.nch == 1:
+            return self._gain(x, g)
+        if self.nch == 2:
+            return self._stereo_balance(x, pan, g)
+        n = x.shape[0]
+        if x.shape[1] == self.nch:
+            if np.ndim(pan) or abs(float(pan)) > 1e-9:
+                warn_once("audio", "pan-discrete", "pan is ignored for sources already in the output layout")
+            return self._gain(x, g)
+        lay = self.layout
+        if x.shape[1] == 1:
+            G = self._gains_over(lambda p: lay.pan_gains(pan_to_azimuth(p)), pan, n)
+            y = x[:, :1] * G
+        else:
+            GL = self._gains_over(lambda p: lay.pan_gains(pan_to_azimuth(np.clip(np.asarray(p) - 1, -1, 1))), pan, n)
+            GR = self._gains_over(lambda p: lay.pan_gains(pan_to_azimuth(np.clip(np.asarray(p) + 1, -1, 1))), pan, n)
+            y = x[:, :1] * GL + x[:, 1:2] * GR
+        return self._gain(y.astype(np.float32), g)
+
+    def _bus_pan(self, x: np.ndarray, pan, g) -> np.ndarray:
+        """Bus/master pan on a signal already in the output layout."""
+        if self.nch == 1:
+            return self._gain(x, g)
+        if self.nch == 2:
+            return self._stereo_balance(x, pan, g)
+        if np.ndim(pan) == 0 and abs(float(pan)) < 1e-9:
+            return self._gain(x, g)
+        if self.layout.ambisonic:
+            ang = np.radians(pan_to_azimuth(pan))
+            return self._gain(rotate_ambisonic(x.astype(np.float64), self.layout.order, ang).astype(np.float32), g)
+        G = self._gains_over(lambda p: balance_gains(self.layout, p), pan, x.shape[0])
+        return self._gain((x * G).astype(np.float32), g)
 
     # ------------------------------------------------------------ ducking
     def _duck(self, el, x: np.ndarray, i0: int) -> np.ndarray:
@@ -355,7 +654,7 @@ class Mixer:
             sig = self.node_full(sid)
             if sig is None:
                 continue
-            seg = np.zeros((n, self.nch), np.float32)
+            seg = np.zeros((n, sig.shape[1]), np.float32)
             if b > a:
                 seg[a - i0:b - i0] = sig[a:b]
             lv = dsp.rms_db_blocks(seg, self.sr, 0.01)
@@ -424,7 +723,7 @@ class Mixer:
             acc = self._sum(bid)
             effects = [c for c in el if ln(c) == "audioEffect"]
             if effects:
-                acc = process_chain(effects, acc, self.fx_ctx_maker(0.0))
+                acc = process_chain(effects, acc, self.fx_ctx_maker(0.0, self.layout))
             seg = self._fader(el, Segment(0, acc))
             out = seg.data if seg is not None else np.zeros_like(acc)
         finally:
@@ -444,20 +743,16 @@ class Mixer:
         if m is not None:
             effects = [c for c in m if ln(c) == "audioEffect"]
             if effects:
-                acc = process_chain(effects, acc, self.fx_ctx_maker(0.0))
+                acc = process_chain(effects, acc, self.fx_ctx_maker(0.0, self.layout))
             vol = self.curve(m, "volume", 1.0, 0, self.n)
-            if np.isscalar(vol):
-                acc = acc * np.float32(vol)
-            else:
-                acc = (acc * vol[:, None]).astype(np.float32)
+            acc = self._gain(acc, vol)
             norm = m.get("normalize", "none")
             tp = self.value(m, "truePeak", 0.0, -1.0)
-            if norm == "dynamic":
-                warn_once("audio", "normalize-dynamic", "normalize=dynamic is rendered as integrated normalisation + limiter")
+            wts = self.layout.loudness_weights()
             limiting = norm != "none" or m.get("limiter") == "true"
-            if norm in ("integrated", "dynamic"):
-                target = self.value(m, "loudness", 0.0, -14.0)
-                measured = dsp.integrated_loudness(acc, self.sr)
+            target = self.value(m, "loudness", 0.0, -14.0)
+            if norm == "integrated":
+                measured = dsp.integrated_loudness(acc, self.sr, wts)
                 self.stats["measured_lufs"] = measured
                 if math.isfinite(measured):
                     # Static gain to the target, then the limiter; when limiting pulls the result
@@ -465,10 +760,11 @@ class Mixer:
                     gain = target - measured
                     pre = acc
                     pk = dsp.true_peak_per_sample(pre)
+                    got = measured
                     for _ in range(3):
                         g = 10 ** (gain / 20)
                         acc = dsp.limit(pre * np.float32(g), self.sr, tp, peaks=pk * g)
-                        got = dsp.integrated_loudness(acc, self.sr)
+                        got = dsp.integrated_loudness(acc, self.sr, wts)
                         short = target - got
                         if not math.isfinite(got) or short < 0.1 or gain - (target - measured) > 6:
                             break
@@ -476,6 +772,15 @@ class Mixer:
                     self.stats["normalize_gain_db"] = gain
                     self.stats["final_lufs"] = got
                     limiting = False
+            elif norm == "dynamic":
+                self.stats["measured_lufs"] = dsp.integrated_loudness(acc, self.sr, wts)
+                t, gdb = dsp.dynamic_gain_db(acc, self.sr, target, wts)
+                gs = np.interp(np.arange(acc.shape[0]) / self.sr, t, dsp.db_to_lin(gdb))
+                acc = self._gain(acc, gs)
+                acc = dsp.limit(acc, self.sr, tp)
+                self.stats["dynamic_gain_db"] = (t, gdb)
+                self.stats["final_lufs"] = dsp.integrated_loudness(acc, self.sr, wts)
+                limiting = False
             if limiting:
                 acc = dsp.limit(acc, self.sr, tp)
         self._master = acc.astype(np.float32)
@@ -502,16 +807,13 @@ class Mixer:
             return self._layer_segs
         self._layer_segs = []
         comp = self.doc.section("composition")
-        if comp is None:
+        if comp is None or self.rc is None:
             return self._layer_segs
-        for el in comp.iter("layer"):
+        for path in self._audible_layers(comp, [], 0):
+            el = path[-1]
             asset = self.doc.ids.get(el.get("asset"))
-            if asset is None or ln(asset) != "video" or asset.get("hasAudio") != "true":
-                continue
-            if el.get("mute") == "true":
-                continue
             try:
-                seg = self._layer_audio(el, asset)
+                seg = self._layer_audio(path, asset)
             except Exception as e:  # noqa: BLE001 — never fail the render over layer audio
                 warn_once("audio-layer", el.get("id"), f"layer audio skipped: {e}")
                 seg = None
@@ -519,20 +821,63 @@ class Mixer:
                 self._layer_segs.append((self._target(el.get("audioBus"), el.get("id") or "layer"), seg))
         return self._layer_segs
 
-    def _video_audio(self, asset):
-        return self.decode_asset(asset)
+    def _audible_layers(self, parent, path: list, depth: int):
+        """Paths (outermost node .. layer) to every video layer with audio, through instances."""
+        if depth > 16:
+            return
+        for c in self.doc.nodes(parent):
+            tag = ln(c)
+            if tag == "layer":
+                asset = self.doc.ids.get(c.get("asset"))
+                if asset is not None and ln(asset) == "video" and asset.get("hasAudio") == "true" and c.get("mute") != "true":
+                    yield path + [c]
+            elif tag == "instance":
+                sym = self.doc.ids.get(c.get("symbol"))
+                if sym is not None and sym not in path:
+                    yield from self._audible_layers(sym, path + [c, sym], depth + 1)
+            elif len(c):
+                yield from self._audible_layers(c, path + [c], depth + 1)
 
-    def _layer_audio(self, el, asset) -> Segment | None:
+    def _clock(self, path: list, tc: float):
+        """Walk the compositor's clocks from composition time tc down to the layer: its ctx, or None
+        when an ancestor is inactive at tc."""
+        from ..nodes.core import _repeat_vars, child_ctx, instance_time
         rc = self.rc
-        if rc is None:
+        ctx = Ctx(t=tc, comp_t=tc, frame=int(tc * float(self.doc.fps)))
+        k = 0
+        while k < len(path) - 1:
+            el = path[k]
+            if not rc.active(el, ctx):
+                return None
+            shift = self.doc.clock_shift.get(el)
+            if shift:
+                ctx = replace(ctx, t=ctx.t - shift)
+            nctx = rc.node_ctx(el, ctx)
+            if ln(el) == "instance":
+                sym = path[k + 1]
+                lt = instance_time(rc, el, nctx, sym)
+                if lt is None:
+                    return None
+                ov = {(o.get("target"), o.get("property")): o.get("value") for o in el if ln(o) == "override"}
+                ctx = replace(ctx, t=lt, scope=ctx.scope.push(el.get("id", ""), ov) if ov else ctx.scope)
+                k += 2
+                continue
+            if ln(el) in ("group", "sequence"):
+                ctx = _repeat_vars(el, child_ctx(rc, el, nctx))
+            k += 1
+        lay = path[-1]
+        if lay.get("visible") == "false" or not self.ev.condition(lay, ctx):
             return None
+        shift = self.doc.clock_shift.get(lay)
+        if shift:
+            ctx = replace(ctx, t=ctx.t - shift)
+        return ctx
+
+    def _layer_audio(self, path: list, asset) -> Segment | None:
+        rc = self.rc
         from ..nodes.core import media_time
-        anc = [a for a in el.iterancestors() if isinstance(a.tag, str)]
-        if any(ln(a) in ("symbol", "symbols") for a in anc):
-            warn_once("audio-layer", el.get("id"), "layer audio inside symbols is not mixed")
-            return None
-        chain = [a for a in reversed(anc) if ln(a) in ("group", "sequence")]
-        src = self._video_audio(asset)
+        el = path[-1]
+        src = self.decode_asset(asset)
         if src.shape[0] == 0:
             return None
         src_dur = src.shape[0] / self.sr
@@ -540,6 +885,7 @@ class Mixer:
         e = self.doc.duration if e is None else e
         # transitions extend the audible window and shape the gain
         trs = []
+        ext = 0.0
         for tr in rc.trans_members.get(el, ()):
             w = rc.transition_window(tr)
             if w is None:
@@ -547,62 +893,47 @@ class Mixer:
             mode = tr.get("audio", "crossfade")
             role = "from" if tr.get("from") == el.get("id") else "to"
             trs.append((w, mode, role))
+            ext = max(ext, w[1] - w[0])
             if mode in ("crossfade", "equal-power"):
                 if role == "from":
                     e = max(e, w[1])
                 else:
                     s = min(s, w[0])
-
-        def local(t):
-            for g in chain:
-                shift = self.doc.clock_shift.get(g)
-                if shift:
-                    t -= shift
-                if ln(g) == "group":
-                    gs = self.doc.window(g)[0]
-                    off = float(g.get("timeOffset", 0) or 0)
-                    sc = float(g.get("timeScale", 1) or 1)
-                    t = gs + (t - gs - off) * sc
-            return t
-
-        def visible(tc):
-            for g in chain:
-                if g.get("visible") == "false":
-                    return False
-            return True
-
+        top = path[0]
+        ts0, te0 = self.doc.window(top)
+        te0 = self.doc.duration if te0 is None else te0
+        if len(path) == 1:
+            ts0, te0 = s, e
         hz = 1000.0
-        # region in composition time: approximate by mapping the layer window through the clocks
-        t_lo, t_hi = 0.0, self.doc.duration
+        t_lo = max(0.0, ts0 - ext)
+        t_hi = min(self.doc.duration, te0 + ext)
+        if t_hi <= t_lo:
+            return None
         k = int(math.ceil((t_hi - t_lo) * hz)) + 1
         ts = t_lo + np.arange(k) / hz
         gains = np.zeros(k)
         pos = np.zeros(k)
         vol_anim = _has_anim(el, "volume")
-        base_vol = self.value(el, "volume", 0.0, 1.0)
+        mute_anim = _has_anim(el, "mute")
+        vcache: dict = {}
         for i, tc in enumerate(ts):
-            tl = local(float(tc))
-            if tl < s - 1e-9 or tl >= e - 1e-9 or not visible(tc):
+            ctx = self._clock(path, float(tc))
+            if ctx is None:
                 continue
-            ctx = self.ctx(tl, s, e)
-            g = self.ev.num(el, "volume", ctx, 1.0) if vol_anim else base_vol
-            for (w0, w1, cut), mode, role in trs:
-                if mode == "none":
-                    continue
-                if mode == "cut":
-                    if (role == "from" and tl >= cut) or (role == "to" and tl < cut):
-                        g = 0.0
-                    continue
-                if w0 <= tl < w1:
-                    p = (tl - w0) / max(1e-9, w1 - w0)
-                    if mode == "equal-power":
-                        g *= math.cos(p * math.pi / 2) if role == "from" else math.sin(p * math.pi / 2)
-                    else:
-                        g *= (1 - p) if role == "from" else p
-                elif role == "from" and tl >= w1:
-                    g = 0.0
-                elif role == "to" and tl < w0:
-                    g = 0.0
+            tl = ctx.t
+            if tl < s - 1e-9 or tl >= e - 1e-9:
+                continue
+            ctx = replace(ctx, node_start=s, node_end=e)
+            if vol_anim:
+                g = self.ev.num(el, "volume", ctx, 1.0)
+            else:
+                g = vcache.get(ctx.scope)
+                if g is None:
+                    g = vcache[ctx.scope] = self.ev.num(el, "volume", ctx, 1.0)
+            if mute_anim and self.ev.num(el, "mute", ctx, 0.0) > 0.5:
+                g = 0.0
+            if trs:
+                g *= float(transition_gain(np.array([tl]), trs)[0])
             gains[i] = g
             pos[i] = media_time(rc, el, ctx, src_dur)
         nz = np.nonzero(gains)[0]
@@ -616,8 +947,12 @@ class Mixer:
         samp_t = np.arange(i0, i1) / self.sr
         p = np.interp(samp_t, ts, pos) * self.sr
         g = np.interp(samp_t, ts, gains)
-        x = dsp.interp_positions(src, p, cutoff=0.98)
-        x = (x * g[:, None]).astype(np.float32)
+        # anti-aliasing for the fastest playback rate (loop/remap jumps are discontinuities, not rates)
+        rate = np.abs(np.diff(pos[a:b + 1])) * hz
+        ok = (gains[a:b] > 0) & (rate < 16.0)
+        top_rate = float(rate[ok].max()) if ok.any() else 1.0
+        x = dsp.interp_positions(src, p, cutoff=min(1.0, 1.0 / max(1e-6, top_rate)) * 0.98)
+        x = self._spatialize(x, 0.0, g)
         return Segment(i0, x)
 
     # ------------------------------------------------------------ envelopes
@@ -643,7 +978,7 @@ class Mixer:
                             sig[seg.i0:seg.i1] += seg.data
                 else:
                     raw = self.decode_asset(asset)
-                    sig = np.zeros((self.n, self.nch), np.float32)
+                    sig = np.zeros((self.n, raw.shape[1]), np.float32)
                     m = min(self.n, raw.shape[0])
                     sig[:m] = raw[:m]
             else:

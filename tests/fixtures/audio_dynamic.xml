@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- normalize="dynamic": audio_levels.wav is 1 kHz at -30 dBFS for 8 s, then -10 dBFS for 8 s. -->
+<scene version="1.1">
+  <project width="64" height="36" fps="10" duration="16"/>
+  <assets>
+    <audio id="levels" src="media/audio_levels.wav"/>
+  </assets>
+  <composition/>
+  <audioMix sampleRate="48000" channels="2" channelLayout="stereo">
+    <audioTrack id="prog" asset="levels"/>
+    <master normalize="dynamic" loudness="-16" truePeak="-1"/>
+  </audioMix>
+</scene>
