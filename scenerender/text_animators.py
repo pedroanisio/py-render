@@ -123,7 +123,7 @@ from . import curves
 from .assets import text as T
 from .document import ln
 from .registry import FEATURES, FULL, TEXT_ANIMATORS, warn_once
-from .values import paint_ref, parse_color
+from .values import parse_bool, paint_ref, parse_color
 
 ADD = {"x", "y", "zDepth", "rotation", "rotationX", "rotationY", "skew", "strokeWidth", "tracking", "lineSpacing",
        "blur", "baselineShift", "characterOffset", "anchorX", "anchorY"}
@@ -441,7 +441,7 @@ def evaluate(rc, block, anims, ctx) -> Anim | None:
                 rate = rc.ev.num(an, "wiggleRate", ctx, 2.0)
                 base_s = base_s * _noise1(rc.ev.seed_for(an, "wiggly") & 0xFFFF, ctx.t * rate + np.arange(N) * 7.31)
         sel_expr = next((c for c in an if ln(c) == "expression" and c.get("property") == "selector"
-                         and c.get("enabled", "true") != "false"), None)
+                         and parse_bool(c.get("enabled", "true"), True)), None)
         if sel_expr is not None or an.get("selector") == "expression":
             if sel_expr is None:
                 warn_once("textAnimator", "selector:expression", "expression selector without <expression property=\"selector\">")
@@ -753,7 +753,7 @@ def _in_plane(rc, layer) -> bool:
     except (ImportError, AttributeError):
         p = layer
         while p is not None and isinstance(p.tag, str):
-            if p.get("threeD") == "true":
+            if parse_bool(p.get("threeD")):
                 return True
             p = p.getparent()
         return False

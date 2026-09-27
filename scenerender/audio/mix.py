@@ -70,6 +70,7 @@ from . import dsp, spectral
 from .effects import FxContext, process_chain, tail_seconds
 from .io import decode, ffmpeg_exe
 from .spatial import Layout, balance_gains, pan_to_azimuth, rotate_ambisonic
+from ..values import parse_bool
 
 log = logging.getLogger("scenerender")
 
@@ -354,20 +355,20 @@ class Mixer:
         clip_out = self.value(el, "clipOut", start, src_len) if el.get("clipOut") else src_len
         clip_out = min(clip_out, src_len)
         speed = self.value(el, "speed", start, 1.0)
-        reverse = (el.get("reverse") == "true") ^ (speed < 0)
+        reverse = (parse_bool(el.get("reverse"))) ^ (speed < 0)
         speed = abs(speed) or 1.0
         span = clip_out - clip_in
         if span <= 1e-6:
             return None
         plays = int(self.value(el, "loop", start, 0.0)) + 1
         dur = plays * span / speed
-        fit = el.get("fitToDuration") == "true"
+        fit = parse_bool(el.get("fitToDuration"))
         if fit:
             dur = (self.n - int(round(start * self.sr))) / self.sr
             if dur <= 0:
                 return None
         return {"src": src, "start": start, "clip_in": clip_in, "span": span, "speed": speed, "reverse": reverse,
-                "plays": plays, "dur": dur, "fit": fit, "pitch": el.get("preservePitch", "true") != "false"}
+                "plays": plays, "dur": dur, "fit": fit, "pitch": parse_bool(el.get("preservePitch", "true"), True)}
 
     def _one_play(self, g) -> np.ndarray:
         """One pass over the region: clipIn..clipOut, reversed, at speed (stretched or resampled)."""
@@ -509,7 +510,7 @@ class Mixer:
         effects = [c for c in el if ln(c) == "audioEffect"]
         bpm = self.tempo(asset)[0]
         if effects:
-            tail = sum(tail_seconds(fx, bpm) for fx in effects if fx.get("enabled", "true") != "false")
+            tail = sum(tail_seconds(fx, bpm) for fx in effects if parse_bool(fx.get("enabled", "true"), True))
             pad = max(0, min(int(tail * sr), self.n - (i0 + n_region)))
             if pad:
                 x = np.concatenate([x, np.zeros((pad, x.shape[1]), np.float32)])
@@ -557,7 +558,7 @@ class Mixer:
     # ------------------------------------------------------------ fader / pan / spatialisation
     def _fader(self, el, seg: Segment, s: float = 0.0, e: float | None = None, source: bool = False,
                trs=None) -> Segment | None:
-        if el.get("mute") == "true" and not _has_anim(el, "mute"):
+        if parse_bool(el.get("mute")) and not _has_anim(el, "mute"):
             return None
         n = seg.data.shape[0]
         vol = self.curve(el, "volume", 1.0, seg.i0, n, s, e)
@@ -749,7 +750,7 @@ class Mixer:
             norm = m.get("normalize", "none")
             tp = self.value(m, "truePeak", 0.0, -1.0)
             wts = self.layout.loudness_weights()
-            limiting = norm != "none" or m.get("limiter") == "true"
+            limiting = norm != "none" or parse_bool(m.get("limiter"))
             target = self.value(m, "loudness", 0.0, -14.0)
             if norm == "integrated":
                 measured = dsp.integrated_loudness(acc, self.sr, wts)
@@ -829,7 +830,7 @@ class Mixer:
             tag = ln(c)
             if tag == "layer":
                 asset = self.doc.ids.get(c.get("asset"))
-                if asset is not None and ln(asset) == "video" and asset.get("hasAudio") == "true" and c.get("mute") != "true":
+                if asset is not None and ln(asset) == "video" and parse_bool(asset.get("hasAudio")) and not parse_bool(c.get("mute")):
                     yield path + [c]
             elif tag == "instance":
                 sym = self.doc.ids.get(c.get("symbol"))
@@ -849,29 +850,23 @@ class Mixer:
             el = path[k]
             if not rc.active(el, ctx):
                 return None
-            shift = self.doc.clock_shift.get(el)
-            if shift:
-                ctx = replace(ctx, t=ctx.t - shift)
-            nctx = rc.node_ctx(el, ctx)
+            ctx = nctx = rc.enter_node(el, ctx)
             if ln(el) == "instance":
                 sym = path[k + 1]
                 lt = instance_time(rc, el, nctx, sym)
                 if lt is None:
                     return None
                 ov = {(o.get("target"), o.get("property")): o.get("value") for o in el if ln(o) == "override"}
-                ctx = replace(ctx, t=lt, scope=ctx.scope.push(el.get("id", ""), ov) if ov else ctx.scope)
+                ctx = replace(ctx, t=lt, scope=ctx.scope.push(el.get("id", ""), ov), clock_node=None)
                 k += 2
                 continue
             if ln(el) in ("group", "sequence"):
                 ctx = _repeat_vars(el, child_ctx(rc, el, nctx))
             k += 1
         lay = path[-1]
-        if lay.get("visible") == "false" or not self.ev.condition(lay, ctx):
+        if not self.ev.bool(lay, "visible", rc.enter_node(lay, ctx), True) or not self.ev.condition(lay, rc.enter_node(lay, ctx)):
             return None
-        shift = self.doc.clock_shift.get(lay)
-        if shift:
-            ctx = replace(ctx, t=ctx.t - shift)
-        return ctx
+        return rc.enter_node(lay, ctx)
 
     def _layer_audio(self, path: list, asset) -> Segment | None:
         rc = self.rc

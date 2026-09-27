@@ -11,7 +11,7 @@ from typing import Callable, Mapping
 
 RGBA = tuple[float, float, float, float]
 
-_VAR = re.compile(r"var\(--([A-Za-z0-9_\-]+)\)")
+_VAR = re.compile(r"var\(--([A-Za-z0-9_./#\-]+)\)")
 _URL = re.compile(r"url\(#([A-Za-z_][A-Za-z0-9_.\-]*)\)")
 _LEN = re.compile(r"^(-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(%|vw|vh|vmin|vmax)?$")
 
@@ -91,6 +91,8 @@ def parse_fps(s) -> Fraction:
 def parse_bool(s, default: bool = False) -> bool:
     if s is None:
         return default
+    if isinstance(s, bool):
+        return s
     return str(s).strip() in ("true", "1")
 
 

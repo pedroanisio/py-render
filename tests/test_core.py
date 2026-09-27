@@ -416,3 +416,15 @@ def test_adaptive_motion_blur_skips_still_frames(tmp_path):
     calls.clear()
     r.frame_rgb(1.5)                      # moving: every sample
     assert len(calls) == 8
+
+
+def test_repeat_over_data_fills_text_templates(tmp_path):
+    head = """<parameters><param id="p" type="string" default="x"/>
+      <data id="rows" format="json">[{"name":"Lamp","price":"$49"},{"name":"Chair","price":"$129"}]</data></parameters>
+    <assets><text id="t" text="{{item.name}} {{item.price}} #{{index}}" width="200" height="30" size="12"/></assets>"""
+    body = """<repeat id="r" over="rows" var="item" offsetY="40">
+      <layer id="L" asset="t"/>
+    </repeat>"""
+    d = load(scene(tmp_path, body, head=head))
+    texts = [d.ids[d.ids[f"L#{i}"].get("asset")].get("text") for i in range(2)]
+    assert texts == ["Lamp $49 #0", "Chair $129 #1"]

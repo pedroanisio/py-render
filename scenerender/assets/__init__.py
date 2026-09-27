@@ -125,17 +125,17 @@ def surface_for_asset(rc, asset, ctx):
     """(cairo surface, width, height) for assets usable as pattern paint or texture sources."""
     kind = ln(asset)
     if kind == "image":
-        m = load_mips(rc, rc.doc.resolve_path(asset.get("src")))
+        m = load_mips(rc, rc.doc.resolve_path(rc.ev.str(asset, "src", ctx)))
         if m is None:
             return None, 0, 0
-        return m.levels[0], float(asset.get("width") or m.w), float(asset.get("height") or m.h)
+        return m.levels[0], rc.ev.num(asset, "width", ctx, m.w), rc.ev.num(asset, "height", ctx, m.h)
     if kind == "imageSequence":
         from .image import sequence_frame_path
-        path = sequence_frame_path(rc, asset, 0.0)
+        path = sequence_frame_path(rc, asset, ctx.t, ctx)
         m = load_mips(rc, path) if path else None
         if m is None:
             return None, 0, 0
-        return m.levels[0], float(asset.get("width")), float(asset.get("height"))
+        return m.levels[0], rc.ev.num(asset, "width", ctx), rc.ev.num(asset, "height", ctx)
     from ..registry import ASSETS
     fn = ASSETS.get(kind)
     if fn is None:
@@ -195,20 +195,21 @@ def file_sha256(path: str) -> str | None:
     return hit
 
 
-def generated_cache_path(doc_or_rc, asset) -> str | None:
-    """Path of a `generated` asset's @cache file if it exists and matches @cacheSha256, else None (warned once).
+def generated_cache_path(doc_or_rc, asset, ctx=None) -> str:
+    """Return a verified generated cache, or fail as required by generatedAssetType.
     The renderer never calls providers: the cache is the only source of generated media."""
     doc = getattr(doc_or_rc, "doc", doc_or_rc)
-    path = doc.resolve_path(asset.get("cache"))
+    from ..document import SceneError
+    def get(name):
+        return doc_or_rc.ev.str(asset, name, ctx) if ctx is not None and hasattr(doc_or_rc, "ev") else asset.get(name)
+    path = doc.resolve_path(get("cache"))
     digest = file_sha256(path)
     if digest is None:
-        warn_once("generated", asset.get("id"), f"cache file {path} not found; drawing nothing")
-        return None
-    want = (asset.get("cacheSha256") or "").lower()
+        raise SceneError(f"generated {asset.get('id')!r}: cache file {path!r} not found")
+    want = (get("cacheSha256") or "").lower()
     if digest != want:
-        warn_once("generated", asset.get("id"),
-                  f"cache {path} sha256 {digest[:12]}... does not match cacheSha256 {want[:12]}...; drawing nothing")
-        return None
+        raise SceneError(f"generated {asset.get('id')!r}: cache {path!r} sha256 {digest} "
+                         f"does not match cacheSha256 {want}")
     return path
 
 

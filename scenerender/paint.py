@@ -82,11 +82,59 @@ def set_source(rc, cr: cairo.Context, paint: str | None, w: float, h: float, ctx
         warn_once("paint", ref, "paint reference not found")
         return False
     kind = ln(el)
-    pat = _PAINTERS.get(kind, _unknown)(rc, el, w, h, ctx)
+    pat = (_conic(rc, el, w, h, ctx, cr.clip_extents()) if kind == "conicGradient"
+           else _PAINTERS.get(kind, _unknown)(rc, el, w, h, ctx))
     if pat is None:
         return False
+    if kind in ("linearGradient", "radialGradient", "conicGradient"):
+        if rc.ev.bool(el, "dither", ctx, True):
+            pat = _dither_pattern(cr, pat)
+        elif hasattr(pat, "set_dither"):
+            pat.set_dither(cairo.DITHER_NONE)
     cr.set_source(pat)
     return True
+
+
+def _dither_pattern(cr, pattern):
+    """Quantize a floating gradient with an ordered, zero-mean pixel threshold.
+
+    Cairo's pattern dither setting is backend-dependent (and has no effect on
+    several ARGB32 paths). Quantizing explicitly makes the schema switch work
+    consistently and keeps rendering independent of thread order/random state.
+    The pattern is sampled in device space, so transforms retain pixel resolution.
+    """
+    from .assets import array_to_surface
+    matrix = cr.get_matrix()
+    x0, y0, x1, y1 = cr.clip_extents()
+    corners = [matrix.transform_point(x, y) for x in (x0, x1) for y in (y0, y1)]
+    left = math.floor(min(x for x, _ in corners))
+    top = math.floor(min(y for _, y in corners))
+    width = max(1, math.ceil(max(x for x, _ in corners)) - left)
+    height = max(1, math.ceil(max(y for _, y in corners)) - top)
+    transform = cairo.Matrix(*matrix)
+    transform.x0 -= left
+    transform.y0 -= top
+    surf = cairo.ImageSurface(cairo.FORMAT_RGBA128F, width, height)
+    paint = cairo.Context(surf)
+    paint.set_matrix(transform)
+    paint.set_source(pattern)
+    paint.paint()
+    surf.flush()
+    pixels = np.frombuffer(surf.get_data(), np.float32).reshape(height, surf.get_stride() // 4)[:, :4*width].reshape(height, width, 4)
+    # Bayer recursion produces every rank 0..63 exactly once in an 8x8 tile.
+    ranks = np.array([[0.]], np.float32)
+    for _ in range(3):
+        ranks = np.block([[4*ranks, 4*ranks+2], [4*ranks+3, 4*ranks+1]])
+    yy, xx = np.ogrid[top:top+height, left:left+width]
+    noise = ((ranks[yy % 8, xx % 8] + .5) / 64 - .5)[..., None]
+    alpha = np.clip(pixels[..., 3:4], 0, 1)
+    a8 = np.floor(alpha * 255 + .5)
+    rgb = np.clip(np.floor(pixels[..., :3] * 255 + .5 + noise * alpha), 0, a8)
+    bgra = np.concatenate((rgb[..., ::-1], a8), axis=-1).astype(np.uint8)
+    out = cairo.SurfacePattern(array_to_surface(bgra))
+    out.set_matrix(transform)
+    out.set_filter(cairo.FILTER_NEAREST)
+    return out
 
 
 def _unknown(rc, el, w, h, ctx):
@@ -109,7 +157,7 @@ def _stops(rc, el, ctx):
 
 
 def _add_stops(rc, pat, el, ctx):
-    space = el.get("interpolationSpace", "linear")
+    space = rc.ev.str(el, "interpolationSpace", ctx, "linear")
     stops = _stops(rc, el, ctx)
     pat.add_color_stop_rgba(stops[0][0], *stops[0][1])
     for (o0, c0, mid), (o1, c1, _) in zip(stops, stops[1:]):
@@ -122,15 +170,15 @@ def _add_stops(rc, pat, el, ctx):
             pat.add_color_stop_rgba(o0 + (o1 - o0) * u, *mix_color(c0, c1, e, space))
 
 
-def _spread(pat, el):
+def _spread(rc, pat, el, ctx):
     pat.set_extend({"pad": cairo.EXTEND_PAD, "reflect": cairo.EXTEND_REFLECT,
-                    "repeat": cairo.EXTEND_REPEAT}.get(el.get("spread", "pad"), cairo.EXTEND_PAD))
+                    "repeat": cairo.EXTEND_REPEAT}.get(rc.ev.str(el, "spread", ctx, "pad"), cairo.EXTEND_PAD))
 
 
 def _units_matrix(rc, el, w, h, ctx):
     """Matrix mapping gradient space to user space (object units = fractions of the box)."""
     rot = rc.ev.num(el, "rotation", ctx, 0.0)
-    base = cairo.Matrix(xx=w, yy=h) if el.get("units", "object") == "object" else cairo.Matrix()
+    base = cairo.Matrix(xx=w, yy=h) if rc.ev.str(el, "units", ctx, "object") == "object" else cairo.Matrix()
     if rot:
         # Rotate about the centre of the painted box.
         cx, cy = (w / 2, h / 2)
@@ -151,40 +199,48 @@ def _linear(rc, el, w, h, ctx):
     pat = cairo.LinearGradient(ev.num(el, "x1", ctx, 0), ev.num(el, "y1", ctx, 0),
                                ev.num(el, "x2", ctx, 1), ev.num(el, "y2", ctx, 0))
     _add_stops(rc, pat, el, ctx)
-    _spread(pat, el)
+    _spread(rc, pat, el, ctx)
     return _with_matrix(pat, _units_matrix(rc, el, w, h, ctx))
 
 
 def _radial(rc, el, w, h, ctx):
     ev = rc.ev
     cx, cy, r = ev.num(el, "cx", ctx, 0.5), ev.num(el, "cy", ctx, 0.5), ev.num(el, "r", ctx, 0.5)
-    fx = ev.num(el, "fx", ctx, cx) if el.get("fx") is not None else cx
-    fy = ev.num(el, "fy", ctx, cy) if el.get("fy") is not None else cy
+    fx = ev.num(el, "fx", ctx, cx)
+    fy = ev.num(el, "fy", ctx, cy)
     aspect = ev.num(el, "aspect", ctx, 1.0)
     pat = cairo.RadialGradient(fx, fy, ev.num(el, "fr", ctx, 0.0), cx, cy, r)
     _add_stops(rc, pat, el, ctx)
-    _spread(pat, el)
+    _spread(rc, pat, el, ctx)
     gm = _units_matrix(rc, el, w, h, ctx)
     if aspect != 1:
         gm = cairo.Matrix(x0=-cx, y0=-cy).multiply(cairo.Matrix(xx=aspect)).multiply(cairo.Matrix(x0=cx, y0=cy)).multiply(gm)
     return _with_matrix(pat, gm)
 
 
-def _conic(rc, el, w, h, ctx):
+def _conic(rc, el, w, h, ctx, extent=None):
     ev = rc.ev
     cx, cy = ev.num(el, "cx", ctx, 0.5), ev.num(el, "cy", ctx, 0.5)
     start = math.radians(ev.num(el, "angle", ctx, 0.0) - 90)
-    space = el.get("interpolationSpace", "linear")
+    space = ev.str(el, "interpolationSpace", ctx, "linear")
     stops = _stops(rc, el, ctx)
     pat = cairo.MeshPattern()
     n = 96
-    R = 4.0  # beyond the unit box in object units
+    gm = _units_matrix(rc, el, w, h, ctx)
+    inv = cairo.Matrix(*gm)
+    inv.invert()
+    x0, y0, x1, y1 = extent or (0, 0, w, h)
+    corners = [inv.transform_point(x, y) for x in (x0, x1) for y in (y0, y1)]
+    R = 1.01 * max(math.hypot(x - cx, y - cy) for x, y in corners) + 1
     def color_at(u):
         if u <= stops[0][0]:
             return stops[0][1]
-        for (o0, c0, _), (o1, c1, _) in zip(stops, stops[1:]):
+        for (o0, c0, midpoint), (o1, c1, _) in zip(stops, stops[1:]):
             if o0 <= u <= o1:
-                return mix_color(c0, c1, (u - o0) / max(1e-9, o1 - o0), space)
+                fraction = (u - o0) / max(1e-9, o1 - o0)
+                if abs(midpoint - .5) > 1e-6:
+                    fraction **= math.log(.5) / math.log(max(1e-4, min(.9999, midpoint)))
+                return mix_color(c0, c1, fraction, space)
         return stops[-1][1]
     for i in range(n):
         a0, a1 = start + 2 * math.pi * i / n, start + 2 * math.pi * (i + 1) / n
@@ -197,7 +253,7 @@ def _conic(rc, el, w, h, ctx):
         for k, c in enumerate((c0, c0, c1, c1)):
             pat.set_corner_color_rgba(k, *c)
         pat.end_patch()
-    return _with_matrix(pat, _units_matrix(rc, el, w, h, ctx))
+    return _with_matrix(pat, gm)
 
 
 def _mesh(rc, el, w, h, ctx):
@@ -206,8 +262,8 @@ def _mesh(rc, el, w, h, ctx):
     as SUB x SUB cairo patches, so colour is C1-smooth across cell edges. A missing grid point takes
     its default position (the regular grid) and the colour of the nearest defined point."""
     ev = rc.ev
-    rows, cols = int(el.get("rows", 2)), int(el.get("cols", 2))
-    space = el.get("interpolationSpace", "oklab")
+    rows, cols = int(ev.num(el, "rows", ctx, 2)), int(ev.num(el, "cols", ctx, 2))
+    space = ev.str(el, "interpolationSpace", ctx, "oklab")
     pts = np.zeros((rows, cols, 2), np.float64)
     col = np.zeros((rows, cols, 4), np.float64)
     known = np.zeros((rows, cols), bool)
@@ -217,7 +273,7 @@ def _mesh(rc, el, w, h, ctx):
     for p in el:
         if ln(p) != "point":
             continue
-        r, c = int(p.get("row")), int(p.get("col"))
+        r, c = int(ev.num(p, "row", ctx)), int(ev.num(p, "col", ctx))
         if not (0 <= r < rows and 0 <= c < cols):
             continue
         if p.get("x") is not None or _animated(p, "x"):
@@ -293,7 +349,7 @@ def _animated(el, prop):
 def _pattern(rc, el, w, h, ctx):
     from .assets import surface_for_asset
     ev = rc.ev
-    asset = rc.doc.ids.get(el.get("asset"))
+    asset = rc.doc.ids.get(ev.str(el, "asset", ctx))
     if asset is None:
         warn_once("paint", el.get("id"), "pattern asset not found")
         return None

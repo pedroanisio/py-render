@@ -25,6 +25,7 @@ from .document import Document, ln
 from .evaluator import Ctx, Evaluator
 from .raster import Buf, Canvas, intersect, union
 from .registry import ASSETS, ASSET_SIZES, EFFECTS, FEATURES, FULL, NODES, PARTIAL, TRANSITIONS, warn_once
+from .values import parse_bool
 
 log = logging.getLogger("scenerender")
 
@@ -69,6 +70,7 @@ class RenderContext:
     cache: dict = field(default_factory=dict)
     frame_cache: dict = field(default_factory=dict)
     matte_nodes: set = field(default_factory=set)
+    matte_users: tuple = ()
     transitions: dict = field(default_factory=dict)   # parent element -> [transition elements]
     trans_members: dict = field(default_factory=dict)  # node -> transition elements it takes part in
     hooks: dict = field(default_factory=dict)          # optional modules: "camera", "particles", "captions", "finish"
@@ -82,7 +84,7 @@ class RenderContext:
 
     def __post_init__(self):
         d = self.doc
-        self.linear = d.project.get("linearLight", "true") != "false"
+        self.linear = parse_bool(d.project.get("linearLight", "true"), True)
         self.width = max(1, round(d.frame_width * self.scale))
         self.height = max(1, round(d.frame_height * self.scale))
         self.frame_rect = (0, 0, self.width, self.height)
@@ -98,8 +100,12 @@ class RenderContext:
         # of another context installs its own.
         self.install_working_primaries()
         self.root_matrix = scale(self.scale, self.scale) @ self.reframe_matrix(d.reframe)
+        matte_overrides = {o.get("target") for o in d.root.iter("override") if o.get("property") == "matte"}
+        self.matte_users = tuple(el for el in d.root.iter() if isinstance(el.tag, str) and
+                                 (el.get("matte") or el.get("id") in matte_overrides or
+                                  any(c.get("property") == "matte" for c in el)))
         for el in d.root.iter():
-            if isinstance(el.tag, str) and el.get("matte") and el.get("matteVisible", "false") != "true":
+            if isinstance(el.tag, str) and el.get("matte") and not parse_bool(el.get("matteVisible", "false")):
                 m = d.ids.get(el.get("matte"))
                 if m is not None:
                     self.matte_nodes.add(m)
@@ -158,28 +164,26 @@ class RenderContext:
         return blending.composite(back, fitted)
 
     # ------------------------------------------------------------ children
-    def child_order(self, parent) -> list:
-        key = ("order", parent)
-        hit = self.cache.get(key)
-        if hit is None:
-            kids = [c for c in self.doc.nodes(parent) if ln(c) != "transition"]
-            # On object3D and camera, z is a 3D coordinate, not a stacking index.
-            sz = lambda c: 0 if ln(c) in ("object3D", "camera") else int(float(c.get("z", 0)))  # noqa: E731
-            hit = [c for _, _, c in sorted((sz(c), i, c) for i, c in enumerate(kids))]
-            self.cache[key] = hit
-        return hit
+    def child_order(self, parent, ctx: Ctx | None = None) -> list:
+        ctx = ctx or Ctx(0, 0)
+        kids = [c for c in self.doc.nodes(parent) if ln(c) != "transition"]
+        # On object3D and camera, z is a 3D coordinate, not a stacking index.
+        def z(c):
+            return 0 if ln(c) in ("object3D", "camera") else self.ev.num(c, "z", self.enter_node(c, ctx), 0)
+        return sorted(kids, key=z)  # stable: equal z retains document order
 
     def render_children(self, parent, dst: Buf, ctx: Ctx, M: np.ndarray, box: tuple[float, float],
                         fold_opacity: float, layout: dict | None = None) -> Buf:
         layout = layout if layout is not None else self.layout_positions(parent, ctx, box)
         active_tr = self.active_transitions(parent, ctx)
         done_tr = set()
-        order = self.child_order(parent)
+        hidden_mattes = self.hidden_mattes(ctx)
+        order = self.child_order(parent, ctx)
         ds = self.hooks.get("depth_sort")
-        if ds is not None and parent.get("collapse") == "true":
+        if ds is not None and self.ev.bool(parent, "collapse", ctx):
             order = ds(self, parent, order, ctx)   # collapsed 3D group: farthest first
         for child in order:
-            if child in self.matte_nodes or child in self.exclude:
+            if child in hidden_mattes or child in self.exclude:
                 continue
             tr = next((tr for tr in active_tr if child in tr[1:3]), None)
             if tr is not None:
@@ -201,36 +205,51 @@ class RenderContext:
                 dst = blending.composite(dst, out.buf, out.blend, out.opacity * fold_opacity)
         return dst
 
+    def hidden_mattes(self, ctx: Ctx) -> set:
+        if not self.matte_users:
+            return set()
+        key = ("hidden-mattes", ctx.t, ctx.comp_t, ctx.scope, ctx.clock_node)
+        if key not in self.frame_cache:
+            hidden = set()
+            for user in self.matte_users:
+                ref = self.ev.str(user, "matte", ctx)
+                if ref and not self.ev.bool(user, "matteVisible", ctx, False):
+                    node = self.doc.ids.get(ref)
+                    if node is not None:
+                        hidden.add(node)
+            self.frame_cache[key] = hidden
+        return self.frame_cache[key]
+
     def _passthrough(self, el, dst, ctx, PM, box, layout, fold_opacity) -> Buf | None:
         """Render a non-isolated group straight into dst so its children blend with the real backdrop.
         Returns the updated dst, or None when the group must be isolated."""
         from .nodes.core import _repeat_vars, child_ctx, is_isolated
-        if is_isolated(self, el, self.node_ctx(el, ctx)):
+        if is_isolated(self, el, self.enter_node(el, ctx)):
             return None
         if not self.active(el, ctx):
             return dst
-        shift = self.doc.clock_shift.get(el)
-        if shift:
-            ctx = replace(ctx, t=ctx.t - shift)
-        nctx = self.node_ctx(el, ctx)
+        ctx = nctx = self.enter_node(el, ctx)
         M = self.node_matrix(el, ctx, PM, box, layout.get(el))
-        size = self.node_size(el, nctx, box)
+        size = self.node_size(el, nctx, box, layout.get(el))
         cctx = _repeat_vars(el, child_ctx(self, el, nctx))
         return self.render_children(el, dst, cctx, M, size, fold_opacity)
 
     # ------------------------------------------------------------ node
     def active(self, el, ctx: Ctx, force: bool = False) -> bool:
-        if el.get("visible") == "false":
+        if not self.ev.bool(el, "visible", self.enter_node(el, ctx), True):
             return False
         if not force:
             s, e = self.doc.window(el)
             if ctx.t < s - 1e-9 or (e is not None and ctx.t >= e - 1e-9):
                 return False
-        return self.ev.condition(el, ctx)
+        return self.ev.condition(el, self.enter_node(el, ctx))
 
     def node_ctx(self, el, ctx: Ctx) -> Ctx:
-        s, e = self.doc.window(el)
-        return replace(ctx, node_start=s, node_end=e)
+        return self.ev.node_ctx(el, ctx)
+
+    def enter_node(self, el, ctx: Ctx) -> Ctx:
+        """Enter a scheduled node once; its active window stays on the parent clock."""
+        return self.ev.enter_node(el, ctx)
 
     def local_matrix(self, el, ctx: Ctx, box, size, layout_pos=None) -> np.ndarray:
         ev = self.ev
@@ -245,6 +264,12 @@ class RenderContext:
         ay = ev.length(el, "anchorY", ctx, h)
         sx = ev.num(el, "scaleX", ctx, 1.0)
         sy = ev.num(el, "scaleY", ctx, 1.0)
+        if layout_pos is not None and len(layout_pos) > 2 and ln(el) not in ("shape", "group", "sequence"):
+            tw, th = layout_pos[2:]
+            if tw is not None and w * abs(sx) > 0:
+                sx *= tw / (w * abs(sx))
+            if th is not None and h * abs(sy) > 0:
+                sy *= th / (h * abs(sy))
         rot = ev.num(el, "rotation", ctx, 0.0)
         orient = ev.motion_path_angle(el, ctx)
         if orient is not None:
@@ -254,7 +279,7 @@ class RenderContext:
         pose = phys(self, el, ctx) if phys is not None else None
         if pose is not None:  # simulated rigid body: parent-space x/y (px) and rotation (deg)
             x, y, rot = pose
-        if pose is None and (el.get("alignX") or el.get("alignY")):
+        if pose is None and (ev.str(el, "alignX", ctx) or ev.str(el, "alignY", ctx)):
             x, y, sx, sy = self._align(el, ctx, box, (w, h), x, y, ax, ay, sx, sy, rot, kx, ky)
         L = translate(x, y) @ rotate(rot)
         if kx or ky:
@@ -264,7 +289,7 @@ class RenderContext:
     def _align(self, el, ctx, box, size, x, y, ax, ay, sx, sy, rot=0.0, kx=0.0, ky=0.0):
         """Place x/y (and scale for stretch) so the node's transformed box aligns within alignTo."""
         ev = self.ev
-        target = el.get("alignTo", "parent")
+        target = self.ev.str(el, "alignTo", ctx, "parent")
         bx0, by0, bw, bh = 0.0, 0.0, box[0], box[1]
         if target in ("frame", "safe-area"):
             bw, bh = self.doc.width, self.doc.height
@@ -273,7 +298,7 @@ class RenderContext:
                 bx0, by0, bw, bh = l * bw, t_ * bh, bw * (1 - l - r), bh * (1 - t_ - b)
         m = ev.length(el, "margin", ctx, min(bw, bh))
         w, h = size
-        ax_mode, ay_mode = el.get("alignX"), el.get("alignY")
+        ax_mode, ay_mode = self.ev.str(el, "alignX", ctx), self.ev.str(el, "alignY", ctx)
         if ax_mode == "stretch" and w > 0:
             sx = (bw - 2 * m) / w
         if ay_mode == "stretch" and h > 0:
@@ -311,7 +336,17 @@ class RenderContext:
         from .safe_areas import insets
         return insets(sa, self.doc.width, self.doc.height)
 
-    def node_size(self, el, ctx: Ctx, box) -> tuple[float, float]:
+    def node_size(self, el, ctx: Ctx, box, layout_pos=None) -> tuple[float, float]:
+        w, h = self._natural_node_size(el, ctx, box)
+        if layout_pos is not None and len(layout_pos) > 2 and ln(el) in ("shape", "group", "sequence"):
+            tw, th = layout_pos[2:]
+            if tw is not None:
+                w = tw / max(1e-12, abs(self.ev.num(el, "scaleX", ctx, 1)))
+            if th is not None:
+                h = th / max(1e-12, abs(self.ev.num(el, "scaleY", ctx, 1)))
+        return w, h
+
+    def _natural_node_size(self, el, ctx: Ctx, box) -> tuple[float, float]:
         """The node's own box (used for anchors, % children, layout and alignment)."""
         tag = ln(el)
         ev = self.ev
@@ -320,27 +355,39 @@ class RenderContext:
             h = ev.length(el, "height", ctx, box[1], box[1] if tag != "shape" else 0.0)
             return w, h
         if tag == "layer":
-            if el.get("boxWidth") or el.get("width"):
-                return (ev.length(el, "boxWidth" if el.get("boxWidth") else "width", ctx, box[0]),
-                        ev.length(el, "boxHeight" if el.get("boxHeight") else "height", ctx, box[1]))
             asset = self.layer_asset(el, ctx)
-            return self.asset_size(asset, ctx) if asset is not None else (0.0, 0.0)
+            natural = self.asset_size(asset, ctx) if asset is not None else (0.0, 0.0)
+            return self._media_box(el, ctx, box, natural)
         if tag == "instance":
-            if el.get("boxWidth"):
-                return ev.length(el, "boxWidth", ctx, box[0]), ev.length(el, "boxHeight", ctx, box[1])
-            sym = self.doc.ids.get(el.get("symbol"))
+            sym = self.doc.ids.get(ev.str(el, "symbol", ctx))
             if sym is not None and sym.get("width"):
-                return float(sym.get("width")), float(sym.get("height"))
-            return box
+                natural = (ev.num(sym, "width", ctx, box[0]), ev.num(sym, "height", ctx, box[1]))
+            else:
+                natural = box
+            return self._media_box(el, ctx, box, natural)
         if tag == "particleEmitter":
             return ev.num(el, "emitterWidth", ctx, 0.0), ev.num(el, "emitterHeight", ctx, 0.0)
         return box
+
+    def _media_box(self, el, ctx, parent, natural):
+        ev = self.ev
+        bw, bh = ev.get(el, "boxWidth", ctx), ev.get(el, "boxHeight", ctx)
+        if bw is None and bh is None:
+            return parent if ev.str(el, "fit", ctx, "none") != "none" else natural
+        aw, ah = natural
+        w = ev.length(el, "boxWidth", ctx, parent[0]) if bw is not None else None
+        h = ev.length(el, "boxHeight", ctx, parent[1]) if bh is not None else None
+        if w is None:
+            w = h * aw / ah if ah else parent[0]
+        if h is None:
+            h = w * ah / aw if aw else parent[1]
+        return w, h
 
     def asset_size(self, asset, ctx) -> tuple[float, float]:
         fn = ASSET_SIZES.get(ln(asset))
         if fn:
             return fn(self, asset, ctx)
-        return float(asset.get("width", 0) or 0), float(asset.get("height", 0) or 0)
+        return self.ev.num(asset, "width", ctx, 0), self.ev.num(asset, "height", ctx, 0)
 
     def layer_asset(self, el, ctx: Ctx):
         aid = self.ev.str(el, "asset", ctx)
@@ -367,9 +414,9 @@ class RenderContext:
 
     def node_matrix(self, el, ctx, PM, box, layout_pos) -> np.ndarray:
         nctx = self.node_ctx(el, ctx)
-        size = self.node_size(el, nctx, box)
+        size = self.node_size(el, nctx, box, layout_pos)
         L = self.local_matrix(el, nctx, box, size, layout_pos)
-        parent_id = el.get("parent")
+        parent_id = self.ev.str(el, "parent", nctx)
         if parent_id and parent_id in self.doc.ids:
             PM = self.world_matrix(self.doc.ids[parent_id], ctx)
         M = PM @ L
@@ -382,38 +429,35 @@ class RenderContext:
     def is_threed(self, el) -> bool:
         """2.5D participation: threeD="true", or a child of a collapsed 3D group (camera hook decides)."""
         fn = self.hooks.get("is_threed")
-        return fn(self, el) if fn is not None else el.get("threeD") == "true"
+        return fn(self, el) if fn is not None else parse_bool(el.get("threeD"))
 
-    def temporal_effects(self, el) -> list:
+    def temporal_effects(self, el, ctx: Ctx) -> list:
         """(effect element, handler) pairs of el's effects that sample other times."""
-        key = ("temporal", el)
-        hit = self.cache.get(key)
-        if hit is None:
-            hit = []
-            for eid in (el.get("effects") or "").split():
-                e = self.doc.ids.get(eid)
-                fn = EFFECTS.get(e.get("type")) if e is not None else None
-                if fn is not None and getattr(fn, "temporal", False):
-                    hit.append((e, fn))
-            self.cache[key] = hit
-        return hit
+        ctx = self.enter_node(el, ctx)
+        result = []
+        for eid in self.ev.str(el, "effects", ctx, "").split():
+            e = self.doc.ids.get(eid)
+            fn = EFFECTS.get(self.ev.str(e, "type", ctx)) if e is not None else None
+            if fn is not None and getattr(fn, "temporal", False):
+                result.append((e, fn))
+        return result
 
     def _ghost_active(self, el, ctx: Ctx) -> bool:
         """Past its window, a node with a lookback effect (echo) stays alive while its tail lasts."""
-        if el.get("visible") == "false":
+        if not self.ev.bool(el, "visible", self.enter_node(el, ctx), True):
             return False
         s, e = self.doc.window(el)
         if e is None or ctx.t < e - 1e-9:
             return False
-        tail = max((getattr(fn, "lookback", lambda *a: 0.0)(self, fx, ctx) for fx, fn in self.temporal_effects(el)), default=0.0)
+        tail = max((getattr(fn, "lookback", lambda *a: 0.0)(self, fx, ctx) for fx, fn in self.temporal_effects(el, ctx)), default=0.0)
         return ctx.t < e + tail
 
     def render_node(self, el, ctx: Ctx, PM, box, layout_pos=None, force: bool = False) -> Out | None:
         if not self.active(el, ctx, force):
-            if self.temporal_effects(el) and self._ghost_active(el, ctx):
+            if self.temporal_effects(el, ctx) and self._ghost_active(el, ctx):
                 return self._render_node_once(el, ctx, PM, box, layout_pos, ghost=True)
             return None
-        mode = self.motion_blur_mode(el)
+        mode = self.motion_blur_mode(el, ctx)
         if self.motion_blur and mode == "off" and self.mb_center is not None:
             # Excluded from the frame's shutter: always drawn at the frame's centre time.
             ctx = ctx.at(ctx.t + (self.mb_center - ctx.comp_t))
@@ -421,19 +465,16 @@ class RenderContext:
             return self._render_node_blurred(el, ctx, PM, box, layout_pos, force)
         return self._render_node_once(el, ctx, PM, box, layout_pos)
 
-    def motion_blur_mode(self, el) -> str:
+    def motion_blur_mode(self, el, ctx: Ctx) -> str:
         """Effective node motionBlur: the nearest non-"inherit" value on el or its ancestors."""
-        key = ("mb", el)
-        hit = self.cache.get(key)
-        if hit is None:
-            hit = "inherit"
-            for n in [el, *el.iterancestors()]:
-                v = n.get("motionBlur") if isinstance(n.tag, str) else None
-                if v in ("on", "off"):
-                    hit = v
-                    break
-            self.cache[key] = hit
-        return hit
+        for n in [el, *el.iterancestors()]:
+            if not isinstance(n.tag, str):
+                continue
+            _, nctx = self.ev.reference(n.get("id", ""), n, ctx)
+            v = self.ev.str(n, "motionBlur", nctx, "inherit")
+            if v in ("on", "off"):
+                return v
+        return "inherit"
 
     def _render_node_blurred(self, el, ctx, PM, box, layout_pos, force) -> Out | None:
         p = self.doc.project
@@ -480,12 +521,9 @@ class RenderContext:
 
     def _render_node_once(self, el, ctx: Ctx, PM, box, layout_pos=None, ghost: bool = False) -> Out | None:
         tag = ln(el)
-        shift = self.doc.clock_shift.get(el)
-        if shift:
-            ctx = replace(ctx, t=ctx.t - shift)
-        nctx = self.node_ctx(el, ctx)
+        ctx = nctx = self.enter_node(el, ctx)
         opacity = self.ev.num(el, "opacity", nctx, 1.0)
-        temporal = bool(self.temporal_effects(el))
+        temporal = bool(self.temporal_effects(el, ctx))
         if opacity <= 1e-4 and not temporal:
             return None
         handler = NODES.get(tag)
@@ -495,7 +533,7 @@ class RenderContext:
         M = self.node_matrix(el, ctx, PM, box, layout_pos)
         if abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]) < 1e-12:
             return None  # collapsed to zero area (e.g. scale 0): nothing visible, and cairo can't invert it
-        size = self.node_size(el, nctx, box)
+        size = self.node_size(el, nctx, box, layout_pos)
         if self.is_threed(el) and self.hooks.get("camera"):
             M = self.hooks["camera"](self, el, M, nctx)
             if M is None:
@@ -510,7 +548,7 @@ class RenderContext:
                 buf = Buf.null()
             buf = Buf(buf.px * opacity, buf.x0, buf.y0)
             buf = self.finish_node(el, buf, nctx, M, size, PM, box)
-            return None if buf is None or buf.is_null else Out(buf, el.get("blend", "normal"), 1.0)
+            return None if buf is None or buf.is_null else Out(buf, self.ev.str(el, "blend", nctx, "normal"), 1.0)
         if abs(M[2, 0]) + abs(M[2, 1]) > 1e-12:
             buf = self._render_projective(el, handler, nctx, M, size, PM, box)
         else:
@@ -521,7 +559,7 @@ class RenderContext:
                 buf = self.finish_node(el, buf, nctx, M, size, PM, box)
         if buf is None:
             return None
-        return Out(buf, el.get("blend", "normal"), opacity)
+        return Out(buf, self.ev.str(el, "blend", nctx, "normal"), opacity)
 
     def _render_projective(self, el, handler, ctx, H, size, PM, box) -> Buf | None:
         """Perspective: draw the node flat at a resolution matching its projected size, run its
@@ -561,10 +599,10 @@ class RenderContext:
         if masks:
             from .masks import apply_masks
             buf = apply_masks(self, masks, buf, ctx, M, size)
-        fx = el.get("effects")
+        fx = self.ev.str(el, "effects", ctx)
         if fx and ln(el) != "adjustment" and el not in self._skip_effects:
             buf = self.apply_effects(fx.split(), buf, ctx, el)
-        if el.get("matte"):
+        if self.ev.str(el, "matte", ctx):
             from .masks import apply_matte
             buf = apply_matte(self, el, buf, ctx)
         return buf
@@ -577,7 +615,7 @@ class RenderContext:
                 continue
             if not self.ev.bool(e, "enabled", ctx, True):
                 continue
-            typ = e.get("type")
+            typ = self.ev.str(e, "type", ctx)
             fn = EFFECTS.get(typ)
             if fn is None:
                 warn_once("effect", typ)
@@ -598,13 +636,13 @@ class RenderContext:
     def apply_adjustment(self, el, dst: Buf, ctx, PM, box, fold_opacity) -> Buf:
         if not self.active(el, ctx):
             return dst
-        nctx = self.node_ctx(el, ctx)
+        ctx = nctx = self.enter_node(el, ctx)
         opacity = self.ev.num(el, "opacity", nctx, 1.0) * fold_opacity
         if opacity <= 0:
             return dst
         region = dst.expand_to(self.frame_rect) if dst.rect != self.frame_rect else dst
         before = region.copy()
-        after = self.apply_effects((el.get("effects") or "").split(), region.copy(), nctx, el)
+        after = self.apply_effects((self.ev.str(el, "effects", nctx) or "").split(), region.copy(), nctx, el)
         after = after.crop_to(before.rect).expand_to(before.rect)
         M = self.node_matrix(el, ctx, PM, box, None)
         size = self.node_size(el, nctx, box)
@@ -613,10 +651,10 @@ class RenderContext:
         if masks:
             from .masks import mask_coverage
             cov *= mask_coverage(self, masks, before.rect, nctx, M, size)
-        if el.get("matte"):
+        if self.ev.str(el, "matte", nctx):
             from .masks import matte_coverage
             cov *= matte_coverage(self, el, before.rect, nctx)
-        mode = el.get("blend", "normal")
+        mode = self.ev.str(el, "blend", nctx, "normal")
         if mode == "normal":
             before.px += (after.px - before.px) * cov[..., None]
             return before
@@ -625,7 +663,7 @@ class RenderContext:
 
     # ------------------------------------------------------------ layout
     def layout_positions(self, parent, ctx: Ctx, box) -> dict:
-        mode = parent.get("layout", "none") if ln(parent) in ("group", "sequence") else "none"
+        mode = self.ev.str(parent, "layout", ctx, "none") if ln(parent) in ("group", "sequence") else "none"
         if mode == "none":
             return {}
         from .layout import flex_layout

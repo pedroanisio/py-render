@@ -63,6 +63,7 @@ from .document import ln
 from .physics import fbm
 from .raster import Buf, intersect
 from .registry import DEFORMERS, FEATURES, FULL, warn_once
+from .values import parse_bool
 
 FEATURES.declare("deform", FULL, "node tiles are resampled through an inverse map (modifier levels vary)")
 GRID = 4          # output pixels per inverse-map sample
@@ -611,7 +612,7 @@ def _skeleton_ik(rc, skel, c, bones, by_id, local, world, ctx):
     goal = goal + np.array([rc.ev.num(c, "offsetX", ctx, 0.0), rc.ev.num(c, "offsetY", ctx, 0.0)])
     infl = rc.ev.num(c, "influence", ctx, 1.0)
     pts = [world[b][:2, 2] for b in chain] + [(world[tip[0]] @ np.array([tip[1], 0.0, 1.0]))[:2]]
-    deltas = chain_deltas(np.array(pts), goal, c.get("bendPositive", "true") not in ("false", "0"))
+    deltas = chain_deltas(np.array(pts), goal, parse_bool(c.get("bendPositive"), True))
     for b, d in zip(chain, deltas):
         mirror = np.linalg.det(world[b][:2, :2]) < 0
         local[b] = local[b] @ _rot3(math.radians(d * infl) * (-1 if mirror else 1))

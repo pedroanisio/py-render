@@ -69,6 +69,7 @@ from .document import ln
 from .evaluator import Ctx
 from .raster import Buf
 from .registry import FEATURES, FULL
+from .values import parse_bool
 
 UNITS_PER_METRE = 100.0
 
@@ -338,18 +339,12 @@ def node_clock(rc, el, t: float, base: Ctx | None = None) -> Ctx | None:
         p = p.getparent()
     ctx = base or Ctx(t=t, comp_t=t)
     for g in reversed(chain):
-        sh = rc.doc.clock_shift.get(g)
-        if sh:
-            ctx = replace(ctx, t=ctx.t - sh)
         if not rc.active(g, ctx):
             return None
-        ctx = _repeat_vars(g, child_ctx(rc, g, rc.node_ctx(g, ctx)))
-    sh = rc.doc.clock_shift.get(el)
-    if sh:
-        ctx = replace(ctx, t=ctx.t - sh)
+        ctx = _repeat_vars(g, child_ctx(rc, g, rc.enter_node(g, ctx)))
     if ln(el) not in ("light",) and not rc.active(el, ctx):
         return None
-    return rc.node_ctx(el, ctx) if ln(el) != "light" else ctx
+    return rc.enter_node(el, ctx) if ln(el) != "light" else ctx
 
 
 def _local3d(rc, el, ctx: Ctx) -> np.ndarray:
@@ -465,7 +460,7 @@ def apply_constraint3d(rc, c, el, M: np.ndarray, ctx: Ctx, depth: int = 0) -> np
         rc.cache[key] = smp
         x, y, ang = smp.at(ev.num(c, "progress", ctx, 0.0))
         p = frame_to_world(rc, np.array([x, y]), 0.0) + off
-        if c.get("autoOrient") == "true":
+        if parse_bool(c.get("autoOrient")):
             R = rz(-(ang + orot))
         out = trs(p, R, s)
     elif typ in ("ik", "track"):
@@ -506,15 +501,7 @@ def default_fpx(W: float) -> float:
 
 
 def _window_ok(rc, el, t: float) -> bool:
-    p = el
-    while p is not None and isinstance(p.tag, str):
-        if ln(p) in ("composition", "symbol"):
-            return True
-        s, e = rc.doc.window(p)
-        if t < s - 1e-9 or (e is not None and t >= e - 1e-9) or p.get("visible") == "false":
-            return False
-        p = p.getparent()
-    return True
+    return node_clock(rc, el, t) is not None
 
 
 def cameras(rc) -> list:
@@ -536,9 +523,9 @@ def active_camera(rc, t: float):
         if vid and vid in rc.doc.ids:
             return rc.doc.ids[vid]
     found = None
-    c = _ctx(t)
     for cam in cameras(rc):
-        if rc.ev.bool(cam, "active", c, True) and _window_ok(rc, cam, t):
+        c = node_clock(rc, cam, t)
+        if c is not None and rc.ev.bool(cam, "active", c, True):
             found = cam
     return found
 
@@ -654,7 +641,7 @@ def _flattening_ancestor(el, rc=None) -> bool:
     routed = rc is not None and collapse_routed(rc)
     p = el.getparent()
     while p is not None and isinstance(p.tag, str) and ln(p) not in ("composition", "symbol"):
-        if p.get("threeD") == "true" and (p.get("collapse") != "true" or not routed):
+        if parse_bool(p.get("threeD")) and (not parse_bool(p.get("collapse")) or not routed):
             return True
         p = p.getparent()
     return False
@@ -668,8 +655,8 @@ def _collapsed_ancestors(el) -> list:
     out = []
     p = el.getparent()
     while p is not None and isinstance(p.tag, str) and ln(p) not in ("composition", "symbol"):
-        if p.get("threeD") == "true":
-            if p.get("collapse") != "true":
+        if parse_bool(p.get("threeD")):
+            if not parse_bool(p.get("collapse")):
                 break
             out.append(p)
         p = p.getparent()
@@ -679,7 +666,7 @@ def _collapsed_ancestors(el) -> list:
 def is_threed(rc, el) -> bool:
     """Whether the compositor should route el through the camera hook: threeD="true", or any node
     inside a collapsed threeD group (it shares that group's camera space at zDepth 0)."""
-    if el.get("threeD") == "true":
+    if parse_bool(el.get("threeD")):
         return True
     return ln(el) not in ("object3D", "camera", "light") and bool(_collapsed_ancestors(el))
 
@@ -802,7 +789,7 @@ def camera_hook(rc, el, M: np.ndarray, ctx: Ctx) -> np.ndarray | None:
     non-collapsed threeD ancestor and for collapsed threeD groups themselves."""
     if _flattening_ancestor(el, rc) or rc._flat_depth > 0:
         return M
-    if el.get("collapse") == "true" and ln(el) in ("group", "sequence") and collapse_routed(rc):
+    if parse_bool(el.get("collapse")) and ln(el) in ("group", "sequence") and collapse_routed(rc):
         return M
     if rc.cache.get("pass360") == "flat":
         return None

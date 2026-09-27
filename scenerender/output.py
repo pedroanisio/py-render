@@ -40,7 +40,8 @@ Pinned delivery rules:
   ST 2086 units): h265 also gets x265 SEI; every mp4/mov gets mdcv + clli boxes in the video
   sample entry (h264, h265, av1, vp9, prores, dnxhr); mkv/webm/mxf go through an MP4/MOV copy
   that ffmpeg's demuxer turns into stream side data, which the Matroska muxer writes as Colour
-  MasteringMetadata/MaxCLL/MaxFALL (MXF: mastering display only).
+  MasteringMetadata/MaxCLL/MaxFALL. MXF content light levels are then added directly
+  to its picture descriptors and primer packs (scenerender.mxf).
 * Spherical metadata (project mode="equirectangular", output/@sphericalMetadata true): Google
   Spherical Video V2 st3d (stereo mode from scene360/@stereo) and sv3d (svhd, proj: prhd zero
   pose + equi full-sphere bounds, cbmp layout 0, or for eac / fisheye-180 a mshp mesh projection
@@ -73,7 +74,7 @@ import numpy as np
 
 from . import color  # noqa: F401  (registers the colour-management finishing hook)
 from .registry import CODECS, FEATURES, FULL, NONE, PARTIAL, warn_once
-from .values import parse_fps
+from .values import parse_bool, parse_fps
 
 log = logging.getLogger("scenerender")
 
@@ -91,7 +92,7 @@ FEATURES.declare("output:maxFileSize", FULL, "bitrate/quality derived from the b
                  "from a lossless intermediate until it fits (5 tries); fixed-rate codecs fail when over")
 FEATURES.declare("output:hdrMetadata", FULL, "maxCLL/maxFALL/masteringDisplay: x265 SEI for h265, mdcv/clli sample-entry "
                  "boxes in mp4/mov, Matroska/WebM Colour MasteringMetadata/MaxCLL/MaxFALL")
-FEATURES.declare("output:hdrMetadata:mxf", PARTIAL, "ffmpeg's MXF muxer writes the mastering display but has no MaxCLL/MaxFALL descriptor")
+FEATURES.declare("output:hdrMetadata:mxf", FULL, "mastering display via ffmpeg; MaxCLL/MaxFALL in MXF picture descriptors")
 FEATURES.declare("output:sphericalMetadata", FULL, "Spherical Video V2: st3d + sv3d (equi/cbmp) boxes in mp4/mov, "
                  "Matroska/WebM Projection + StereoMode; mono, top-bottom, left-right")
 FEATURES.declare("output:sphericalMetadata:mesh", FULL, "eac / fisheye-180: Spherical V2 mesh projection (mshp, dfl8, "
@@ -163,7 +164,8 @@ def _base_open_kwargs(args) -> dict:
     return dict(path=args.scene, scale=float(getattr(args, "scale", 1.0) or 1.0), params=_params(args),
                 variant=getattr(args, "variant", None), layout=getattr(args, "layout", None),
                 strict=bool(getattr(args, "strict", False)), representation=getattr(args, "representation", None),
-                assets_dir=getattr(args, "assets_dir", None))
+                assets_dir=getattr(args, "assets_dir", None),
+                motion_blur=False if getattr(args, "no_motion_blur", False) else None)
 
 
 def _codec_for_path(path: str) -> tuple[str, str | None, str]:
@@ -237,8 +239,8 @@ def jobs_from_args(renderer, args) -> list[Job]:
         container = o.get("container") or _EXT_CODEC.get(os.path.splitext(path)[1].lower(), (None, None))[1]
         caps = o.get("captions").split() if o.get("captions") else None
         jobs.append(Job(name=oid, path=path, codec=codec, container=container, el=o, width=W, height=H, fps=fps,
-                        t0=t0, t1=t1, open_kwargs=kw, alpha=o.get("alpha") == "true",
-                        audio=o.get("audio", "true") != "false", attrs=attrs,
+                        t0=t0, t1=t1, open_kwargs=kw, alpha=parse_bool(o.get("alpha")),
+                        audio=parse_bool(o.get("audio", "true"), True), attrs=attrs,
                         color=(o.get("colorSpace"), o.get("transfer")), burn=o.get("burnCaptions"), captions=caps))
     return jobs
 
@@ -705,7 +707,7 @@ def audio_codec_args(job: Job, bits: int, duration: float = 0.0) -> list[str]:
 
 
 def metadata_args(doc, job: Job) -> list[str]:
-    if job.a("embedMetadata", "true") == "false":
+    if not parse_bool(job.a("embedMetadata", "true"), True):
         return []
     md = doc.section("metadata")
     if md is None:
@@ -735,7 +737,7 @@ def _audio_file(r, job: Job, tmpdir: str, n_frames: int) -> tuple[str | None, in
     except ImportError:
         return None, 24
     if r.doc.section("audioMix") is None and not any(
-            (r.doc.ids.get(l.get("asset")) is not None and r.doc.ids.get(l.get("asset")).get("hasAudio") == "true")
+            (r.doc.ids.get(l.get("asset")) is not None and parse_bool(r.doc.ids.get(l.get("asset")).get("hasAudio")))
             for l in r.doc.root.iter("layer")):
         return None, 24
     m = mixer_for(r)
@@ -744,7 +746,7 @@ def _audio_file(r, job: Job, tmpdir: str, n_frames: int) -> tuple[str | None, in
     t1 = job.t0 + n_frames / float(job.fps) if job.codec != "audio-only" else job.t1
     t0p = time.perf_counter()
     pcm = m.render(job.t0, t1)
-    dither = (m.master_el.get("dither", "true") != "false") if m.master_el is not None else True
+    dither = (parse_bool(m.master_el.get("dither", "true"), True)) if m.master_el is not None else True
     path = os.path.join(tmpdir, "mix.wav")
     lay = getattr(m, "layout", None)
     if lay is not None:
@@ -990,7 +992,7 @@ def _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, pr
     movflags = []
     if mov:
         flags = []
-        if job.a("faststart", "true") != "false":
+        if parse_bool(job.a("faststart", "true"), True):
             flags.append("+faststart")
         md = r.doc.section("metadata")
         if md is not None and any(isinstance(m.tag, str) and m.tag == "meta" for m in md):
@@ -999,8 +1001,8 @@ def _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, pr
             movflags = ["-movflags", "".join(flags)]
     meta = metadata_args(r.doc, job)
     tail = ["-shortest"] if audio_path and job.codec in ("apng", "webp") else []
-    two_pass = job.a("twoPass", "false") in ("true", True) and bitrate_mode and job.codec in _RATE_CODECS
-    if job.a("twoPass", "false") in ("true", True) and not two_pass:
+    two_pass = parse_bool(job.a("twoPass")) and bitrate_mode and job.codec in _RATE_CODECS
+    if parse_bool(job.a("twoPass")) and not two_pass:
         warn_once("output", f"twoPass-{job.name}", "twoPass needs a bitrate (bitrate/maxFileSize); encoded in one pass")
     cap = int(job.a("maxFileSize") or 0)
     fit = bool(cap) and (job.codec in _RATE_CODECS or job.codec == "webp")
@@ -1057,7 +1059,7 @@ def _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, pr
 # ====================================================================== spherical / HDR container metadata
 def spherical_params(doc, job: Job) -> dict | None:
     """(projection, stereo, eye size) for equirectangular projects unless output/@sphericalMetadata="false"."""
-    if doc.project.get("mode") != "equirectangular" or str(job.a("sphericalMetadata", "true")) == "false":
+    if doc.project.get("mode") != "equirectangular" or not parse_bool(job.a("sphericalMetadata", "true"), True):
         return None
     s360 = doc.section("scene360")
     layout = s360.get("layout", "equirectangular") if s360 is not None else "equirectangular"
@@ -1103,6 +1105,9 @@ def post_metadata(r, job: Job, tmp: str) -> None:
     _run_ffmpeg([ff, "-y", "-v", "error", "-nostdin", "-i", v, "-i", job.path, "-map", "0:v:0", "-map", "1", "-map", "-1:v",
                  "-c", "copy", "-map_metadata", "1", *rate, "-f", _FORMATS[cont], out])
     shutil.move(out, job.path)
+    if cont == "mxf":
+        from .mxf import inject_content_light
+        inject_content_light(job.path, job.a("maxCLL"), job.a("maxFALL"))
     if mesh and cont in ("mkv", "webm"):
         from .spherical_mesh import layout_mshp
         inject_matroska_projection(job.path, 3, layout_mshp(sph["projection"], *sph["eye"]))

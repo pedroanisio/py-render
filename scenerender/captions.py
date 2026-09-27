@@ -179,7 +179,7 @@ from .document import ln
 from .raster import Buf
 from .registry import CAPTION_PRESETS, FEATURES, FULL, warn_once
 from .render import hook_installer
-from .values import parse_length
+from .values import parse_bool, parse_length
 
 log = logging.getLogger("scenerender")
 
@@ -1692,7 +1692,7 @@ def track_cues(doc, track) -> list[Cue]:
         if ln(c) != "cue":
             continue
         s, e = float(c.get("start")), float(c.get("end"))
-        words = [Word(float(w.get("start")), float(w.get("end")), w.get("text"), w.get("emphasis") == "true")
+        words = [Word(float(w.get("start")), float(w.get("end")), w.get("text"), parse_bool(w.get("emphasis")))
                  for w in c if ln(w) == "word"]
         text = c.get("text")
         if text is None:
@@ -1714,7 +1714,7 @@ def track_cues(doc, track) -> list[Cue]:
     elif track.get("transcribe") and not cues:
         warn_once("captions", track.get("id"), "transcription requested without @cache; no captions")
     cues.sort(key=lambda c: (c.start, c.order))
-    lists = _profanity_list() if track.get("profanityFilter") == "true" else None
+    lists = _profanity_list() if parse_bool(track.get("profanityFilter")) else None
     for c in cues:
         if not c.words and c.rich is None:
             c.words = _synth_words(c.text, c.start, c.end)

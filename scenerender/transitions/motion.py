@@ -74,7 +74,7 @@ def whip_pan(rc, tr, a, b, p, ctx):
     dq = 0.5 * k * (1 - math.tanh(k * (p - 0.5)) ** 2) / math.tanh(k / 2)
     dq0 = 0.5 * k * (1 - math.tanh(k / 2) ** 2) / math.tanh(k / 2)      # speed at the ends
     bl = E * 0.12 * max(0.0, dq - dq0)
-    if rc.ev.str(tr, "motionBlur", ctx, "true") == "false":
+    if not rc.ev.bool(tr, "motionBlur", ctx, True):
         bl *= 0.25
     A2 = moved(A, d[0] * E * q, d[1] * E * q, bl, d)
     B2 = moved(B, d[0] * E * (q - 1), d[1] * E * (q - 1), bl, d)

@@ -81,6 +81,7 @@ import numpy as np
 
 from .registry import FEATURES, FULL, PARTIAL, warn_once
 from .render import hook_installer
+from .values import parse_bool
 
 log = logging.getLogger("scenerender")
 
@@ -397,7 +398,7 @@ def working_space_name(doc) -> str:
 
 def working_primaries_for(doc) -> str:
     """Primaries the compositor should work in for this document (the core stores it in rc.working_primaries)."""
-    if doc.project.get("linearLight", "true") == "false":
+    if not parse_bool(doc.project.get("linearLight", "true"), True):
         return "srgb"
     p = primaries_of(working_space_name(doc))
     return p if p not in (None, "xyz") else "srgb"

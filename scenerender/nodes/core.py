@@ -14,7 +14,7 @@ from ..document import ln
 from ..evaluator import Ctx
 from ..raster import Buf
 from ..registry import ASSETS, FEATURES, FULL, NODES, PARTIAL, SHAPE_MODIFIERS, warn_once
-from ..values import parse_bool, parse_float
+from ..values import parse_bool, parse_float, parse_fps
 
 NODES.declare("adjustment", FULL)
 NODES.declare("transition", FULL)
@@ -26,9 +26,10 @@ FEATURES.declare("trimPath", FULL)
 
 # ================================================================ group / sequence
 def is_isolated(rc: RenderContext, el, ctx: Ctx) -> bool:
-    return (el.get("isolate") == "true" or bool(el.get("effects")) or el.get("blend", "normal") != "normal"
-            or el.get("matte") is not None or any(ln(c) == "mask" for c in el)
-            or el.get("clip") == "true" or el.get("threeD") == "true"
+    ev = rc.ev
+    return (ev.bool(el, "isolate", ctx) or bool(ev.str(el, "effects", ctx)) or ev.str(el, "blend", ctx, "normal") != "normal"
+            or ev.str(el, "matte", ctx) is not None or any(ln(c) == "mask" for c in el)
+            or ev.bool(el, "clip", ctx) or ev.bool(el, "threeD", ctx)
             or rc.ev.num(el, "opacity", ctx, 1.0) < 1.0)
 
 
@@ -37,7 +38,7 @@ def child_ctx(rc: RenderContext, el, ctx: Ctx) -> Ctx:
     off = rc.ev.num(el, "timeOffset", ctx, 0.0)
     if ts == 1.0 and off == 0.0:
         return ctx
-    s = rc.doc.window(el)[0]
+    s = rc.node_ctx(el, ctx).node_start
     return replace(ctx, t=s + (ctx.t - s - off) * ts)
 
 
@@ -50,6 +51,7 @@ def _repeat_vars(el, ctx: Ctx) -> Ctx:
     item = el.get("{urn:scenerender}item")
     if item is not None:
         kw["item"] = json.loads(item)
+        kw["param:" + kw["var"]] = kw["item"]
     return ctx.with_vars(**kw)
 
 
@@ -58,7 +60,7 @@ def render_group(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     cctx = _repeat_vars(el, child_ctx(rc, el, ctx))
     dst = Buf.null()
     dst = rc.render_children(el, dst, cctx, M, size, 1.0)
-    if el.get("clip") == "true":
+    if rc.ev.bool(el, "clip", ctx):
         c = rc.canvas_for(M, size[0], size[1], 0)
         if c is None:
             return None
@@ -78,12 +80,12 @@ _SHAPE_ATTRS = ("radius", "cornerRadii", "points", "innerRadius", "outerRadius",
 
 def shape_paths(rc: RenderContext, el, ctx: Ctx, w: float, h: float) -> list[list]:
     a = rc.eval_attrs(el, ctx, _SHAPE_ATTRS)
-    cmds = geometry.shape_commands(el.get("shape", "rect"), w, h, a)
+    cmds = geometry.shape_commands(rc.ev.str(el, "shape", ctx, "rect"), w, h, a)
     paths = [cmds]
     for m in el:
         if ln(m) != "shapeModifier":
             continue
-        fn = SHAPE_MODIFIERS.get(m.get("type"))
+        fn = SHAPE_MODIFIERS.get(rc.ev.str(m, "type", ctx))
         if fn is None:
             warn_once("shapeModifier", m.get("type"))
             continue
@@ -93,7 +95,7 @@ def shape_paths(rc: RenderContext, el, ctx: Ctx, w: float, h: float) -> list[lis
     ts, te = ev.num(el, "trimStart", ctx, 0.0), ev.num(el, "trimEnd", ctx, 1.0)
     to = ev.num(el, "trimOffset", ctx, 0.0)
     if ts > 0 or te < 1 or to:
-        mode = el.get("trimMode", "simultaneous")
+        mode = ev.str(el, "trimMode", ctx, "simultaneous")
         if mode == "sequential" and len(paths) > 1:
             joined = [c for p in paths for c in p]
             paths = [geometry.trim(joined, ts, te, to, mode)]
@@ -105,8 +107,8 @@ def shape_paths(rc: RenderContext, el, ctx: Ctx, w: float, h: float) -> list[lis
 def stroke_setup(rc: RenderContext, cr: cairo.Context, el, ctx: Ctx, width: float) -> None:
     ev = rc.ev
     cr.set_line_width(width)
-    cr.set_line_cap({"round": cairo.LINE_CAP_ROUND, "square": cairo.LINE_CAP_SQUARE}.get(el.get("strokeCap"), cairo.LINE_CAP_BUTT))
-    cr.set_line_join({"round": cairo.LINE_JOIN_ROUND, "bevel": cairo.LINE_JOIN_BEVEL}.get(el.get("strokeJoin"), cairo.LINE_JOIN_MITER))
+    cr.set_line_cap({"round": cairo.LINE_CAP_ROUND, "square": cairo.LINE_CAP_SQUARE}.get(ev.str(el, "strokeCap", ctx), cairo.LINE_CAP_BUTT))
+    cr.set_line_join({"round": cairo.LINE_JOIN_ROUND, "bevel": cairo.LINE_JOIN_BEVEL}.get(ev.str(el, "strokeJoin", ctx), cairo.LINE_JOIN_MITER))
     cr.set_miter_limit(ev.num(el, "miterLimit", ctx, 4.0))
     dash = ev.get(el, "dash", ctx, None)
     if dash:
@@ -130,9 +132,9 @@ def draw_paths(rc: RenderContext, cr: cairo.Context, el, ctx: Ctx, paths, w, h, 
     fill = ev.str(el, fill_attr, ctx)
     stroke = ev.str(el, stroke_attr, ctx)
     sw = ev.num(el, "strokeWidth", ctx, 0.0)
-    rule = cairo.FILL_RULE_EVEN_ODD if el.get("fillRule", default_rule) == "evenodd" else cairo.FILL_RULE_WINDING
-    pos = el.get("strokePosition", "center")
-    order = ("stroke", "fill") if el.get("paintOrder") == "stroke-fill" else ("fill", "stroke")
+    rule = cairo.FILL_RULE_EVEN_ODD if ev.str(el, "fillRule", ctx, default_rule) == "evenodd" else cairo.FILL_RULE_WINDING
+    pos = ev.str(el, "strokePosition", ctx, "center")
+    order = ("stroke", "fill") if ev.str(el, "paintOrder", ctx) == "stroke-fill" else ("fill", "stroke")
 
     def outline():
         cr.new_path()
@@ -178,7 +180,7 @@ def render_shape(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     if not any(paths):
         return None
     x0, y0, x1, y1 = geometry.bounds([c for p in paths for c in p]) if any(paths) else (0, 0, w, h)
-    sw = rc.ev.num(el, "strokeWidth", ctx, 0.0) * (2 if el.get("strokePosition") == "outside" else 1)
+    sw = rc.ev.num(el, "strokeWidth", ctx, 0.0) * (2 if rc.ev.str(el, "strokePosition", ctx) == "outside" else 1)
     pad = sw * max(2.0, rc.ev.num(el, "miterLimit", ctx, 4.0) / 2) + 2
     from ..raster import Canvas, intersect, transformed_rect
     r = transformed_rect(M, min(0, x0) - pad, min(0, y0) - pad, max(w, x1) + pad, max(h, y1) + pad, 1)
@@ -196,18 +198,18 @@ def render_shape(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
 def media_time(rc: RenderContext, el, ctx: Ctx, source_duration: float | None) -> float:
     """Layer-local time -> source time: timeRemap, else clipIn + speed/timeStretch, freezeAt, loop, reverse."""
     ev = rc.ev
-    lt = ctx.t - rc.doc.window(el)[0]
+    lt = ctx.t - rc.node_ctx(el, ctx).node_start
     tr = next((c for c in el if ln(c) == "timeRemap"), None)
     if tr is not None:
         keys = rc.ev.keys(el, tr, "timeRemap")
         from .. import anim
         v = anim.sample(keys, lt, tr.get("defaultInterpolation", "linear"))
         return float(v) if isinstance(v, float) else lt
-    if el.get("freezeAt") is not None:
+    if ev.get(el, "freezeAt", ctx) is not None:
         lt = ev.num(el, "freezeAt", ctx, 0.0)
     speed = ev.num(el, "speed", ctx, 1.0) / max(1e-9, ev.num(el, "timeStretch", ctx, 1.0))
     clip_in = ev.num(el, "clipIn", ctx, 0.0)
-    clip_out = ev.num(el, "clipOut", ctx, source_duration if source_duration else 0.0) if (el.get("clipOut") or source_duration) else None
+    clip_out = ev.num(el, "clipOut", ctx, source_duration or 0.0) if (ev.get(el, "clipOut", ctx) is not None or source_duration) else None
     span = (clip_out - clip_in) if clip_out is not None else None
     u = lt * speed
     loops = int(ev.num(el, "loop", ctx, 0.0))
@@ -216,7 +218,7 @@ def media_time(rc: RenderContext, el, ctx: Ctx, source_duration: float | None) -
             u = u % span
         else:
             u = min(u, span)
-        if el.get("reverse") == "true":
+        if ev.bool(el, "reverse", ctx):
             u = span - u
     return clip_in + u
 
@@ -246,15 +248,15 @@ def render_layer(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
         return None
     aw, ah = rc.asset_size(asset, ctx)
     ev = rc.ev
-    has_box = bool(el.get("boxWidth") or el.get("width"))
-    mode = el.get("fit", "none")
+    has_box = ev.get(el, "boxWidth", ctx) is not None or ev.get(el, "boxHeight", ctx) is not None
+    mode = ev.str(el, "fit", ctx, "none")
     box = size if has_box or mode != "none" else None
     if box is None and mode != "none":
         box = (rc.doc.width, rc.doc.height)
     F = fit_matrix(rc, el, ctx, aw, ah, box, mode)
-    if el.get("flipX") == "true" or el.get("flipY") == "true":
-        F = F @ translate(aw if el.get("flipX") == "true" else 0, ah if el.get("flipY") == "true" else 0) @ \
-            scale(-1 if el.get("flipX") == "true" else 1, -1 if el.get("flipY") == "true" else 1)
+    flip_x, flip_y = ev.bool(el, "flipX", ctx), ev.bool(el, "flipY", ctx)
+    if flip_x or flip_y:
+        F = F @ translate(aw if flip_x else 0, ah if flip_y else 0) @ scale(-1 if flip_x else 1, -1 if flip_y else 1)
     cl, ct = ev.num(el, "cropLeft", ctx, 0.0), ev.num(el, "cropTop", ctx, 0.0)
     cr_, cb = ev.num(el, "cropRight", ctx, 0.0), ev.num(el, "cropBottom", ctx, 0.0)
     clip = (cl * aw, ct * ah, aw * (1 - cr_), ah * (1 - cb)) if (cl or ct or cr_ or cb) else None
@@ -263,6 +265,9 @@ def render_layer(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     else:
         box_clip = None
     src_dur = float(asset.get("duration")) if asset.get("duration") else None
+    if kind == "imageSequence":
+        count = (int(ev.num(asset, "last", ctx)) - int(ev.num(asset, "first", ctx))) // max(1, int(ev.num(asset, "step", ctx, 1))) + 1
+        src_dur = count / float(parse_fps(ev.str(asset, "fps", ctx)))
     if src_dur is None and kind == "lottie":
         from ..assets.lottie import segment_duration
         src_dur = segment_duration(rc, asset, ctx)
@@ -296,37 +301,12 @@ def render_layer(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
 
 # ================================================================ instance
 def instance_time(rc: RenderContext, el, ctx: Ctx, sym) -> float | None:
-    ev = rc.ev
-    s = rc.doc.window(el)[0]
-    tr = next((c for c in el if ln(c) == "timeRemap"), None)
-    dur = parse_float(sym.get("duration"), 0.0) if sym.get("duration") else None
-    if tr is not None:
-        from .. import anim
-        v = anim.sample(ev.keys(el, tr, "timeRemap"), ctx.t - s, tr.get("defaultInterpolation", "linear"))
-        return float(v)
-    lt = (ctx.t - s) * ev.num(el, "speed", ctx, 1.0) + ev.num(el, "clipIn", ctx, 0.0)
-    clip_out = ev.num(el, "clipOut", ctx, dur or 0.0) if (el.get("clipOut") or dur) else None
-    loops = int(ev.num(el, "loop", ctx, 0.0))
-    if clip_out:
-        clip_in = ev.num(el, "clipIn", ctx, 0.0)
-        span = clip_out - clip_in
-        if span > 0:
-            u = lt - clip_in
-            if loops != 0 and (loops < 0 or u < span * (loops + 1)):
-                u %= span
-            elif u > span + 1e-9 and el.get("end") is None:
-                return None
-            else:
-                u = min(u, span)
-            if el.get("reverse") == "true":
-                u = span - u
-            lt = clip_in + u
-    return lt
+    return rc.ev.instance_time(el, ctx, sym)
 
 
 @NODES.register("instance", level=FULL)
 def render_instance(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
-    sym = rc.doc.ids.get(el.get("symbol"))
+    sym = rc.doc.ids.get(rc.ev.str(el, "symbol", ctx))
     if sym is None:
         warn_once("instance", el.get("id"), "symbol not found")
         return None
@@ -334,15 +314,15 @@ def render_instance(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     if lt is None:
         return None
     overrides = {(o.get("target"), o.get("property")): o.get("value") for o in el if ln(o) == "override"}
-    sctx = replace(ctx, t=lt, scope=ctx.scope.push(el.get("id", ""), overrides) if overrides else ctx.scope)
+    sctx = replace(ctx, t=lt, scope=ctx.scope.push(el.get("id", ""), overrides), clock_node=None)
     sw = float(sym.get("width")) if sym.get("width") else float(rc.doc.width)
     sh = float(sym.get("height")) if sym.get("height") else float(rc.doc.height)
-    mode = el.get("fit", "none")
+    mode = rc.ev.str(el, "fit", ctx, "none")
     SM = M
-    if el.get("boxWidth") and mode != "none":
+    if mode != "none":
         SM = M @ fit_matrix(rc, el, ctx, sw, sh, size, mode)
     dst = Buf.null()
-    bg = sym.get("background")
+    bg = rc.ev.str(sym, "background", sctx)
     if bg and paint.paint_ref(bg) is None and paint.parse_color(bg, rc.doc.tokens)[3] > 0 or (bg and paint.paint_ref(bg)):
         c = rc.canvas_for(SM, sw, sh, 1)
         if c is not None:

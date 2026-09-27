@@ -27,4 +27,4 @@ build-backend = "setuptools.build_meta"
 include = ["scenerender*"]
 
 [tool.setuptools.package-data]
-scenerender = ["schema/*.xsd"]
+scenerender = ["schema/*.xsd", "schema/*.sch"]

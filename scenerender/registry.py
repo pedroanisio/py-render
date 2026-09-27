@@ -4,8 +4,9 @@ Every renderable concept of the schema (node kind, asset kind, effect type,
 transition type, blend mode, shape modifier, deform modifier, audio effect,
 caption preset, output codec, ...) is registered here with a support level.
 Anything a document uses that has no handler is reported once and skipped,
-so any valid document renders, and `scenerender coverage` can say exactly
-what was approximated or ignored.
+and `scenerender coverage` reports the declared support level of the concepts
+it recognizes. This is not a conformance proof for every attribute combination
+or for features inside external asset files.
 
 Handler signatures (see compositor.RenderContext for `rc`):
   asset(rc, asset_el, M, ctx, *, layer=None, src_t=0.0, clip=None) -> Buf | None

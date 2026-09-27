@@ -59,3 +59,23 @@ def test_film_strip_shutter_blurs_motion(rig):
     blurred=run(rig,'film-roll',.5,t=2,motionBlur='true').px
     assert not np.allclose(sharp,blurred)
     assert np.any((blurred[...,3]>0)&(blurred[...,3]<1))
+
+
+def test_transition_boolean_spellings_and_expression(rig):
+    from scenerender.evaluator import Evaluator
+    sharp = run(rig, 'film-roll', .5, t=2, motionBlur='false').px
+    blurred = run(rig, 'film-roll', .5, t=2, motionBlur='true').px
+    np.testing.assert_array_equal(run(rig, 'film-roll', .5, t=2, motionBlur='0').px, sharp)
+    np.testing.assert_array_equal(run(rig, 'film-roll', .5, t=2, motionBlur='1').px, blurred)
+    rc, tr, a, b = rig
+    tr.set('motionBlur', 'true')
+    expression = etree.SubElement(tr, 'expression', property='motionBlur')
+    expression.text = 'false'
+    previous = rc.ev
+    rc.ev = Evaluator(rc.doc)  # new prepared tree: discover the added animation child
+    try:
+        ctx = Ctx(t=2, comp_t=2, frame=48)
+        np.testing.assert_array_equal(TRANSITIONS.get('film-roll')(rc, tr, a, b, .5, ctx).px, sharp)
+    finally:
+        rc.ev = previous
+        tr.remove(expression)

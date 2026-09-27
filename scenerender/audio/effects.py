@@ -61,6 +61,7 @@ import numpy as np
 
 from ..registry import AUDIO_EFFECTS, FULL, warn_once
 from . import dsp, spectral
+from ..values import parse_bool
 
 GAIN_CONSUMERS = {"gain", "eq", "compressor", "limiter", "distortion"}
 
@@ -517,7 +518,7 @@ def tail_seconds(fx_el, bpm: float | None = None) -> float:
 def process_chain(effects: list, x: np.ndarray, make_ctx) -> np.ndarray:
     """Run audioEffect elements in document order."""
     for el in effects:
-        if el.get("enabled", "true") == "false":
+        if not parse_bool(el.get("enabled", "true"), True):
             continue
         typ = el.get("type")
         fn = AUDIO_EFFECTS.get(typ)

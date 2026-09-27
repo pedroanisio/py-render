@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from . import curves
-from .values import parse_color, parse_point
+from .values import parse_bool, parse_color, parse_point
 
 _NUM = re.compile(r"-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 
@@ -252,12 +252,12 @@ def _span_length(k0: Key, k1: Key) -> float:
 def apply_roving(keys: list[Key]) -> list[Key]:
     """Roving keys (AE): between two fixed keys, roving keys are retimed so the value moves at constant
     speed along the (spatial) path; the first and last keys never rove."""
-    if not any(k.el is not None and k.el.get("roving") == "true" for k in keys[1:-1]):
+    if not any(k.el is not None and parse_bool(k.el.get("roving")) for k in keys[1:-1]):
         return keys
     i = 0
     while i < len(keys) - 1:
         j = i + 1
-        while j < len(keys) - 1 and keys[j].el is not None and keys[j].el.get("roving") == "true":
+        while j < len(keys) - 1 and keys[j].el is not None and parse_bool(keys[j].el.get("roving")):
             j += 1
         if j > i + 1:
             lens = [_span_length(keys[k], keys[k + 1]) for k in range(i, j)]

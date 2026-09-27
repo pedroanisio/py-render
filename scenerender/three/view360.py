@@ -43,6 +43,7 @@ from ..evaluator import Ctx
 from ..raster import Buf
 from ..registry import FEATURES, FULL, warn_once
 from .postfx import sample_bilinear
+from ..values import parse_bool
 
 FEATURES.declare("scene360", FULL, "equirectangular / cubemap / eac / fisheye-180, mono / top-bottom / left-right "
                                     "ODS stereo, viewportCamera; 2D frame on the front face")
@@ -138,24 +139,22 @@ def participants(rc, t: float) -> list:
     comp = rc.doc.section("composition")
 
     def walk(parent, ctx, PM, box, op):
-        for ch in rc.child_order(parent):
+        for ch in rc.child_order(parent, ctx):
             tag = ln(ch)
-            if tag in ("camera", "adjustment", "transition", "skeleton") or ch in rc.matte_nodes:
+            if tag in ("camera", "adjustment", "transition", "skeleton") or ch in rc.hidden_mattes(ctx):
                 continue
-            if not rc.active(ch, replace(ctx, t=ctx.t - (rc.doc.clock_shift.get(ch) or 0.0))):
+            if not rc.active(ch, ctx):
                 continue
             if tag == "object3D":
                 out.append((ch, ctx, PM, box, op))
                 continue
             grp = tag in ("group", "sequence")
-            routed = grp and ch.get("collapse") == "true" and collapse_routed(rc)
+            routed = grp and parse_bool(ch.get("collapse")) and collapse_routed(rc)
             if is_threed(rc, ch) and not _in_flattening(ch, rc) and not routed:
                 out.append((ch, ctx, PM, box, op))
                 continue
             if grp:
-                sh = rc.doc.clock_shift.get(ch)
-                c2 = replace(ctx, t=ctx.t - sh) if sh else ctx
-                nctx = rc.node_ctx(ch, c2)
+                c2 = nctx = rc.enter_node(ch, ctx)
                 M = rc.node_matrix(ch, c2, PM, box, None)
                 size = rc.node_size(ch, nctx, box)
                 walk(ch, _repeat_vars(ch, child_ctx(rc, ch, nctx)), M, size, op * rc.ev.num(ch, "opacity", nctx, 1.0))

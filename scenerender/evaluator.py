@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from . import anim
-from .document import Document, ln
+from .document import Document, ln, _param_list
 from .values import parse_bool, parse_color, parse_length, parse_numbers, parse_point
 
 log = logging.getLogger("scenerender")
@@ -57,6 +57,7 @@ class Ctx:
     vars: tuple = ()            # (name, value) pairs: index, count, item, textIndex, ...
     node_start: float = 0.0     # window of the node being evaluated (for timeBase local/normalized)
     node_end: float | None = None
+    clock_node: Any = None      # node whose sequence offset has already been applied
 
     def at(self, t: float) -> "Ctx":
         return replace(self, t=t, comp_t=self.comp_t + (t - self.t))
@@ -79,19 +80,147 @@ class Evaluator:
     _depth: int = 0
 
     # ------------------------------------------------------------ public
+    def node_ctx(self, el, ctx: Ctx) -> Ctx:
+        s, e = self.doc.window(el)
+        if ctx.clock_node is el:
+            shift = self.doc.clock_shift.get(el, 0)
+            s, e = s - shift, e - shift if e is not None else None
+        return replace(ctx, node_start=s, node_end=e)
+
+    def enter_node(self, el, ctx: Ctx) -> Ctx:
+        if ctx.clock_node is not el:
+            ctx = replace(ctx, t=ctx.t - self.doc.clock_shift.get(el, 0), clock_node=el)
+        return self.node_ctx(el, ctx)
+
+    def instance_time(self, el, ctx: Ctx, sym) -> float | None:
+        ctx = self.node_ctx(el, ctx)
+        s = ctx.node_start
+        remap = el.find("timeRemap")
+        if remap is not None:
+            return float(anim.sample(self.keys(el, remap, "timeRemap"), ctx.t - s,
+                                     remap.get("defaultInterpolation", "linear")))
+        clip_in = self.num(el, "clipIn", ctx, 0)
+        lt = (ctx.t - s) * self.num(el, "speed", ctx, 1) + clip_in
+        duration = self.num(sym, "duration", ctx, 0)
+        clip_out = self.num(el, "clipOut", ctx, duration)
+        span = clip_out - clip_in
+        if span > 0:
+            u = lt - clip_in
+            loops = int(self.num(el, "loop", ctx, 0))
+            if loops and (loops < 0 or u < span * (loops + 1)):
+                u %= span
+            elif u > span + 1e-9 and self.get(el, "end", ctx) is None:
+                return None
+            else:
+                u = min(u, span)
+            if self.bool(el, "reverse", ctx):
+                u = span - u
+            lt = clip_in + u
+        return lt
+
+    def _within_context(self, node, boundary, ctx: Ctx) -> Ctx:
+        """Follow group/sequence clocks and repeat bindings to a referenced descendant."""
+        from .nodes.core import _repeat_vars
+        ancestors = []
+        for ancestor in node.iterancestors():
+            if ancestor is boundary:
+                break
+            ancestors.append(ancestor)
+        for ancestor in reversed(ancestors):
+            if ln(ancestor) not in ("group", "sequence"):
+                continue
+            ctx = self.enter_node(ancestor, ctx)
+            s = ctx.node_start
+            ctx = replace(ctx, t=s + (ctx.t - s - self.num(ancestor, "timeOffset", ctx, 0))
+                          * self.num(ancestor, "timeScale", ctx, 1))
+            ctx = _repeat_vars(ancestor, ctx)
+        return self.enter_node(node, ctx)
+
+    def reference(self, ref: str, origin, ctx: Ctx):
+        """Return (node, evaluation context), resolving effective instance/child IDs."""
+        if origin is not None:
+            ref = self.doc.resolve_id(origin, ref)
+        node = self.doc.ids.get(ref)
+        if node is not None:
+            symbol = next((a for a in node.iterancestors() if ln(a) == "symbol"), None)
+            if symbol is not None and ctx.scope.path:
+                instance = self.doc.ids.get(ctx.scope.path[-1])
+                if instance is not None and instance.get("symbol") == symbol.get("id"):
+                    return self.reference("/".join((*ctx.scope.path, ref)), None, ctx)
+            comp = self.doc.section("composition")
+            if comp in node.iterancestors():
+                return node, self._within_context(node, comp, Ctx(ctx.comp_t, ctx.comp_t, frame=ctx.frame))
+            return node, self.node_ctx(node, ctx)
+        # Authored IDs can contain '/' after include expansion; match the longest
+        # instance ID, then resolve the remaining path inside that instance only.
+        boundary = self.doc.section("composition")
+        current = Ctx(ctx.comp_t, ctx.comp_t, frame=ctx.frame)
+        remaining = ref
+        for _ in range(64):
+            candidates = []
+            for key, item in self.doc.ids.items():
+                if ln(item) != "instance":
+                    continue
+                if boundary is not None and boundary not in item.iterancestors():
+                    continue
+                short = key
+                if boundary is not None:
+                    # Resolve local instance names in imported symbols.
+                    aliases = [part for part in remaining.split("/") if self.doc.resolve_id(item, part) == key]
+                    if aliases:
+                        short = aliases[0]
+                if remaining.startswith(key + "/"):
+                    candidates.append((len(key), item, remaining[len(key)+1:]))
+                elif remaining.startswith(short + "/"):
+                    candidates.append((len(short), item, remaining[len(short)+1:]))
+            if not candidates:
+                break
+            _, instance, remaining = max(candidates, key=lambda c: c[0])
+            current = self._within_context(instance, boundary, current)
+            sym = self.doc.ids.get(self.str(instance, "symbol", current))
+            if sym is None:
+                break
+            lt = self.instance_time(instance, current, sym)
+            if lt is None:
+                lt = self.num(instance, "clipOut", current, self.num(sym, "duration", current, 0))
+            overrides = {(o.get("target"), o.get("property")): o.get("value") for o in instance if ln(o) == "override"}
+            current = replace(current, t=lt, scope=current.scope.push(instance.get("id"), overrides), clock_node=None)
+            boundary = sym
+            name = self.doc.resolve_id(sym, remaining)
+            node = self.doc.ids.get(name)
+            if node is not None and sym in node.iterancestors():
+                return node, self._within_context(node, sym, current)
+        return None, ctx
+
     def get(self, el, prop: str, ctx: Ctx, default: Any = None) -> Any:
         base = self.base(el, prop, ctx, default)
         anims = self._anims(el, prop)
         if not anims:
-            return base
+            return self._resolve_value(el, prop, base)
         if self._depth > 64:
             log.warning("property recursion limit reached at %s.%s", el.get("id"), prop)
             return base
         self._depth += 1
         try:
-            return self._animate(el, prop, ctx, base, anims)
+            return self._resolve_value(el, prop, self._animate(el, prop, ctx, base, anims))
         finally:
             self._depth -= 1
+
+    def _resolve_value(self, el, prop, value):
+        if not isinstance(value, str):
+            return value
+        info = self.doc.type_info(el)
+        attr = info.attrs.get(prop) if info else None
+        if attr is not None and attr.type == "xs:IDREF":
+            return self.doc.resolve_id(el, value.strip())
+        if attr is not None and attr.type == "xs:IDREFS":
+            return " ".join(self.doc.resolve_id(el, ref) for ref in value.split())
+        if "var(--" in value:
+            value = re.sub(r"var\(--([^)]*)\)",
+                lambda m: "var(--" + self.doc.resolve_id(el, "var:" + m[1])[4:] + ")", value)
+        if "url(#" in value:
+            value = re.sub(r"url\(#([^)]*)\)", lambda m: "url(#" + self.doc.resolve_id(el, m[1]) + ")", value)
+        return value
 
     def num(self, el, prop: str, ctx: Ctx, default: float = 0.0) -> float:
         v = self.get(el, prop, ctx, default)
@@ -168,11 +297,12 @@ class Evaluator:
         return raw
 
     def condition(self, el, ctx: Ctx) -> bool:
-        src = el.get("condition")
+        from . import expr
+        src = self.base(el, "condition", ctx)
         if not src:
             return True
         try:
-            return bool(self.run_expression(src, el, "condition", ctx, None))
+            return expr.truthy(_jsval(self.run_expression(src, el, "condition", ctx, None)))
         except Exception as e:  # noqa: BLE001 — a broken condition hides the node, loudly
             log.warning("condition on %s failed: %s", el.get("id"), e)
             return False
@@ -203,7 +333,7 @@ class Evaluator:
                     v = _component(v, comp)
                 if v is None:
                     continue
-                if a.get("additive") == "true" and isinstance(value, (float, tuple)):
+                if parse_bool(a.get("additive")) and isinstance(value, (float, tuple)):
                     v = anim._add(value, v)
                 value = v
             elif tag == "link":
@@ -214,7 +344,7 @@ class Evaluator:
                 pt = self._motion_path(el, a, ctx)
                 if pt is not None:
                     value = pt[0] if prop == "x" else pt[1] if prop == "y" else value
-            elif tag == "expression" and a.get("enabled", "true") != "false":
+            elif tag == "expression" and parse_bool(a.get("enabled", "true"), True):
                 try:
                     v = self.run_expression(a.text or "", el, prop, ctx, value, seed=a.get("seed"))
                 except Exception as e:  # noqa: BLE001
@@ -266,7 +396,7 @@ class Evaluator:
         vals = []
         for i in range(n):
             dt = delay + (smoothing * i / (n - 1) if n > 1 else 0.0)
-            v = self._link_source(src, ctx.at(ctx.t - dt))
+            v = self._link_source(src, ctx.at(ctx.t - dt), el)
             if v is None:
                 return None
             vals.append(v)
@@ -278,30 +408,41 @@ class Evaluator:
             v = min(float(a.get("max")), v)
         return v
 
-    def _link_source(self, src: str, ctx: Ctx) -> float | None:
+    def _link_source(self, src: str, ctx: Ctx, origin=None) -> float | None:
         if src.startswith("param:"):
-            return _to_float(self.doc.params.get(src[6:]))
+            return _to_float(self.parameter(src[6:], origin, ctx))
         if src.startswith("marker:"):
             # Seconds since the marker (negative before it); the schema leaves the value open.
-            m = self.doc.markers.get(src[7:])
+            mid = self.doc.resolve_id(origin, src[7:]) if origin is not None else src[7:]
+            m = self.doc.markers.get(mid)
             return None if m is None else ctx.comp_t - m
         if src.startswith("audio:"):
             parts = src.split(":")
             if self.audio_amplitude is None:
                 return 0.0
-            return float(self.audio_amplitude(parts[1], parts[2] if len(parts) > 2 else None, ctx.comp_t))
-        node_id, _, p = src.partition(".")
-        node = self.doc.ids.get(node_id)
+            aid = self.doc.resolve_id(origin, parts[1]) if origin is not None else parts[1]
+            return float(self.audio_amplitude(aid, parts[2] if len(parts) > 2 else None, ctx.comp_t))
+        node_id, _, p = src.rpartition(".")
+        node, source_ctx = self.reference(node_id, origin, ctx)
         if node is None:
             log.warning("link source %r not found", src)
             return None
-        return _to_float(self.get(node, p, ctx))
+        return _to_float(self.get(node, p, source_ctx))
+
+    def parameter(self, name: str, origin, ctx: Ctx):
+        missing = object()
+        item = ctx.var("param:" + name, missing)
+        if item is not missing:
+            return item
+        if origin is not None:
+            name = self.doc.resolve_id(origin, name)
+        return _typed_param(self.doc, name)
 
     def _motion_path(self, el, mp, ctx: Ctx):
         from .geometry import PathSampler
         sampler = self._keys.get(("mp", mp))
         if sampler is None:
-            sampler = PathSampler(mp.get("path"), constant_speed=mp.get("constantSpeed", "true") != "false")
+            sampler = PathSampler(mp.get("path"), constant_speed=parse_bool(mp.get("constantSpeed", "true"), True))
             self._keys[("mp", mp)] = sampler
         prog_anim = [c for c in mp if ln(c) == "animate" and c.get("property") == "progress"]
         if prog_anim:
@@ -317,7 +458,7 @@ class Evaluator:
 
     def motion_path_angle(self, el, ctx: Ctx) -> float | None:
         for mp in el:
-            if ln(mp) == "motionPath" and mp.get("autoOrient") == "true":
+            if ln(mp) == "motionPath" and parse_bool(mp.get("autoOrient")):
                 from .geometry import PathSampler
                 sampler = self._keys.get(("mp", mp)) or PathSampler(mp.get("path"))
                 self._keys[("mp", mp)] = sampler
@@ -341,11 +482,11 @@ class Evaluator:
         doc = self.doc
 
         def prop_fn(ref: str):
-            node_id, _, p = ref.partition(".")
-            node = doc.ids.get(node_id)
+            node_id, _, p = ref.rpartition(".")
+            node, source_ctx = self.reference(node_id, el, ctx)
             if node is None:
                 raise expr.ExprError(f"prop(): no node {node_id!r}")
-            return _jsval(self.get(node, p, ctx))
+            return _jsval(self.get(node, p, source_ctx))
 
         def value_at(t: float):
             return _jsval(self._pre_expression(el, prop, ctx.at(float(t))))
@@ -371,16 +512,16 @@ class Evaluator:
             "time": ctx.t, "frame": ctx.frame, "value": _jsval(value),
             "index": ctx.var("index", 0), "count": ctx.var("count", 1), "seed": s,
             "textIndex": ctx.var("textIndex", 0), "textTotal": ctx.var("textTotal", 1),
-            "param": lambda name: _typed_param(doc, name), "prop": prop_fn, "valueAtTime": value_at,
+            "param": lambda name: self.parameter(name, el, ctx), "prop": prop_fn, "valueAtTime": value_at,
             "loopOut": lambda kind="cycle", n=0: loop(kind, int(n), after=True),
             "loopIn": lambda kind="cycle", n=0: loop(kind, int(n), after=False),
-            "markerTime": lambda mid: doc.markers.get(mid, float("nan")), "beat": beat,
-            "audioAmplitude": lambda track, band=None: float(self.audio_amplitude(track, band, ctx.comp_t))
+            "markerTime": lambda mid: doc.markers.get(doc.resolve_id(el, mid), float("nan")), "beat": beat,
+            "audioAmplitude": lambda track, band=None: float(self.audio_amplitude(doc.resolve_id(el, track), band, ctx.comp_t))
             if self.audio_amplitude else 0.0,
         })
-        var = ctx.var("var")
-        if var and ctx.var("item") is not None:
-            env[var] = ctx.var("item")
+        for name, item in ctx.vars:
+            if name.startswith("param:"):
+                env[name[6:]] = item
         return _pyval(fn(env))
 
     def _pre_expression(self, el, prop: str, ctx: Ctx):
@@ -435,9 +576,9 @@ def _typed_param(doc: Document, name: str):
     if t in ("number", "time"):
         return _to_float(v)
     if t == "boolean":
-        return v == "true"
+        return parse_bool(v)
     if t == "list":
-        return [x.strip() for x in v.split(",")]
+        return _param_list(v)
     return v
 
 

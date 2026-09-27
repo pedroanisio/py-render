@@ -14,7 +14,7 @@ def _mask_attrs(rc, m, ctx, size):
     w = ev.length(m, "width", ctx, size[0], size[0])
     h = ev.length(m, "height", ctx, size[1], size[1])
     a = rc.eval_attrs(m, ctx, ("radius", "points", "innerRadius", "path"))
-    kind = m.get("type", "rect")
+    kind = ev.str(m, "type", ctx, "rect")
     if kind == "rect" and a.get("radius"):
         kind = "rounded-rect"
     return kind, w, h, a
@@ -26,7 +26,7 @@ def mask_coverage(rc, masks, rect, ctx, M, size) -> np.ndarray:
     h, w = rect[3] - rect[1], rect[2] - rect[0]
     total = None
     for m in masks:
-        mode = m.get("mode", "intersect")
+        mode = ev.str(m, "mode", ctx, "intersect")
         if mode == "none":
             continue
         kind, mw, mh, a = _mask_attrs(rc, m, ctx, size)
@@ -36,7 +36,7 @@ def mask_coverage(rc, masks, rect, ctx, M, size) -> np.ndarray:
         c.set_matrix(M)
         cr = c.cr
         cr.translate(mx, my)
-        cr.set_fill_rule(cairo.FILL_RULE_EVEN_ODD if m.get("fillRule") == "evenodd" else cairo.FILL_RULE_WINDING)
+        cr.set_fill_rule(cairo.FILL_RULE_EVEN_ODD if ev.str(m, "fillRule", ctx) == "evenodd" else cairo.FILL_RULE_WINDING)
         cr.set_source_rgba(1, 1, 1, 1)
         geometry.emit(cr, cmds)
         exp = ev.num(m, "expansion", ctx, 0.0)
@@ -58,7 +58,7 @@ def mask_coverage(rc, masks, rect, ctx, M, size) -> np.ndarray:
         if feather > 0:
             from .effects import gaussian
             cov = gaussian(cov[..., None], feather / 2)[..., 0]
-        if m.get("invert") == "true":
+        if ev.bool(m, "invert", ctx):
             cov = 1 - cov
         cov = cov * ev.num(m, "opacity", ctx, 1.0)
         if total is None:
@@ -92,9 +92,9 @@ def _luma(px):
 
 
 def matte_coverage(rc, el, rect, ctx) -> np.ndarray:
-    node = rc.doc.ids.get(el.get("matte"))
+    node = rc.doc.ids.get(rc.ev.str(el, "matte", ctx))
     h, w = rect[3] - rect[1], rect[2] - rect[0]
-    mode = el.get("matteMode", "alpha")
+    mode = rc.ev.str(el, "matteMode", ctx, "alpha")
     inverted = mode.endswith("inverted")
     if node is None:
         return np.ones((h, w), np.float32)

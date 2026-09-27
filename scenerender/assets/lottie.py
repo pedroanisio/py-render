@@ -48,10 +48,12 @@ Text layers
     frame into per-character transforms / colours (lottie-web's TextSelectorProp: units r, basedOn b
     1-4, shapes sh 1-6, s / e / o / a, ease ne / xe, smoothness sm; randomize rn uses a seeded
     permutation, rlottie/lottie-web use an unseeded one); animated properties p, a, s, r, sk, sa, o,
-    fc, sc, sw, fh, fs, fb, t, grouping m.g 1-4 and m.a. Text on a path (t.p with a mask) and
-    expression selectors are not supported by any renderer path here and warn once (the text is
-    drawn straight). Glyph "chars" embedded in the JSON are ignored; Pango shapes the text with the
-    named font.
+    fc, sc, sw, fh, fs, fb, t, grouping m.g 1-4 and m.a. Text paths sample animated mask
+    curves by arc length, including margins, reverse, perpendicular and forced alignment.
+    Expression selectors use the scene expression language with textIndex (1-based), textTotal,
+    selectorValue (100), time, value and deterministic math/random built-ins; scalar or vector
+    results are percentages. Unsupported expression syntax is reported explicitly.
+    Glyph "chars" embedded in the JSON are ignored; Pango shapes text with the named font.
 
 Everything else in the animation (shapes, precomps, mattes, masks, time remap, images, effects that
 rlottie supports) is rlottie's rendering; expressions are not evaluated (no Lottie player without a JS
@@ -74,6 +76,7 @@ import cairo
 import numpy as np
 
 from ..registry import ASSET_SIZES, ASSETS, FULL, NONE, warn_once
+from ..expr import ExprError
 from ..values import parse_color
 from . import array_to_surface
 
@@ -185,6 +188,15 @@ def _is_keyed(prop) -> bool:
     return isinstance(k, list) and bool(k) and isinstance(k[0], dict) and "t" in k[0]
 
 
+def _interpolate_value(a, b, u):
+    if isinstance(a, dict):
+        return {k: _interpolate_value(v, b.get(k, v), u) if k in ("v", "i", "o") else v
+                for k, v in a.items()}
+    if isinstance(a, list):
+        return [_interpolate_value(x, y, u) for x, y in zip(a, b)] if len(a) == len(b) else a
+    return a + (b - a) * u
+
+
 def lottie_value(prop, t: float):
     """Value of a Lottie property at frame t (numbers as lists; text documents as dicts)."""
     if not isinstance(prop, dict):
@@ -208,7 +220,7 @@ def lottie_value(prop, t: float):
                 e = _bez_y(_pick(o.get("x"), d, 0), _pick(o.get("y"), d, 0), _pick(i.get("x"), d, 1),
                            _pick(i.get("y"), d, 1), u)
                 b = s1l[d] if d < len(s1l) else s0l[d]
-                out.append(s0l[d] + (b - s0l[d]) * e)
+                out.append(_interpolate_value(s0l[d], b, e))
             return out
     last = keys[-1]
     return last["s"] if "s" in last else keys[-2].get("e", keys[-2].get("s"))
@@ -557,8 +569,21 @@ def _paint_items(fc, sc, sw, stroke_over: bool) -> list[dict]:
     return items
 
 
-def _selector_mult(sel: dict, ind: float, total: int, t: float, order: list[int] | None) -> float:
+def _selector_mult(sel: dict, ind: float, total: int, t: float, order: list[int] | None,
+                   *, fps: float = 1.0, seed: int = 0):
     """lottie-web TextSelectorProp.getMult for the character with index ind (in basedOn units)."""
+    if sel.get("t") == 1:
+        from ..expr import builtin_functions, compile_expr
+        seconds = t / fps
+        env = {**builtin_functions(seed, seconds, value=100), "time": seconds, "frame": t,
+               "textIndex": ind + 1, "textTotal": total, "selectorValue": 100, "value": 100,
+               "framesToTime": lambda f: f / fps, "timeToFrames": lambda s=seconds: s * fps}
+        result = compile_expr(sel.get("x") or "selectorValue")(env)
+        vector = isinstance(result, (tuple, list))
+        values = [float(v) / 100 for v in result] if vector else [float(result) / 100]
+        if not values or not all(math.isfinite(v) for v in values):
+            raise ValueError("Lottie selector must return finite scalar or vector percentages")
+        return values if vector else values[0]
     if order is not None and 0 <= int(ind) < len(order):
         ind = order[int(ind)]
     units_index = sel.get("r", 1) == 2
@@ -623,6 +648,83 @@ def _hsb_shift(c, dh: float, ds: float, db: float):
     return [r, g, b]
 
 
+def _mask_path(L, t):
+    """Arc-length sampler for the text's selected mask at local frame t."""
+    from ..geometry import PathSampler
+    options = L["t"]["p"]
+    masks = L.get("masksProperties") or []
+    ref = options["m"]
+    if isinstance(ref, str) and not ref.isdigit():
+        mask = next((m for m in masks if m.get("nm") == ref), None)
+    else:
+        index = int(ref) - 1
+        mask = masks[index] if 0 <= index < len(masks) else None
+    if mask is None:
+        raise ValueError(f"Lottie text path mask {ref!r} is missing")
+    shape = lottie_value(mask.get("pt"), t)
+    if isinstance(shape, list):
+        shape = shape[0] if shape else None
+    if not isinstance(shape, dict) or not shape.get("v"):
+        raise ValueError("Lottie text path has no vertices")
+    verts, ins, outs = shape["v"], shape["i"], shape["o"]
+    cmds = [("M", *verts[0])]
+    closed = bool(shape.get("c"))
+    for k in range(len(verts) if closed else len(verts) - 1):
+        j = (k + 1) % len(verts)
+        cmds.append(("C", verts[k][0] + outs[k][0], verts[k][1] + outs[k][1],
+                     verts[j][0] + ins[j][0], verts[j][1] + ins[j][1], *verts[j]))
+    if closed:
+        cmds.append(("Z",))
+    return PathSampler(cmds), closed
+
+
+def _path_point(sampler, closed, distance, reverse):
+    if reverse:
+        distance = sampler.total - distance
+    if closed and sampler.total:
+        distance %= sampler.total
+    x, y, angle = sampler.at_distance(distance)
+    # Open paths extrapolate along the endpoint tangent, as lottie-web does.
+    spill = min(distance, 0.0) + max(distance - sampler.total, 0.0)
+    if not closed and spill:
+        x += spill * math.cos(math.radians(angle))
+        y += spill * math.sin(math.radians(angle))
+    return x, y, angle + (180 if reverse else 0)
+
+
+def _place_on_path(chars, L, times, justify):
+    options = L["t"]["p"]
+    lines = {}
+    for c in chars:
+        lines.setdefault(c["line"], []).append(c)
+    for ti, t in enumerate(times):
+        sampler, closed = _mask_path(L, t)
+        first, last = _num(options.get("f"), t), _num(options.get("l"), t)
+        available = sampler.total - first - last
+        reverse = bool(_num(options.get("r"), t))
+        perpendicular = bool(_num(options.get("p"), t))
+        force = bool(_num(options.get("a"), t))
+        for line in lines.values():
+            lo, hi = min(c["x0"] for c in line), max(c["x1"] for c in line)
+            shift = {0: 0.0, 1: available - (hi - lo), 2: (available - (hi - lo)) / 2}.get(justify, 0.0)
+            for ci, c in enumerate(line):
+                if "P" not in c:
+                    continue
+                px, py = c["P"][ti]
+                distance = first + px - lo + shift
+                if force and len(line) > 1:
+                    left = (line[0]["x1"] - line[0]["x0"]) / 2
+                    right = (line[-1]["x1"] - line[-1]["x0"]) / 2
+                    centre = (c["x0"] + c["x1"]) / 2
+                    distance = first + left + (available - left - right) * ci / (len(line) - 1) + px - centre
+                x, y, angle = _path_point(sampler, closed, distance, reverse)
+                if not perpendicular:
+                    angle = 0.0
+                theta = math.radians(angle)
+                c["P"][ti] = [x - py * math.sin(theta), y + py * math.cos(theta)]
+                c["R"][ti] += angle
+
+
 def convert_text_layers(rc, asset, d: dict) -> None:
     """Replace every text layer (ty 5) by an equivalent shape layer (see module docstring)."""
     for layers in _all_layer_lists(d):
@@ -641,17 +743,13 @@ def _text_to_shape_layer(rc, asset, d: dict, L: dict) -> dict:
         keys = [(float(k["t"]), k["s"]) for k in docs["k"] if isinstance(k.get("s"), dict)]
     else:
         keys = [(0.0, docs.get("k") or {})]
-    if (tdata.get("p") or {}).get("m") is not None:
-        warn_once("lottie", f"{asset.get('id')}:{L.get('nm')}:path", "Lottie text on a path is drawn straight")
+    has_path = (tdata.get("p") or {}).get("m") is not None
     animators = [a for a in tdata.get("a") or [] if isinstance(a, dict)]
-    for a in animators:
-        if (a.get("s") or {}).get("t") not in (None, 0):
-            warn_once("lottie", f"{asset.get('id')}:{L.get('nm')}:expr", "expression text selectors are not evaluated")
     grouping = (tdata.get("m") or {}).get("g", 1)
     galign = _vec((tdata.get("m") or {}).get("a"), 0.0, [0.0, 0.0])
     sr = float(L.get("sr", 1) or 1)
     lt0, lt1 = (float(L.get("ip", 0)) - float(L.get("st", 0))) / sr, (float(L.get("op", 0)) - float(L.get("st", 0))) / sr
-    times = [float(f) for f in range(int(math.floor(lt0)), int(math.ceil(lt1)) + 1)] if animators else [0.0]
+    times = [float(f) for f in range(int(math.floor(lt0)), int(math.ceil(lt1)) + 1)] if animators or has_path else [0.0]
     groups = []
     for ki, (kt, doc) in enumerate(keys):
         g = _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times)
@@ -749,7 +847,9 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
         return []
     fcol = [float(c) for c in fc] if fc is not None else None
     scol = [float(c) for c in sc] if sc is not None else None
-    if not animators:
+    path_options = (L.get("t") or {}).get("p") or {}
+    has_path = path_options.get("m") is not None
+    if not animators and not has_path:
         out = []
         for li in sorted({c["line"] for c in chars}):
             shapes = [_sub_to_shape(s, c["dx"], c["y"] - c["base"]) for c in chars if c["line"] == li for s in c["subs"]]
@@ -775,7 +875,9 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
         return res
     piv = {2: span("word"), 3: span("line"), 4: {0: (min(c["x0"] for c in chars), max(c["x1"] for c in chars))}}
     orders = []
+    seeds = []
     for ai, an in enumerate(animators):
+        seeds.append(rc.ev.seed_for(asset, f"lottie:{L.get('nm')}:{ai}"))
         sel = an.get("s") or {}
         if sel.get("rn"):
             key = based.get(sel.get("b", 1), "idx")
@@ -802,21 +904,29 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
             s_ = list(scol[:3]) if scol else None
             w_ = sw
             track = 0.0
-            for an, order in zip(animators, orders):
+            for ai, (an, order) in enumerate(zip(animators, orders)):
                 sel, props = an.get("s") or {}, an.get("a") or {}
                 key = based.get(sel.get("b", 1), "idx")
-                m = _selector_mult(sel, float(c[key]), counts[key], t, order)
-                if m == 0:
+                try:
+                    mult = _selector_mult(sel, float(c[key]), counts[key], t, order,
+                                          fps=float(d.get("fr", 30)), seed=seeds[ai])
+                except (ExprError, ValueError, TypeError, ArithmeticError) as exc:
+                    warn_once("lottie-expression", f"{asset.get('id')}:{L.get('nm')}:{ai}", str(exc))
+                    mult = 0.0
+                mv = [float(v) for v in mult] if isinstance(mult, list) else [float(mult)]
+                mv = (mv or [0.0]) + [mv[-1] if mv else 0.0] * 3
+                m = mv[0]
+                if not any(mv):
                     continue
                 if "p" in props:
                     v = _vec(props["p"], t, [0, 0])
-                    pos = [pos[0] + v[0] * m, pos[1] + v[1] * m]
+                    pos = [pos[0] + v[0] * mv[0], pos[1] + v[1] * mv[1]]
                 if "a" in props:
                     v = _vec(props["a"], t, [0, 0])
-                    anc = [anc[0] + v[0] * m, anc[1] + v[1] * m]
+                    anc = [anc[0] + v[0] * mv[0], anc[1] + v[1] * mv[1]]
                 if "s" in props:
                     v = _vec(props["s"], t, [100, 100])
-                    scl = [scl[k] * (1 + (v[k] / 100 - 1) * m) for k in (0, 1)]
+                    scl = [scl[k] * (1 + (v[k] / 100 - 1) * mv[k]) for k in (0, 1)]
                 if "r" in props:
                     rot += _num(props["r"], t) * m
                 if "sk" in props:
@@ -858,7 +968,10 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
         shift = acc.get(c["line"], [0.0] * len(times))
         c["P"] = [[p[0] + s, p[1]] for p, s in zip(c["P"], shift)]
         acc[c["line"]] = [s + tr for s, tr in zip(shift, c["track"])]
-        if not c["subs"]:
+    if has_path:
+        _place_on_path(chars, L, times, j)
+    for c in chars:
+        if not c["subs"] or "P" not in c:
             continue
         shapes = [_sub_to_shape(s, c["dx"], c["y"] - c["base"]) for s in c["subs"]]
         paints = _paint_items(_baked(times, c["FC"]) if fcol else None, _baked(times, c["SC"]) if scol else None,
@@ -960,7 +1073,7 @@ def segment_duration(rc, asset, ctx=None) -> float | None:
 
 
 @ASSETS.register("lottie", level=FULL if LottieAnimation is not None else NONE,
-                 note="rlottie: .json/.lottie, @animation, @segment, sub-frame timing, slots, text layers as outlines"
+                 note="rlottie: .json/.lottie, slots, text outlines and paths; selectors use the pure scene expression language"
                  if LottieAnimation is not None else "rlottie-python is not installed; Lottie layers draw nothing")
 def render_lottie(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
     p = prepare(rc, asset, ctx)

@@ -11,24 +11,27 @@ from __future__ import annotations
 
 import copy
 import csv
+import hashlib
 import io
 import json
 import logging
 import math
 import os
 import re
+from urllib.parse import urlsplit, unquote
 from dataclasses import dataclass, field
 from fractions import Fraction
 
 from lxml import etree
 
 from .schema import Schema, default_schema
-from .values import parse_float, parse_fps
+from .values import parse_bool, parse_float, parse_fps
 
 log = logging.getLogger("scenerender")
 
 NODE_TAGS = frozenset({"group", "sequence", "layer", "shape", "object3D", "camera", "particleEmitter",
                        "instance", "include", "repeat", "adjustment", "transition", "skeleton"})
+INTERNAL = "{urn:scenerender}"
 
 
 class SceneError(Exception):
@@ -68,6 +71,9 @@ class Document:
     variant: str | None = None
     beat_grids: list[tuple[float, float, int]] = field(default_factory=list)
     _paths: dict = field(default_factory=dict)
+    strict: bool = False
+    include_stack: tuple[str, ...] = ()
+    _reference_maps: dict = field(default_factory=dict)
 
     # ------------------------------------------------------------ convenience
     @property
@@ -82,7 +88,39 @@ class Document:
         return self.root.find("project")
 
     def resolve_path(self, src: str) -> str:
+        if src.startswith("file:"):
+            return unquote(urlsplit(src).path)
+        if urlsplit(src).scheme:
+            return src
         return src if os.path.isabs(src) else os.path.normpath(os.path.join(self.base, src))
+
+    def resolve_id(self, origin, ref: str) -> str:
+        """Resolve names authored before include/repeat expansion, including computed references."""
+        if ref in self.ids and ("/" in ref or "#" in ref):
+            return ref
+        maps = []
+        raw_seen = set()
+        for el in (origin, *origin.iterancestors()):
+            raw = el.get(INTERNAL + "references")
+            if raw and raw not in raw_seen:
+                raw_seen.add(raw)
+                if raw not in self._reference_maps:
+                    self._reference_maps[raw] = json.loads(raw)
+                maps.append(self._reference_maps[raw])
+        used = set()
+        while True:
+            changed = False
+            for index, mapping in reversed(list(enumerate(maps))):
+                if index in used:
+                    continue
+                new = _mapped_reference(ref, mapping)
+                if new != ref:
+                    ref = new
+                    used.add(index)
+                    changed = True
+            if not changed:
+                break
+        return ref
 
     def schema_path(self, el) -> tuple[str, ...]:
         p = self._paths.get(el)
@@ -114,22 +152,51 @@ class Document:
 # ====================================================================== load
 def load(path: str, *, params: dict[str, str] | None = None, variant: str | None = None,
          layout: str | None = None, strict: bool = False, schema: Schema | None = None,
-         base: str | None = None) -> Document:
+         base: str | None = None, _prepare_tree: bool = True,
+         _include_stack: tuple[str, ...] = ()) -> Document:
     """Load and prepare a document. `base` is the directory asset paths resolve against
     (default: the document's own directory)."""
     schema = schema or default_schema()
+    canonical = os.path.realpath(path)
+    if canonical in _include_stack:
+        raise SceneError("include cycle: " + " -> ".join((*_include_stack, canonical)))
     parser = etree.XMLParser(remove_comments=True, remove_pis=True, huge_tree=True)
     tree = etree.parse(path, parser)
-    doc = Document(path=path, tree=tree, schema=schema, base=os.path.abspath(base) if base else os.path.dirname(os.path.abspath(path)))
+    doc = Document(path=path, tree=tree, schema=schema,
+                   base=os.path.abspath(base) if base else os.path.dirname(os.path.abspath(path)),
+                   strict=strict, include_stack=(*_include_stack, canonical))
     v = schema.validator()
     if not v.validate(tree):
         doc.validation_errors = [f"{e.line}: {e.message}" for e in v.error_log]
+    _normalize_attributes(doc)
+    doc.validation_errors.extend(schema.semantic_errors(tree))
+    if doc.validation_errors:
         if strict:
             raise SceneError("schema validation failed:\n  " + "\n  ".join(doc.validation_errors[:20]))
         log.warning("%s: %d schema errors (lenient mode, rendering anyway); first: %s",
                     os.path.basename(path), len(doc.validation_errors), doc.validation_errors[0])
-    _prepare(doc, params or {}, variant, layout)
+    if _prepare_tree:
+        _prepare(doc, params or {}, variant, layout)
+    else:
+        _expand_includes(doc)
     return doc
+
+
+def _normalize_attributes(doc: Document) -> None:
+    """lxml validates XSD whitespace facets without updating the authored tree."""
+    for el in doc.root.iter():
+        info = doc.type_info(el)
+        if info is None:
+            continue
+        for name, value in list(el.attrib.items()):
+            attr = info.attrs.get(name)
+            if attr is None:
+                continue
+            whitespace = doc.schema.whitespace(attr.type)
+            if whitespace == "replace":
+                el.set(name, value.translate(str.maketrans("\t\r\n", "   ")))
+            elif whitespace == "collapse":
+                el.set(name, " ".join(value.split()))
 
 
 def _prepare(doc: Document, cli_params: dict[str, str], variant: str | None, layout: str | None) -> None:
@@ -144,6 +211,8 @@ def _prepare(doc: Document, cli_params: dict[str, str], variant: str | None, lay
     _styles(doc)
     _markers(doc)
     _expand_repeats(doc)
+    _index(doc)
+    _repeat_text(doc)
     _index(doc)
     _schedule_sequences(doc)
     _fonts(doc)
@@ -223,7 +292,7 @@ def _validate_param(doc: Document, p, value: str, source: str | None) -> None:
     stops the load (SceneError); a non-conforming declared default only warns."""
     pid, typ = p.get("id"), p.get("type")
     problems = []
-    if p.get("required") == "true" and value == "":
+    if parse_bool(p.get("required")) and value == "":
         problems.append("is required")
     if value != "":
         if typ in ("number", "time"):
@@ -288,7 +357,7 @@ def _binds(doc: Document) -> None:
         _apply_override(doc, b.get("target"), b.get("property"), value)
 
 
-_TPL = re.compile(r"\{\{\s*([A-Za-z_][\w.\-]*)\s*\}\}")
+_TPL = re.compile(r"\{\{\s*([A-Za-z_][\w./#\-]*)\s*\}\}")
 
 
 def _substitute_text(doc: Document) -> None:
@@ -364,18 +433,30 @@ def _fonts(doc: Document) -> None:
 
 
 # ------------------------------------------------------------ includes
-def _expand_includes(doc: Document, depth: int = 0) -> None:
+def _expand_includes(doc: Document) -> None:
     for inc in list(doc.root.iter("include")):
         src = doc.resolve_path(inc.get("src"))
-        if not os.path.exists(src) or depth > 8:
+        if not os.path.exists(src):
+            if doc.strict:
+                raise SceneError(f"include {inc.get('id')}: {src} not found")
             log.warning("include %s: %s not found; skipped", inc.get("id"), inc.get("src"))
             inc.getparent().remove(inc)
             continue
-        other = load(src, schema=doc.schema)
+        if inc.get("sha256"):
+            with open(src, "rb") as stream:
+                actual = hashlib.sha256(stream.read()).hexdigest()
+            if actual != inc.get("sha256"):
+                raise SceneError(f"include {inc.get('id')}: sha256 mismatch for {src}")
+        # Merge authored trees before parameter, repeat and sequence preparation.
+        # Preparing a child first would lose its clock tables and repeat data.
+        other = load(src, schema=doc.schema, strict=doc.strict, _prepare_tree=False,
+                     _include_stack=doc.include_stack)
+        doc.validation_errors.extend(f"include {inc.get('id')}: {error}" for error in other.validation_errors)
         ns = inc.get("id") + "/"
         oroot = copy.deepcopy(other.root)
+        _rebase_paths(other, oroot)
         _namespace_ids(doc.schema, other, oroot, ns)
-        for sec in ("assets", "paints", "effects", "symbols", "materials"):
+        for sec in ("assets", "paints", "effects", "symbols", "materials", "parameters", "markers", "tracking", "lights"):
             src_sec = oroot.find(sec)
             if src_sec is None:
                 continue
@@ -394,7 +475,14 @@ def _expand_includes(doc: Document, depth: int = 0) -> None:
             body = oroot.find(f"symbols/symbol[@id='{ns}{inc.get('symbol')}']")
         else:
             body = oroot.find("composition")
+        if body is None:
+            raise SceneError(f"include {inc.get('id')}: symbol {inc.get('symbol')!r} not found")
         grp = etree.Element("group", {k: v for k, v in inc.attrib.items() if k not in ("src", "symbol", "sha256")})
+        grp.set(INTERNAL + "references", oroot.get(INTERNAL + "references"))
+        dimensions = body if inc.get("symbol") else oroot.find("project")
+        for attr in ("width", "height"):
+            if dimensions.get(attr):
+                grp.set(attr, dimensions.get(attr))
         grp.extend([c for c in inc if ln(c) != "override"])
         if body is not None:
             grp.extend(list(body))
@@ -404,20 +492,76 @@ def _expand_includes(doc: Document, depth: int = 0) -> None:
             _apply_override(doc, ns + o.get("target"), o.get("property"), o.get("value"))
 
 
-def _namespace_ids(schema: Schema, other: Document, root, ns: str) -> None:
-    """Prefix every id and every reference to one (IDREF/IDREFS attributes, url(#id)) with ns."""
+def _mapped_reference(ref: str, mapping: dict[str, str]) -> str:
+    if ref in mapping:
+        return mapping[ref]
+    # An effective instance ID can have an inner path after the authored ID.
+    for old in sorted(mapping, key=len, reverse=True):
+        if ref.startswith(old + "/"):
+            return mapping[old] + ref[len(old):]
+    return ref
+
+
+def _remap_tree(schema: Schema, root, mapping: dict[str, str], root_path=("scene",), tokens=None) -> None:
+    """Rewrite typed references while retaining maps for computed expression references."""
+    tokens = tokens or {}
+    paths = {root: root_path}
     for el in root.iter():
         if not isinstance(el.tag, str):
             continue
-        info = schema.type_of_path(tuple(ln(a) for a in reversed(list(el.iterancestors()))) + (ln(el),))
+        if el is not root:
+            paths[el] = paths[el.getparent()] + (ln(el),)
+        info = schema.type_of_path(paths[el])
         for k, v in list(el.attrib.items()):
             a = info.attrs.get(k) if info else None
-            if k == "id" or (a and a.type == "xs:IDREF") or k in ("from", "to", "target", "symbol", "asset"):
-                el.set(k, ns + v)
+            if k == "id" or (a and a.type == "xs:IDREF") or (k == "target" and ln(el) == "override"):
+                v = _mapped_reference(v, mapping)
             elif a and a.type == "xs:IDREFS":
-                el.set(k, " ".join(ns + x for x in v.split()))
-            elif "url(#" in v:
-                el.set(k, v.replace("url(#", "url(#" + ns))
+                v = " ".join(_mapped_reference(x, mapping) for x in v.split())
+            elif k == "source" and ln(el) == "link":
+                prefix, sep, tail = v.partition(":")
+                if sep and prefix in ("param", "marker", "audio"):
+                    rid, *rest = tail.split(":")
+                    v = prefix + ":" + ":".join([_mapped_reference(rid, mapping), *rest])
+                else:
+                    rid, sep, prop = v.rpartition(".")
+                    if sep:
+                        v = _mapped_reference(rid, mapping) + "." + prop
+            elif k == "name" and ln(el) == "token":
+                v = tokens.get(v, v)
+            elif k == INTERNAL + "references":
+                v = json.dumps({old: _mapped_reference(new, mapping) for old, new in json.loads(v).items()})
+            v = re.sub(r"url\(#([^)]*)\)", lambda m: "url(#" + _mapped_reference(m[1], mapping) + ")", v)
+            v = re.sub(r"var\(--([^)]*)\)", lambda m: "var(--" + tokens.get(m[1], m[1]) + ")", v)
+            v = _TPL.sub(lambda m: "{{" + _mapped_reference(m[1], mapping) + "}}", v)
+            el.set(k, v)
+        if ln(el) == "span" and el.text:
+            el.text = _TPL.sub(lambda m: "{{" + _mapped_reference(m[1], mapping) + "}}", el.text)
+    existing = json.loads(root.get(INTERNAL + "references", "{}"))
+    root.set(INTERNAL + "references", json.dumps({**mapping, **existing}))
+
+
+def _namespace_ids(schema: Schema, other: Document, root, ns: str) -> None:
+    mapping = {el.get("id"): ns + el.get("id") for el in root.iter() if el.get("id")}
+    tokens = {el.get("name"): ns + el.get("name") for el in root.iter("token")}
+    mapping.update({"var:" + old: "var:" + new for old, new in tokens.items()})
+    _remap_tree(schema, root, mapping, tokens=tokens)
+    # Imported resources live outside the include group, so carry their origin too.
+    refs = root.get(INTERNAL + "references")
+    for sec in root:
+        for child in sec:
+            if isinstance(child.tag, str):
+                previous = json.loads(child.get(INTERNAL + "references", "{}"))
+                child.set(INTERNAL + "references", json.dumps({**json.loads(refs), **previous}))
+
+
+def _rebase_paths(other: Document, root) -> None:
+    paths = {"src", "proxy", "fontFile", "cache", "weights", "ies", "shader"}
+    for el in root.iter():
+        for attr in paths:
+            value = el.get(attr)
+            if value and not urlsplit(value).scheme and not os.path.isabs(value):
+                el.set(attr, other.resolve_path(value))
 
 
 # ------------------------------------------------------------ repeat
@@ -443,6 +587,11 @@ def _expand_repeats(doc: Document) -> None:
                 continue
             grp.set(k, v)
         grp.extend(behaviour)
+        # The repeat's animated opacity belongs to each copy before the decrement.
+        opacity_behaviour = [c for c in grp if c.get("property") == "opacity"]
+        for c in opacity_behaviour:
+            grp.remove(c)
+        grp.set("opacity", "1")
         for i in range(count):
             cp = etree.SubElement(grp, "group", id=f"{rid}#{i}")
             cp.set("x", repr(i * f("offsetX")))
@@ -451,19 +600,21 @@ def _expand_repeats(doc: Document) -> None:
             s = f("scaleStep", 1.0) ** i
             cp.set("scaleX", repr(s))
             cp.set("scaleY", repr(s))
-            cp.set("opacity", repr(max(0.0, 1.0 - i * f("opacityStep"))))
+            cp.set("opacity", repr(max(0.0, f("opacity", 1.0) - i * f("opacityStep"))))
+            if opacity_behaviour:
+                cp.set("opacity", rep.get("opacity", "1"))
+                cp.extend(copy.deepcopy(c) for c in opacity_behaviour)
+                expr = etree.SubElement(cp, "expression", property="opacity")
+                expr.text = f"clamp(value - {i * f('opacityStep')!r}, 0, 1)"
             cp.set("timeOffset", repr(i * f("timeStep")))
             cp.set("{urn:scenerender}index", repr(start_i + i * step_i))
             cp.set("{urn:scenerender}count", str(count))
             cp.set("{urn:scenerender}var", rep.get("var", "item"))
             if items:
                 cp.set("{urn:scenerender}item", json.dumps(items[i]))
-            for c in body:
-                cc = copy.deepcopy(c)
-                for e in cc.iter():
-                    if isinstance(e.tag, str) and e.get("id"):
-                        e.set("id", f"{e.get('id')}#{i}")
-                cp.append(cc)
+            mapping = {e.get("id"): f"{e.get('id')}#{i}" for c in body for e in c.iter() if e.get("id")}
+            cp.extend(copy.deepcopy(c) for c in body)
+            _remap_tree(doc.schema, cp, mapping, doc.schema_path(rep)[:-1] + ("group",))
         rep.getparent().replace(rep, grp)
 
 
@@ -477,6 +628,67 @@ def _param_list(v: str) -> list:
     return [x.strip() for x in v.split(",") if x.strip()] if v else []
 
 
+def _repeat_text(doc: Document) -> None:
+    """Materialise text templates for each repeat item without changing shared assets.
+
+    Walking after expansion retains both outer and inner item bindings. Clone only
+    text assets that actually change, including their addressable span IDs.
+    """
+    assets = doc.section("assets")
+    if assets is None:
+        return
+
+    def visit(el, bindings):
+        if el.get(INTERNAL + "var") is not None:
+            index = float(el.get(INTERNAL + "index", "0"))
+            bindings = {**bindings, "index": int(index) if index.is_integer() else index,
+                        "count": int(el.get(INTERNAL + "count", "0")),
+                        el.get(INTERNAL + "var"): json.loads(el.get(INTERNAL + "item", "null"))}
+        if ln(el) == "layer" and bindings:
+            asset = doc.ids.get(el.get("asset"))
+            if asset is not None and ln(asset) == "text":
+                def sub(match):
+                    key, *parts = match[1].split(".")
+                    if key not in bindings:
+                        return match[0]
+                    value = bindings[key]
+                    for part in parts:
+                        if isinstance(value, dict) and part in value:
+                            value = value[part]
+                        elif isinstance(value, list) and part.isdigit() and int(part) < len(value):
+                            value = value[int(part)]
+                        else:
+                            return match[0]
+                    return (json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list, bool))
+                            or value is None else str(value))
+
+                clone = copy.deepcopy(asset)
+                changed = False
+                for text in clone.iter():
+                    if text.get("text") is not None:
+                        before = text.get("text")
+                        after = _TPL.sub(sub, before)
+                        text.set("text", after)
+                        changed |= before != after
+                    if ln(text) == "span" and text.text:
+                        before = text.text
+                        text.text = _TPL.sub(sub, before)
+                        changed |= before != text.text
+                if changed:
+                    prefix = el.get("id") + "/text/"
+                    mapping = {n.get("id"): prefix + n.get("id") for n in clone.iter() if n.get("id")}
+                    _remap_tree(doc.schema, clone, mapping, ("scene", "assets", "text"))
+                    assets.append(clone)
+                    el.set("asset", clone.get("id"))
+        for child in list(el):
+            if ln(child) in NODE_TAGS:
+                visit(child, bindings)
+
+    for root in [doc.section("composition"), *doc.root.findall("symbols/symbol")]:
+        if root is not None:
+            visit(root, {})
+
+
 # ------------------------------------------------------------ sequence
 def natural_duration(doc: Document, el) -> float:
     """Duration a node occupies when scheduled by a sequence."""
@@ -484,22 +696,25 @@ def natural_duration(doc: Document, el) -> float:
     if el.get("end") is not None or el.get("endMarker"):
         return max(0.0, (e or 0.0) - s)
     tag = ln(el)
-    if tag == "instance":
-        sym = doc.ids.get(el.get("symbol"))
-        d = parse_float(sym.get("duration"), 0.0) if sym is not None else 0.0
-        return d / max(1e-9, abs(parse_float(el.get("speed"), 1.0)))
-    if tag == "layer":
-        a = doc.ids.get(el.get("asset"))
-        if a is not None and a.get("duration"):
-            clip_out = parse_float(el.get("clipOut"), float(a.get("duration")))
-            return (clip_out - parse_float(el.get("clipIn"), 0.0)) / max(1e-9, abs(parse_float(el.get("speed"), 1.0)))
+    if tag in ("instance", "layer"):
+        remap = el.find("timeRemap")
+        if remap is not None and len(remap):
+            return max(float(k.get("time")) for k in remap if ln(k) == "key")
+        a = doc.ids.get(el.get("symbol" if tag == "instance" else "asset"))
+        duration = parse_float(a.get("duration"), 0) if a is not None else 0
         if a is not None and ln(a) == "imageSequence":
             n = (int(a.get("last")) - int(a.get("first"))) // int(a.get("step", 1)) + 1
-            return n / float(parse_fps(a.get("fps")))
+            duration = n / float(parse_fps(a.get("fps")))
+        clip_out = parse_float(el.get("clipOut"), duration)
+        span = max(0, clip_out - parse_float(el.get("clipIn"), 0))
+        speed = abs(parse_float(el.get("speed"), 1))
+        if speed == 0:
+            return max(0, doc.duration - s)
+        return span * parse_float(el.get("timeStretch"), 1) * (1 + int(el.get("loop", 0))) / speed
     if tag in ("group", "sequence"):
-        ends = [doc.window(c)[1] for c in doc.nodes(el)]
-        ends = [x for x in ends if x is not None]
-        return max(ends) - s if ends else 0.0
+        ends = [doc.window(c)[0] + natural_duration(doc, c) for c in doc.nodes(el) if ln(c) != "transition"]
+        return max(0, (max(ends) - s) / parse_float(el.get("timeScale"), 1)
+                   + parse_float(el.get("timeOffset"), 0)) if ends else 0.0
     return 0.0
 
 
@@ -523,4 +738,3 @@ def _schedule_sequences(doc: Document) -> None:
                                  **{"from": prev.get("id", ""), "to": c.get("id", "")})
             prev = c
         doc.windows[seq] = (doc.window(seq)[0], cursor - gap if kids else doc.window(seq)[0])
-

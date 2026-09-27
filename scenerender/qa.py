@@ -47,6 +47,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from .registry import FEATURES, FULL
+from .values import parse_bool
 
 log = logging.getLogger("scenerender")
 
@@ -88,7 +89,7 @@ def accessibility(doc) -> dict:
     g = (lambda k, d: acc.get(k, d)) if acc is not None else (lambda k, d: d)
     return {"present": acc is not None, "flash": g("flashCheck", "warn") if acc is not None else "off",
             "contrast": g("contrastCheck", "off"), "min_contrast": float(g("minContrast", "4.5")),
-            "require_captions": g("requireCaptions", "false") == "true", "audio_description": g("audioDescription", None)}
+            "require_captions": parse_bool(g("requireCaptions", "false")), "audio_description": g("audioDescription", None)}
 
 
 # ====================================================================== flash detection
@@ -223,16 +224,13 @@ def _in_symbols(el) -> bool:
 def _node_ctx_at(rc, el, T: float):
     """Ctx for el's parent clock at composition time T, or None when an ancestor hides it."""
     from .evaluator import Ctx
-    from .nodes.core import child_ctx
+    from .nodes.core import child_ctx, _repeat_vars
     ctx = Ctx(t=T, comp_t=T)
     chain = [a for a in el.iterancestors() if isinstance(a.tag, str) and a.tag not in ("composition", "scene")][::-1]
     for a in chain:
         if not rc.active(a, ctx):
             return None
-        shift = rc.doc.clock_shift.get(a)
-        if shift:
-            ctx = replace(ctx, t=ctx.t - shift)
-        ctx = child_ctx(rc, a, rc.node_ctx(a, ctx))
+        ctx = _repeat_vars(a, child_ctx(rc, a, rc.enter_node(a, ctx)))
     if not rc.active(el, ctx):
         return None
     return ctx
@@ -429,12 +427,12 @@ def _audio_description(doc, ref: str, t0: float, t1: float, audio_out: bool, out
     if el is None:
         return [Finding("audioDescription", "error", f"audioDescription {ref!r} does not exist")], []
     if el.tag == "audioTrack":
-        mixed = el.get("mute", "false") != "true" and audio_out
+        mixed = not parse_bool(el.get("mute", "false")) and audio_out
         if mixed:
             return [], []
         asset = doc.ids.get(el.get("asset"))
         start, clip_in = float(el.get("start", 0) or 0), float(el.get("clipIn", 0) or 0)
-    elif el.tag == "audio" or (el.tag == "video" and el.get("hasAudio") == "true"):
+    elif el.tag == "audio" or (el.tag == "video" and parse_bool(el.get("hasAudio"))):
         asset, start, clip_in = el, 0.0, 0.0
     else:
         return [Finding("audioDescription", "error", f"audioDescription {ref!r} is a <{el.tag}>, not an audio track")], []

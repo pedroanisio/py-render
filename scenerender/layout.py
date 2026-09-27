@@ -18,8 +18,8 @@ def flex_layout(rc, group, ctx, box, mode: str) -> dict:
     gw, gh = box
     gap = ev.length(group, "gap", ctx, gw if mode != "column" else gh)
     pad = ev.length(group, "padding", ctx, min(gw, gh))
-    justify = group.get("justify", "start")
-    align = group.get("alignItems", "start")
+    justify = ev.str(group, "justify", ctx, "start")
+    align = ev.str(group, "alignItems", ctx, "start")
     sizes = []
     for k in kids:
         w, h = rc.node_size(k, ctx, box)
@@ -29,16 +29,18 @@ def flex_layout(rc, group, ctx, box, mode: str) -> dict:
     out = {}
     if mode == "stack":
         for k, (w, h) in zip(kids, sizes):
-            out[k] = (pad + _cross(align, inner_w, w), pad + _cross(align, inner_h, h))
+            out[k] = ((pad, pad, inner_w, inner_h) if align == "stretch" else
+                      (pad + _cross(align, inner_w, w), pad + _cross(align, inner_h, h)))
         return out
     if mode == "grid":
-        cols = max(1, int(group.get("gridColumns", 2)))
+        cols = max(1, int(ev.num(group, "gridColumns", ctx, 2)))
         rows = math.ceil(len(kids) / cols)
         cw = (inner_w - gap * (cols - 1)) / cols if inner_w else max(w for w, _ in sizes)
         rh = (inner_h - gap * (rows - 1)) / rows if inner_h else max(h for _, h in sizes)
         for i, (k, (w, h)) in enumerate(zip(kids, sizes)):
             r, c = divmod(i, cols)
-            out[k] = (pad + c * (cw + gap) + _cross(align, cw, w), pad + r * (rh + gap) + _cross(align, rh, h))
+            pos = (pad + c * (cw + gap) + _cross(align, cw, w), pad + r * (rh + gap) + _cross(align, rh, h))
+            out[k] = (*pos, max(0, cw), max(0, rh)) if align == "stretch" else pos
         return out
     horizontal = mode == "row"
     main = [w if horizontal else h for w, h in sizes]
@@ -68,6 +70,8 @@ def flex_layout(rc, group, ctx, box, mode: str) -> dict:
         else:
             cpos = pad + (_cross(align, cross_avail, c) if cross_avail > 0 else 0.0)
         out[k] = (pos, cpos) if horizontal else (cpos, pos)
+        if align == "stretch":
+            out[k] = (*out[k], None, cross_avail) if horizontal else (*out[k], cross_avail, None)
         pos += m + between
     return out
 

@@ -45,6 +45,7 @@ import numpy as np
 from . import tracking
 from .document import ln
 from .registry import FEATURES, FULL, warn_once
+from .values import parse_bool
 
 for _t in ("parent", "look-at", "follow-path", "copy-position", "copy-rotation", "copy-scale",
            "copy-transform", "distance"):
@@ -183,7 +184,7 @@ def apply_constraint(rc, c, el, M, ctx):
         x, y, ang = (float(v) for v in pg.sample(ev.num(c, "progress", ctx, 0.0)))
         g = _ap(SP, (x, y)) + off
         out = _T(*(g - piv)) @ M
-        if c.get("autoOrient") in ("true", "1"):
+        if parse_bool(c.get("autoOrient")):
             d = SP[:2, :2] @ np.array([math.cos(math.radians(ang)), math.sin(math.radians(ang))])
             want = math.degrees(math.atan2(d[1], d[0]))
             out = _about(g, _R(want + orot - _angle(out))) @ out
@@ -385,7 +386,7 @@ def _solve_chain(rc, c, chain, E, ctx) -> dict:
             SP = base if space == "local" else rc.root_matrix
             goal = goal + SP[:2, :2] @ np.array([rc.ev.num(c, "offsetX", ctx, 0.0), rc.ev.num(c, "offsetY", ctx, 0.0)])
             infl = rc.ev.num(c, "influence", ctx, 1.0)
-            deltas = chain_deltas(pts, goal, c.get("bendPositive", "true") not in ("false", "0"))
+            deltas = chain_deltas(pts, goal, parse_bool(c.get("bendPositive"), True))
             sol = {}
             for J, Mj, d in zip(chain, mats, deltas):
                 P = Mj @ np.linalg.inv(local_matrix_of(rc, J, ctx))

@@ -15,6 +15,7 @@ from lxml import etree
 
 from . import registry as R
 from .document import NODE_TAGS, ln
+from .values import parse_bool
 
 _ORDER = {R.NONE: 0, R.PARTIAL: 1, R.FULL: 2}
 _TITLE = {R.NONE: "NOT SUPPORTED (skipped)", R.PARTIAL: "PARTIAL (approximated)", R.FULL: "SUPPORTED"}
@@ -42,7 +43,7 @@ def collect(root) -> Counter:
     F = R.FEATURES
     project = root.find("project")
     if project is not None:
-        if project.get("motionBlur") == "true":
+        if parse_bool(project.get("motionBlur")):
             add(F, "motionBlur")
         if project.get("mode") in ("equirectangular", "viewport"):
             add(F, f"project:mode:{project.get('mode')}")
@@ -63,9 +64,9 @@ def collect(root) -> Counter:
                 add(F, "parent")
             if el.get("alignX") or el.get("alignY"):
                 add(F, "align")
-            if el.get("threeD") == "true":
+            if parse_bool(el.get("threeD")):
                 add(F, "threeD")
-            if el.get("motionBlur") == "true":
+            if el.get("motionBlur") == "on" or (tag == "transition" and parse_bool(el.get("motionBlur"), True)):
                 add(F, "motionBlur")
             if tag == "group" and el.get("layout") not in (None, "none"):
                 add(F, "groupLayout")
@@ -85,20 +86,22 @@ def collect(root) -> Counter:
             if tag == "particleEmitter":
                 if el.get("preset"):
                     add(F, f"particles:preset:{el.get('preset')}")
-                if el.get("collide") == "true":
+                if parse_bool(el.get("collide")):
                     add(F, "particles:collide")
                 if el.get("emitterShape") == "asset-alpha":
                     add(F, "particles:emitterShape:asset-alpha")
             if tag == "camera":
-                if el.get("depthOfField") == "true":
+                if parse_bool(el.get("depthOfField")):
                     add(F, "camera:depthOfField")
                 if any(ln(c) == "shake" for c in el):
                     add(F, "camera:shake")
                 if any(ln(c) == "transformConstraint" for c in el):
                     add(F, "camera:transformConstraint")
             if tag == "layer":
+                if parse_bool(el.get("stabilize")):
+                    add(F, "layer:stabilize")
                 a = root.find(f".//assets/*[@id='{el.get('asset')}']") if el.get("asset") else None
-                if a is not None and ln(a) == "video" and a.get("hasAudio") == "true" and el.get("mute") != "true":
+                if a is not None and ln(a) == "video" and parse_bool(a.get("hasAudio")) and not parse_bool(el.get("mute")):
                     add(F, "audio:layerAudio")
         # ---- assets / resources
         elif ptag == "assets":
@@ -115,8 +118,8 @@ def collect(root) -> Counter:
             add(R.DEFORMERS, el.get("type"))
         elif tag == "deform":
             add(F, "deform")
-        elif tag == "layer" and el.get("stabilize") == "true":
-            add(F, "layer:stabilize")
+        elif tag in ("animate", "expression", "link", "motionPath"):
+            add(F, tag)
         elif tag == "trackData":
             add(F, f"trackData:{el.get('format', 'json')}")
             add(F, f"trackData:kind:{el.get('kind')}")
@@ -148,9 +151,9 @@ def collect(root) -> Counter:
             if el.get("duckUnder"):
                 add(F, "audio:ducking")
             if tag == "audioTrack":
-                if el.get("fitToDuration") == "true":
+                if parse_bool(el.get("fitToDuration")):
                     add(F, "audio:fitToDuration")
-                if el.get("speed") not in (None, "1", "1.0") and el.get("preservePitch", "true") != "false":
+                if el.get("speed") not in (None, "1", "1.0") and parse_bool(el.get("preservePitch", "true"), True):
                     add(F, "audio:preservePitch")
         elif tag == "master":
             if el.get("normalize") in ("integrated", "dynamic"):
@@ -181,7 +184,7 @@ def collect(root) -> Counter:
         # ---- outputs
         elif tag == "output":
             add(R.CODECS, el.get("codec"))
-            if el.get("twoPass") == "true":
+            if parse_bool(el.get("twoPass")):
                 add(F, "output:twoPass")
             if el.get("maxFileSize"):
                 add(F, "output:maxFileSize")
@@ -193,9 +196,9 @@ def collect(root) -> Counter:
                 add(F, f"colorSpace:{el.get('colorSpace')}")
             if el.get("transfer") not in (None, "auto"):
                 add(F, f"transfer:{el.get('transfer')}")
-            if el.get("embedMetadata", "true") != "false" and root.find("metadata") is not None:
+            if parse_bool(el.get("embedMetadata", "true"), True) and root.find("metadata") is not None:
                 add(F, "output:embedMetadata")
-            if project is not None and project.get("mode") == "equirectangular" and el.get("sphericalMetadata") != "false":
+            if project is not None and project.get("mode") == "equirectangular" and parse_bool(el.get("sphericalMetadata"), True):
                 s360 = root.find("scene360")
                 mesh = s360 is not None and s360.get("layout") in ("eac", "fisheye-180")
                 add(F, "output:sphericalMetadata:mesh" if mesh else "output:sphericalMetadata")
@@ -207,7 +210,7 @@ def collect(root) -> Counter:
                 add(F, "accessibility:flashCheck")
             if el.get("contrastCheck", "off") != "off":
                 add(F, "accessibility:contrastCheck")
-            if el.get("requireCaptions") == "true":
+            if parse_bool(el.get("requireCaptions")):
                 add(F, "accessibility:requireCaptions")
             if el.get("audioDescription"):
                 add(F, "accessibility:audioDescription")
@@ -219,6 +222,13 @@ def collect(root) -> Counter:
 
 
 # concepts handled inline by the core that no module declares
+for _name, _note in {
+    "animate": "typed keyframes, interpolation, extrapolation, additive and time bases",
+    "expression": "pure scene expression language; enabled flag honoured",
+    "link": "property/parameter/audio/marker sources, delay, smoothing and clamping",
+    "motionPath": "SVG path position, timing and orientation",
+}.items():
+    R.FEATURES.declare(_name, R.FULL, _note)
 
 _OPTIONAL = ("constraints", "text_animators", "camera", "physics", "deform", "modifiers", "masks", "layout",
              "captions", "audio", "output", "color", "safe_areas", "qa", "publish")
@@ -257,7 +267,8 @@ def report(path: str, all_features: bool = False) -> str:
         head += "  (valid)"
     lines = [head,
              f"  {len(rows)} concepts: {counts.get(R.NONE, 0)} not supported, {counts.get(R.PARTIAL, 0)} partial, "
-             f"{counts.get(R.FULL, 0)} supported" + ("" if all_features else "  (--all lists the supported ones)")]
+             f"{counts.get(R.FULL, 0)} supported" + ("" if all_features else "  (--all lists the supported ones)"),
+             "  Registry coverage only; attribute combinations and external asset contents are not verified."]
     wc = max([len(r[1]) for r in rows] + [8])
     wn = max([len(r[2]) for r in rows] + [8])
     current = None

@@ -108,6 +108,7 @@ def main(argv=None) -> int:
     p.add_argument("--frames-dir", help="keep rendered frames here; rerunning resumes")
     p.add_argument("--jobs", type=int, default=0, help="parallel frame workers (0 = CPU count)")
     p.add_argument("--no-audio", action="store_true")
+    p.add_argument("--no-motion-blur", action="store_true", help="ignore project motion blur (fast previews)")
     p.add_argument("--crf", type=int)
     p.add_argument("--publish", action="store_true",
                    help="upload to non-file <destination>s (s3, gcs, azure-blob, http-put, sftp, webhook)")

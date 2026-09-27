@@ -72,7 +72,7 @@ import numpy as np
 
 from ..raster import Buf
 from ..registry import ASSET_SIZES, ASSETS, FEATURES, FULL, warn_once
-from ..values import parse_fps
+from ..values import parse_bool, parse_fps
 from . import array_to_surface, cache_dir, ffmpeg_exe, generated_cache_path, probe_media, representation_src
 
 _LRU = 6
@@ -825,7 +825,7 @@ def video_audio(rc_or_doc, asset, sample_rate: int | None = None, channels: int 
         if path is None:
             return None
     elif kind == "video":
-        if asset.get("hasAudio", "false") != "true":
+        if not parse_bool(asset.get("hasAudio", "false")):
             return None
         src = representation_src(rc_or_doc, asset) if hasattr(rc_or_doc, "cache") else asset.get("src")
         path = doc.resolve_path(src)

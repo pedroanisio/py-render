@@ -110,6 +110,7 @@ import numpy as np
 
 from .document import ln
 from .registry import FEATURES, FULL, log, warn_once
+from .values import parse_bool
 
 FEATURES.declare("physics", FULL, "2D rigid and soft bodies, joints, force fields, bounds, cache; see physics.py")
 FEATURES.declare("rigidBody", FULL, "box/circle/capsule/polygon/path/convex-hull, groups, sensors, bullets (CCD)")
@@ -933,6 +934,7 @@ class PhysicsSim:
     def world_doc(self, el, t) -> np.ndarray:
         """Node-local -> composition document pixels at time t (keyframes only, no caches)."""
         rc = self.rc
+        from .nodes.core import child_ctx, _repeat_vars
         chain = []
         p = el
         while p is not None and ln(p) not in ("composition", "symbol", "symbols", "scene"):
@@ -943,14 +945,14 @@ class PhysicsSim:
         M = np.eye(3)
         box = (float(self.doc.width), float(self.doc.height))
         for node in chain:
-            shift = self.doc.clock_shift.get(node)
-            nctx = ctx if not shift else ctx.at(ctx.t - shift)
+            nctx = rc.enter_node(node, ctx)
             prev, self.busy = self.busy, True
             try:
                 M = rc.node_matrix(node, nctx, M, box, None)
             finally:
                 self.busy = prev
             box = rc.node_size(node, rc.node_ctx(node, nctx), box)
+            ctx = _repeat_vars(node, child_ctx(rc, node, nctx))
         return M
 
     def _size(self, el, t):
@@ -1119,9 +1121,9 @@ class PhysicsSim:
             b.activate_at = ev.num(rb, "activateAt", c0, 0.0)
             b.group = int(ev.num(rb, "collisionGroup", c0, 0.0))
             b.collides = _parse_groups(rb.get("collidesWith", "all"))
-            b.sensor = rb.get("sensor") in ("true", "1")
-            b.bullet = rb.get("bullet") in ("true", "1")
-            b.fixed_rotation = rb.get("fixedRotation") in ("true", "1")
+            b.sensor = parse_bool(rb.get("sensor"))
+            b.bullet = parse_bool(rb.get("bullet"))
+            b.fixed_rotation = parse_bool(rb.get("fixedRotation"))
             b.v0 = (ev.num(rb, "velocityX", c0, 0.0), ev.num(rb, "velocityY", c0, 0.0),
                     -math.radians(ev.num(rb, "angularVelocity", c0, 0.0)))
             bodies.append(b)
@@ -1268,7 +1270,7 @@ class PhysicsSim:
         spacing = float(np.min(L0[ks >= k * 0.99])) if len(L0) else 0.01
         s = Soft(el, kind, rows_, cols_, rest, pos, np.zeros_like(pos), mass / n, k, zeta,
                  ev.num(sb, "pressure", c0, 0.0), S, L0, ks, tens, pinned, ring, area0,
-                 sb.get("selfCollision") in ("true", "1"), rigid, anchor, int(min(sub, MAX_SUBSTEPS)),
+                 parse_bool(sb.get("selfCollision")), rigid, anchor, int(min(sub, MAX_SUBSTEPS)),
                  0.01, max(spacing, 1e-4), thick)
         if s.self_coll:
             if kind == "rope":

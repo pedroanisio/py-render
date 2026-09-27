@@ -48,12 +48,29 @@ class Schema:
         self.types: dict[str, TypeInfo] = {}
         self.root_type = self._anon_root(root)
         self._validator: etree.XMLSchema | None = None
+        self._semantic_validator = None
 
     # ------------------------------------------------------------ validation
     def validator(self) -> etree.XMLSchema:
         if self._validator is None:
             self._validator = etree.XMLSchema(self.tree)
         return self._validator
+
+    def semantic_errors(self, tree) -> list[str]:
+        """Cross-field rules kept beside the XSD and shipped in the package."""
+        path = os.path.splitext(self.path)[0] + ".sch"
+        if not os.path.isfile(path):
+            return []  # Custom schemas need not supply the scene-render rules.
+        if self._semantic_validator is None:
+            from lxml.isoschematron import Schematron
+            self._semantic_validator = Schematron(etree.parse(path), store_report=True)
+        validator = self._semantic_validator
+        if validator.validate(tree):
+            return []
+        ns = {"svrl": "http://purl.oclc.org/dsdl/svrl"}
+        return [f"{failure.get('location')}: {failure.get('id')}: "
+                + " ".join(failure.xpath("svrl:text/text()", namespaces=ns))
+                for failure in validator.validation_report.xpath("//svrl:failed-assert", namespaces=ns)]
 
     # ------------------------------------------------------------ type table
     def _anon_root(self, root) -> str:
@@ -158,6 +175,25 @@ class Schema:
                 return "list"
             return "string"
         return "string"
+
+    def whitespace(self, type_name: str) -> str:
+        """Effective XSD whitespace facet (preserve for string-derived types)."""
+        if type_name in ("xs:string", "enum", "xs:anySimpleType"):
+            return "preserve"
+        if type_name == "xs:normalizedString":
+            return "replace"
+        if type_name.startswith("xs:"):
+            return "collapse"
+        node = self._simple.get(type_name)
+        if node is None:
+            return "preserve"
+        if node.find(XS + "union") is not None or node.find(XS + "list") is not None:
+            return "collapse"
+        restriction = node.find(XS + "restriction")
+        if restriction is not None:
+            facet = restriction.find(XS + "whiteSpace")
+            return facet.get("value") if facet is not None else self.whitespace(restriction.get("base", "xs:string"))
+        return "preserve"
 
 
 _BUILTIN_KIND = {

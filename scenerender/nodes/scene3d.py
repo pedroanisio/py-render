@@ -23,7 +23,8 @@ from ..compositor import Out, RenderContext
 from ..evaluator import Ctx
 from ..raster import Canvas
 from ..registry import FEATURES, FULL, NODES, warn_once
-from ..three import lights, materials, view360  # noqa: F401  (feature declarations; render360 hook)
+from ..three import lights, materials, view360
+from ..values import parse_bool  # noqa: F401  (feature declarations; render360 hook)
 
 for _p in ("sphere", "box", "plane", "cylinder", "cone", "torus", "capsule", "text", "extrude"):
     FEATURES.declare(f"object3D:{_p}", FULL, "tessellated, PBR-shaded, shadowed")
@@ -38,7 +39,7 @@ def render_camera(rc: RenderContext, el, ctx: Ctx, M, size):
     if rc.cache.get("pass360") or cam3d.active_camera(rc, ctx.comp_t) is not el:
         return None
     from ..three import lights as L3
-    if not any(L.get("type") == "dome" and L.get("environmentVisible") == "true" for L in L3.light_elements(rc)):
+    if not any(L.get("type") == "dome" and parse_bool(L.get("environmentVisible")) for L in L3.light_elements(rc)):
         return None
     from ..three import scene
     if not scene.gl_ok():

@@ -11,6 +11,7 @@ import scenerender.transitions.fx  # noqa: F401
 import scenerender.transitions.motion  # noqa: F401
 import scenerender.transitions.space  # noqa: F401
 import scenerender.transitions.wipes  # noqa: F401
+import scenerender.transitions.shader  # noqa: F401
 from scenerender import document
 from scenerender.compositor import RenderContext
 from scenerender.evaluator import Evaluator

@@ -1,9 +1,8 @@
 # scenerender — architecture
 
 `scenerender` is a generic Python renderer for documents valid under
-`schema/scene-render-1.1.xsd`. It replaces the per-film scripts in `tools/`
-(`render.py`, `sr.py`, `sr2.py`, `preview_render.py`), which each hard-coded one
-document.
+`schema/scene-render-1.1.xsd`. It replaced the per-film scripts that used to live in `tools/`
+(removed; see git history), which each hard-coded one document.
 
 ## Pipeline
 
@@ -59,6 +58,28 @@ All signatures are in the `registry.py` docstring. Essentials:
 * **Unsupported cases**: `registry.warn_once(category, name, msg)` and degrade gracefully.
 * Register with a truthful level: `@EFFECTS.register("glow", level=FULL)`; use `PARTIAL`
   with a `note` when something is approximated.
+* XML booleans accept `true`, `false`, `1`, `0`, and surrounding whitespace.
+  Use `ev.bool` for evaluated values or `values.parse_bool` for raw attributes.
+  Never compare an attribute to the literal string `"true"` or `"false"`.
+
+## Support reporting and conformance
+
+`scenerender coverage` inventories declared registry support, including animation,
+expressions, links, motion paths, node motion blur and stabilization. It does not
+verify every attribute combination or inspect external asset contents. Passing XSD
+validation and a clean coverage report do not establish complete conformance.
+
+Lottie text layers support animated mask paths (arc-length placement, margins,
+reverse, perpendicular orientation and forced alignment) and expression selectors
+using the scene's pure expression language, including scalar/vector percentages,
+`textIndex`, `textTotal`, `selectorValue` and time. Arbitrary JavaScript and embedded
+glyph outlines remain outside that implementation; external Lottie expressions
+should be baked when they require a full JavaScript runtime.
+
+MXF output writes `maxCLL` and `maxFALL` into picture descriptors using the ULs
+recognized by FFmpeg's MXF reader. `mxf.py` updates primers, metadata copies,
+partition offsets and random indexes without re-encoding essence. Regression tests
+verify FFmpeg reads the values and decoded frames remain identical.
 
 ## Core APIs for handlers
 

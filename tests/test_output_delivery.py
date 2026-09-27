@@ -193,7 +193,7 @@ def test_prores_mov_and_dnxhr_mxf_hdr(tmp_path, monkeypatch):
     src = open(FIX).read()
     src = src.replace('<project width="128" height="64"', '<project width="256" height="128"')
     extra = (f'<output id="pr" path="pr.mov" codec="prores" maxCLL="600" maxFALL="100" masteringDisplay="{MD}"/>\n'
-             f'  <output id="dn" path="dn.mxf" codec="dnxhr" container="mxf" fps="25" maxCLL="600" masteringDisplay="{MD}"/>\n  ')
+             f'  <output id="dn" path="dn.mxf" codec="dnxhr" container="mxf" fps="25" maxCLL="600" maxFALL="100" masteringDisplay="{MD}"/>\n  ')
     src = re.sub(r"<output .*?</output>\n  ", "", src, flags=re.S)
     src = re.sub(r"<output [^>]*/>\n  ", "", src)
     src = src.replace("<scene360", extra + "<scene360")
@@ -204,6 +204,7 @@ def test_prores_mov_and_dnxhr_mxf_hdr(tmp_path, monkeypatch):
     mov = probe("pr.mov")
     assert "Mastering Display Metadata" in mov and "MaxCLL=600" in mov and "spherical: equirectangular" in mov
     assert "Mastering Display Metadata" in probe("dn.mxf")
+    assert "MaxCLL=600, MaxFALL=100" in probe("dn.mxf")
     assert frames_of("dn.mxf") == 25
 
 

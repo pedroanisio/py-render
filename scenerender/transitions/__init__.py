@@ -153,7 +153,7 @@ def velocity(rc, tr, ctx) -> float:
 
 def shutter_px(rc, tr, ctx, travel_px: float) -> float:
     """Motion-blur streak length for a picture moving travel_px per unit progress (180° shutter)."""
-    if rc.ev.str(tr, "motionBlur", ctx, "true") == "false":
+    if not rc.ev.bool(tr, "motionBlur", ctx, True):
         return 0.0
     fps = float(rc.doc.fps) or 30.0
     return abs(velocity(rc, tr, ctx) * travel_px) * 0.5 / fps

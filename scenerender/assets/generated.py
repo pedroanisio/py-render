@@ -1,7 +1,7 @@
 """generated assets: provider-generated media read only from the verified @cache.
 
 The renderer never calls @provider. @cache is used only when its SHA-256 equals @cacheSha256; otherwise
-the asset draws nothing (and is silent in the mix) after a one-time warning.
+rendering fails with SceneError, including when the cache is missing.
 kind image / video are drawn by the image / video handlers from the cache file (video uses @fps [30] and
 @duration; without @duration frames past the end hold the last one). speech / music / sound-effect are
 audio only: they have no picture (size 0 x 0); the audio mixer gets the verified file from
@@ -33,11 +33,10 @@ def _dims(rc, asset, path):
     return float(info.get("width", 0)), float(info.get("height", 0))
 
 
-def _cached(rc, asset):
-    key = ("generated-path", asset)
-    if key not in rc.cache:
-        rc.cache[key] = generated_cache_path(rc, asset)
-    return rc.cache[key]
+def _cached(rc, asset, ctx=None):
+    # The hash helper memoises by file metadata; do not cache a successful check
+    # for the lifetime of the renderer when the file may change between frames.
+    return generated_cache_path(rc, asset, ctx)
 
 
 @ASSETS.register("generated", level=FULL,
@@ -46,7 +45,7 @@ def render_generated(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
     kind = asset.get("kind")
     if kind not in ("image", "video"):
         return None
-    path = _cached(rc, asset)
+    path = _cached(rc, asset, ctx)
     if path is None:
         return None
     aw, ah = _dims(rc, asset, path)
@@ -66,4 +65,4 @@ def render_generated(rc, asset, M, ctx, *, layer=None, src_t=0.0, clip=None):
 def generated_size(rc, asset, ctx):
     if asset.get("kind") not in ("image", "video"):
         return 0.0, 0.0
-    return _dims(rc, asset, _cached(rc, asset))
+    return _dims(rc, asset, _cached(rc, asset, ctx))

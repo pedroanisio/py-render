@@ -338,15 +338,19 @@ def test_generated_cache_verification(tmp_path):
     good = _sha(os.path.join(MEDIA, "gen.png"))
     rc = make_rc(f'<generated id="ok" kind="image" provider="p" model="m" cache="gen.png" cacheSha256="{good}"/>'
                  f'<generated id="bad" kind="image" provider="p" model="m" cache="gen.png" cacheSha256="{"0" * 64}"/>'
+                 f'<generated id="badsp" kind="speech" provider="p" model="m" cache="tone.wav" cacheSha256="{"0" * 64}"/>'
                  f'<generated id="sp" kind="speech" provider="p" model="m" cache="tone.wav" cacheSha256="{_sha(os.path.join(MEDIA, "tone.wav"))}"/>',
                  '', tmp_path)
     assert rc.asset_size(rc.doc.ids["ok"], None) == (32.0, 32.0)
     assert _coverage(asset_buf(rc, "ok")) > 32 * 32 * 0.9
-    assert asset_buf(rc, "bad") is None
+    with pytest.raises(document.SceneError, match="does not match cacheSha256"):
+        asset_buf(rc, "bad")
     assert rc.asset_size(rc.doc.ids["sp"], None) == (0.0, 0.0)
     from scenerender.assets import audio_source_path
     assert audio_source_path(rc, rc.doc.ids["sp"]).endswith("tone.wav")
-    assert audio_source_path(rc, rc.doc.ids["bad"]) is None
+    assert audio_source_path(rc, rc.doc.ids["bad"]) is None  # image has no audio
+    with pytest.raises(document.SceneError, match="does not match cacheSha256"):
+        audio_source_path(rc, rc.doc.ids["badsp"])
 
 
 def test_lottie_missing_file_skips(tmp_path):
@@ -365,6 +369,10 @@ def test_demo_document_valid_and_renders():
     doc = document.load(DEMO)
     assert not doc.validation_errors
     rc = RenderContext(doc, Evaluator(doc), scale=0.5)
-    for t in (0.5, 1.9, 2.5, 3.5):
+    for t in (0.5, 1.9, 3.5):
         px = frame_rgb(rc, t)
         assert px.std() > 10, t
+    # The third panel intentionally contains gen-bad with an all-zero digest.
+    # The XSD accepts its lexical form; rendering must reject the wrong content.
+    with pytest.raises(document.SceneError, match="gen-bad.*does not match cacheSha256"):
+        frame_rgb(rc, 2.5)
