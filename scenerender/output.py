@@ -350,40 +350,59 @@ def _graded_background(r):
 
 
 def render_frame(r, t: float, kind: str, size: tuple[int, int] | None, pad_even: bool) -> np.ndarray:
+    return begin_frame(r, t, kind, size, pad_even)()
+
+
+def begin_frame(r, t: float, kind: str, size: tuple[int, int] | None, pad_even: bool):
+    """render_frame, started: returns a function that gives the image. A frame composited on the GPU
+    is converted there and read back while the caller goes on with the next frame (see FrameSource),
+    so collecting it does not wait for the GPU."""
     from .raster import linear_to_srgb, working_to_rgb8
     frame = int(round(t * float(r.doc.fps)))
-    px = r.frame_linear(t, frame)
+    buf = r.frame_buf(t, frame)
     lin = r.rc.linear
+    if kind == "rgb8" and buf.gpu is not None:
+        from . import gpucomp
+        collect = gpucomp.to_rgb8_async(buf, lin, _graded_background(r))    # 3 bytes a pixel leave the GPU
+        return lambda: _fit(collect(), size, pad_even)
     if kind == "rgb8":
-        img = working_to_rgb8(px, lin, _graded_background(r))
-    elif kind == "rgba8":
-        rgb = working_to_rgb8(px, lin)
-        a = (np.clip(px[..., 3:4], 0, 1) * 255 + 0.5).astype(np.uint8)
-        img = np.concatenate([rgb, a], -1)
+        img = working_to_rgb8(buf.px, lin, _graded_background(r))
     else:
-        a = px[..., 3:4]
-        if kind in ("rgb16", "rgba16"):
-            if kind == "rgb16":
-                bg = np.asarray(_graded_background(r)[:3], np.float32)
-                rgb = px[..., :3] + bg * (1 - a)
-                straight = rgb
-            else:
-                straight = np.where(a > 1e-6, px[..., :3] / np.maximum(a, 1e-6), 0)
-            if lin:
-                straight = linear_to_srgb(straight)
-            img = (np.clip(straight, 0, 1) * 65535 + 0.5).astype(np.uint16)
-            if kind == "rgba16":
-                img = np.concatenate([img, (np.clip(a, 0, 1) * 65535 + 0.5).astype(np.uint16)], -1)
-        else:   # float: linear light; floata = premultiplied RGBA, float = RGB over the background
-            from .raster import srgb_to_linear
-            rgb = px[..., :3] if lin else srgb_to_linear(np.where(a > 1e-6, px[..., :3] / np.maximum(a, 1e-6), 0)) * a
-            if kind == "floata":
-                img = np.concatenate([rgb, a], -1).astype(np.float32)
-            else:
-                bg = np.asarray(_graded_background(r)[:3], np.float32)
-                if not lin:
-                    bg = srgb_to_linear(bg)
-                img = (rgb + bg * (1 - a)).astype(np.float32)
+        px = buf.px
+        if kind == "rgba8":
+            rgb = working_to_rgb8(px, lin)
+            a = (np.clip(px[..., 3:4], 0, 1) * 255 + 0.5).astype(np.uint8)
+            img = np.concatenate([rgb, a], -1)
+        else:
+            a = px[..., 3:4]
+            if kind in ("rgb16", "rgba16"):
+                if kind == "rgb16":
+                    bg = np.asarray(_graded_background(r)[:3], np.float32)
+                    rgb = px[..., :3] + bg * (1 - a)
+                    straight = rgb
+                else:
+                    straight = np.where(a > 1e-6, px[..., :3] / np.maximum(a, 1e-6), 0)
+                if lin:
+                    straight = linear_to_srgb(straight)
+                img = (np.clip(straight, 0, 1) * 65535 + 0.5).astype(np.uint16)
+                if kind == "rgba16":
+                    img = np.concatenate([img, (np.clip(a, 0, 1) * 65535 + 0.5).astype(np.uint16)], -1)
+            else:   # float: linear light; floata = premultiplied RGBA, float = RGB over the background
+                from .raster import srgb_to_linear
+                rgb = px[..., :3] if lin else srgb_to_linear(np.where(a > 1e-6, px[..., :3] / np.maximum(a, 1e-6), 0)) * a
+                if kind == "floata":
+                    img = np.concatenate([rgb, a], -1).astype(np.float32)
+                else:
+                    bg = np.asarray(_graded_background(r)[:3], np.float32)
+                    if not lin:
+                        bg = srgb_to_linear(bg)
+                    img = (rgb + bg * (1 - a)).astype(np.float32)
+    img = _fit(img, size, pad_even)
+    return lambda: img
+
+
+def _fit(img: np.ndarray, size: tuple[int, int] | None, pad_even: bool) -> np.ndarray:
+    """img at the output size, padded to even dimensions when pad_even."""
     if size and (img.shape[1], img.shape[0]) != size:
         img = _resize(img, size)
     if pad_even and (img.shape[0] % 2 or img.shape[1] % 2):
@@ -587,6 +606,8 @@ class FrameSource:
             rest_set = set(rest)
         else:
             rest_set = set()
+        # Frames rendered here are pipelined one deep: frame i + 1 starts before frame i is collected.
+        serial = _pipelined(self, [i for i in range(n) if i not in cached and i not in rest_set])
         try:
             for i in range(n):
                 if i in cached:
@@ -600,7 +621,7 @@ class FrameSource:
                     img = np.frombuffer(raw, np.dtype(dt)).reshape(shape)
                     self._save(i, img)
                 else:
-                    img = render_frame(self.r, self.times[i], self.kind, self.size, self.pad)
+                    img = next(serial)
                     self._save(i, img)
                 if self.tap is not None:
                     self.tap(img)
@@ -610,6 +631,18 @@ class FrameSource:
                 for proc in list(getattr(pool, "_processes", {}).values()):
                     proc.terminate()
                 pool.shutdown(wait=True, cancel_futures=True)
+
+
+def _pipelined(src: "FrameSource", idx: list[int]):
+    """The images of frames idx of src in order, each started before the previous one is collected."""
+    pending = None
+    for i in idx:
+        started = begin_frame(src.r, src.times[i], src.kind, src.size, src.pad)
+        if pending is not None:
+            yield pending()
+        pending = started
+    if pending is not None:
+        yield pending()
 
 
 class Progress:
@@ -958,7 +991,9 @@ def run_job(r, job: Job, args, tap=None) -> list[str]:
     subsampled = job.codec in ("h264", "h265", "av1", "vp9", "webp") or (job.codec == "ffv1" and not job.alpha) \
         or job.codec in ("prores", "dnxhr")
     pad_even = subsampled
-    jobs_n = getattr(args, "jobs", 0)
+    # One process by default: every extra worker reopens the document and redraws the raster cache,
+    # trading CPU time for wall time (--jobs 0: one per CPU).
+    jobs_n = getattr(args, "jobs", 1)
     jobs_n = min(os.cpu_count() or 1, 8) if not jobs_n else max(1, jobs_n)
     frames_dir = getattr(args, "frames_dir", None)
     if frames_dir and len(getattr(args, "_jobs_list", [])) > 1:

@@ -16,7 +16,7 @@ import numpy as np
 from . import document
 from .compositor import RenderContext
 from .evaluator import Evaluator
-from .raster import working_to_rgb8
+from .raster import Buf, working_to_rgb8
 from .registry import FEATURES, FULL, load_plugins
 from .values import parse_bool, paint_ref, parse_color
 
@@ -76,11 +76,15 @@ class Renderer:
 
     def frame_linear(self, t: float, frame: int | None = None) -> np.ndarray:
         """Premultiplied working-space frame (h, w, 4) float32, before background."""
+        return self.frame_buf(t, frame).px
+
+    def frame_buf(self, t: float, frame: int | None = None):
+        """frame_linear as a Buf, whose pixels may still be on the GPU (see gpucomp)."""
         frame = int(round(t * self.fps)) if frame is None else frame
         rc = self.rc
         p = self.doc.project
         if not rc.motion_blur:
-            return rc.render_frame(t, frame).px
+            return rc.render_frame(t, frame)
         n = max(1, int(p.get("motionBlurSamples", 16)))
         base = float(p.get("shutterAngle", 180))
         sa = rc.hooks.get("shutter_angle")
@@ -95,36 +99,28 @@ class Renderer:
                 # Matching endpoints alone cannot establish a still frame: motion
                 # may return to its starting position during the shutter.
                 if self._static_shutter(times[0], times[-1]):
-                    first, last = rc.render_frame(times[0], frame).px, rc.render_frame(times[-1], frame).px
-                    if first.shape == last.shape and float(np.abs(first - last).max(initial=0.0)) < 0.5 / 255:
-                        return (first + last) / 2
-                    acc = self._accumulate(times[1:-1], frame, first + last)
-                    acc /= n
-                    return acc
+                    first, last = rc.render_frame(times[0], frame), rc.render_frame(times[-1], frame)
+                    if first.rect == last.rect and _max_abs_diff(first, last) < 0.5 / 255:
+                        return _mean(_add(_add(None, first), last), 2)
+                    acc = self._accumulate(times[1:-1], frame, _add(_add(None, first), last))
+                    return _mean(acc, n)
                 # acc = first + last, then the inner samples in order.
-                acc = self._accumulate([times[0], times[-1], *times[1:-1]], frame)
-                acc /= n
-                return acc
-            acc = self._accumulate(times, frame)
-            acc /= n
-            return acc
+                return _mean(self._accumulate([times[0], times[-1], *times[1:-1]], frame), n)
+            return _mean(self._accumulate(times, frame), n)
         finally:
             rc.mb_center = None
             rc.mb_interval, rc._mb_nodes, rc._mb_static = None, None, {}
 
     # ------------------------------------------------------------ shutter samples
-    def _accumulate(self, times: list[float], frame: int, acc: np.ndarray | None = None) -> np.ndarray:
-        """acc + the frames at times, summed in order. Samples are independent renders, so spare CPUs
-        render them in worker processes; the sum is formed here in the same order either way."""
+    def _accumulate(self, times: list[float], frame: int, acc=None):
+        """acc (a Buf) + the frames at times, summed in order. Samples are independent renders, so with
+        SCENERENDER_SAMPLE_WORKERS=1 spare CPUs render them in worker processes; the sum is formed here
+        in the same order either way."""
         rc = self.rc
         pool = self._sample_pool(times, frame) if times else None
         if pool is None:
             for ts in times:
-                px = rc.render_frame(ts, frame).px
-                if acc is None:
-                    acc = px
-                else:
-                    acc += px            # in place: the same sums without a new frame per sample
+                acc = _add(acc, rc.render_frame(ts, frame))
             return acc
         from . import thread_limit
         shape = (rc.height, rc.width, 4)
@@ -153,10 +149,7 @@ class Renderer:
                 for i in c:
                     out[i] = rc.render_frame(times[i], frame).px
             for i in range(len(times)):
-                if acc is None:
-                    acc = out[i].copy()
-                else:
-                    acc += out[i]
+                acc = _add(acc, Buf(out[i].copy(), 0, 0))
             del out
             return acc
         except BaseException:
@@ -182,6 +175,11 @@ class Renderer:
     def _sample_pool(self, times: list[float], frame: int):
         """Worker processes for shutter samples, or None when rendering here is as fast or not equivalent."""
         from . import threads
+        # Opt-in: every sample worker reopens the document and redraws what this process has cached,
+        # which saves wall time on idle CPUs but costs CPU time (a 5 s map shot: 71.6 CPU-s with
+        # sample workers, 40.4 without).
+        if os.environ.get("SCENERENDER_SAMPLE_WORKERS", "0") != "1":
+            return None
         n = len(times)
         workers = min(threads(), n, self._mem_workers_cap) - 1
         workers = self._memory_bounded_workers(workers)
@@ -324,8 +322,11 @@ class Renderer:
 
     def frame_rgb(self, t: float, frame: int | None = None) -> np.ndarray:
         frame = int(round(t * self.fps)) if frame is None else frame
-        px = self.frame_linear(t, frame)
-        return working_to_rgb8(px, self.rc.linear, self.graded_background())
+        buf = self.frame_buf(t, frame)
+        if buf.gpu is not None:
+            from . import gpucomp
+            return gpucomp.to_rgb8(buf, self.rc.linear, self.graded_background())
+        return working_to_rgb8(buf.px, self.rc.linear, self.graded_background())
 
     def frame_rgba(self, t: float, frame: int | None = None) -> np.ndarray:
         """Straight-alpha RGBA without the project background (for alpha outputs)."""
@@ -440,3 +441,31 @@ def hook_installer(name: str):
         _HOOK_INSTALLERS.append((name, fn))
         return fn
     return deco
+
+
+def _add(acc, buf):
+    """acc + buf as a Buf (acc None: buf itself). On the GPU when either is (gpucomp.accumulate)."""
+    if acc is None:
+        return buf
+    if acc.gpu is not None or buf.gpu is not None:
+        from . import gpucomp
+        return gpucomp.accumulate(gpucomp.accumulate(None, acc), buf)
+    acc.px += buf.px            # in place: the same sums without a new frame per sample
+    return acc
+
+
+def _mean(acc, n: int):
+    if n == 1:
+        return acc
+    if acc.gpu is not None:
+        from . import gpucomp
+        return gpucomp.combine(acc, None, n)
+    acc.px /= n
+    return acc
+
+
+def _max_abs_diff(a, b) -> float:
+    if a.gpu is not None or b.gpu is not None:
+        from . import gpucomp
+        return gpucomp.max_abs_diff(a, b)
+    return float(np.abs(a.px - b.px).max(initial=0.0))

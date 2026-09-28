@@ -315,6 +315,10 @@ def composite(dst: Buf, src: Buf, mode: str = "normal", opacity: float = 1.0, gr
     """Blend src onto dst; returns dst (grown to cover src when grow is True)."""
     if opacity <= 0:
         return dst
+    if dst.gpu is not None:
+        from . import gpucomp
+        if gpucomp.composite(dst, src, mode, opacity):
+            return dst
     op = BLENDS.get(mode)
     if op is None:
         warn_once("blend", mode)

@@ -94,6 +94,7 @@ class RenderContext:
     _rcache: dict = field(default_factory=dict)    # raster cache entries, see _render_cached
     _rc_ok: dict = field(default_factory=dict)     # (node, window) -> content provably static
     _rc_inside: int = 0                            # > 0 while rendering a raster-cache entry
+    _gpu_frame: bool = False                       # this frame composites on the GPU (see gpucomp)
 
     def __post_init__(self):
         import cairo
@@ -164,7 +165,8 @@ class RenderContext:
         self.install_working_primaries()
         ctx = Ctx(t=t, comp_t=t, frame=frame)
         comp = self.doc.section("composition")
-        out = Buf.empty(0, 0, self.width, self.height)
+        out = self._frame_target()
+        self._gpu_frame = out.gpu is not None
         out = self.render_children(comp, out, ctx, self.root_matrix, (self.doc.width, self.doc.height), 1.0)
         if self.doc.reframe == "fit-blur" and self.doc.layout:
             out = self._fit_blur_backdrop(out, ctx, comp)
@@ -176,6 +178,18 @@ class RenderContext:
                     out = out.crop_to(self.frame_rect)
                 out = hook(self, out, ctx)
         return out.crop_to(self.frame_rect).expand_to(self.frame_rect)
+
+    def _frame_target(self) -> Buf:
+        """The empty frame the composition draws into: on the GPU when gpucomp is enabled (not for
+        documents whose adjustment layers could read what is composited outside the frame)."""
+        from . import gpucomp
+        if self.frame_rect == (0, 0, self.width, self.height) and gpucomp.enabled():
+            gpu_ok = self.cache.get("gpu-frame")
+            if gpu_ok is None:
+                gpu_ok = self.cache["gpu-frame"] = not any(ln(e) == "adjustment" for e in self.doc.root.iter("{*}adjustment", "adjustment"))
+            if gpu_ok:
+                return gpucomp.frame(self.frame_rect)
+        return Buf.empty(0, 0, self.width, self.height)
 
     def _fit_blur_backdrop(self, fitted: Buf, ctx, comp) -> Buf:
         """fit-blur: a blurred, cover-scaled copy of the composition fills the bars around the fitted frame."""
@@ -582,11 +596,30 @@ class RenderContext:
         entries = self._mb_nodes.setdefault(el, [])
         for k, pm, out in entries:
             if k == key and np.array_equal(pm, PM):
-                return None if out is None else Out(Buf(out.buf.px.copy(), out.buf.x0, out.buf.y0), out.blend, out.opacity)
+                return None if out is None else Out(self._reuse_copy(out.buf), out.blend, out.opacity)
         out = self._render_node_once(el, ctx, PM, box, layout_pos)
-        kept = None if out is None else Out(Buf(out.buf.px.copy(), out.buf.x0, out.buf.y0), out.blend, out.opacity)
+        if out is not None and self._gpu_frame:
+            # One GPU copy lent to every sample of the frame: no CPU copy or upload per sample.
+            from . import gpucomp
+            b = out.buf
+            if b.gpu is None:
+                tile = gpucomp.shared_upload(b.px)
+            else:
+                tile = b.gpu
+                tile.shared = True
+            out = Out(gpucomp.lend(tile, b.x0, b.y0), out.blend, out.opacity)
+        kept = None if out is None else Out(self._reuse_copy(out.buf), out.blend, out.opacity)
         entries.append((key, np.array(PM, copy=True), kept))
         return out
+
+    @staticmethod
+    def _reuse_copy(b: Buf) -> Buf:
+        """A Buf with b's pixels that its user may write into: a CPU copy, or another loan of a GPU tile
+        (writing to a loan downloads a private copy)."""
+        if b.gpu is not None and b.gpu.shared:
+            from . import gpucomp
+            return gpucomp.lend(b.gpu, b.x0, b.y0)
+        return Buf(b.px.copy(), b.x0, b.y0)
 
     def mb_reusable(self, el, ctx: Ctx) -> bool:
         """Whether el's rendered output is the same at every time of the shutter interval.
@@ -827,24 +860,28 @@ class RenderContext:
         exact (A = M) and is reused while M is unchanged; a changed M resamples a raster drawn at 15%
         above the current scale over a 25% margin around the view (redrawn when the view leaves it or
         zooms past it)."""
-        base = self.base()
-        cache = base._rcache
-        if cache.get("_k") != k:          # a new window: the previous window's rasters are stale
-            cache.clear()
+        cache = self.base()._rcache
+        if cache.get("_k") != k:
+            # A new window: rasters not proven static through the previous one are stale.
+            for kk in [kk for kk, e in cache.items() if kk != "_k" and e["k"] < k - 1]:
+                del cache[kk]
             cache["_k"] = k
-        entry = cache.get(key)
-        if entry is not None and entry["sig"] != sig:      # the document or a file changed since
-            entry = None
+        entry = _live_entry(cache, key, sig, k)
         if entry is None:
             buf = self._draw_with(draw, M, None)
             if buf is _NOT_CACHED:
                 return _NOT_CACHED
             if crop and buf is not None and not buf.is_null:
                 buf = _crop_alpha(buf)      # transparent pixels composite to nothing: copies stay small
-            cache[key] = {"exact": True, "M": np.array(M, copy=True), "buf": buf, "sig": sig}
+            cache[key] = {"exact": True, "M": np.array(M, copy=True), "buf": buf, "sig": sig, "k": k}
             return None if buf is None else (buf if share else Buf(buf.px.copy(), buf.x0, buf.y0))
         if entry["exact"] and np.array_equal(entry["M"], M):
             b = entry["buf"]
+            if b is not None and self._gpu_frame and not share:
+                # Lent from the GPU copy: composited onto the GPU frame without a download (a caller
+                # writing into it downloads a private copy).
+                from . import gpucomp
+                return gpucomp.lend(_entry_tile(entry), b.x0, b.y0)
             # share: the caller only reads it (composites it at once); otherwise callers may write into it
             return None if b is None else (b if share else Buf(b.px.copy(), b.x0, b.y0))
         s_now = math.sqrt(abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))
@@ -865,7 +902,7 @@ class RenderContext:
             return _NOT_CACHED
         if crop and buf is not None:
             buf = _crop_alpha(buf)
-        entry = cache[key] = {"exact": False, "A": A, "s": s_r, "region": region, "buf": buf, "sig": sig}
+        entry = cache[key] = {"exact": False, "A": A, "s": s_r, "region": region, "buf": buf, "sig": sig, "k": k}
         return self._warp_raster(entry, M)
 
     def _draw_with(self, draw, A, dims):
@@ -878,6 +915,7 @@ class RenderContext:
             rc.width, rc.height = dims
             rc.frame_rect = (0, 0, dims[0], dims[1])
             rc.frame_cache, rc._mb_nodes, rc._fx_memo = {}, None, {}
+            rc._gpu_frame = False
         rc._rc_inside += 1
         try:
             return draw(rc, A)
@@ -932,6 +970,12 @@ class RenderContext:
             b = entry["last"][1]
             return None if b is None else Buf(b.px.copy(), b.x0, b.y0)
         from . import kernels
+        if self._gpu_frame:
+            g = self._warp_geometry(src, entry["A"], M)
+            if g is None:
+                return None
+            from . import gpucomp
+            return gpucomp.warp(_entry_tile(entry), g[1], g[0])
         if not kernels.enabled():
             return warp_projective(src, M @ np.linalg.inv(entry["A"]), self.frame_rect)
         g = self._warp_geometry(src, entry["A"], M)
@@ -948,13 +992,20 @@ class RenderContext:
         but the raster is never copied: an exact entry is composited as is, a resampled one is warped
         straight into dst in one pass."""
         from . import kernels
-        entry = self.base()._rcache.get(key)
-        moving = (entry is not None and entry["sig"] == sig and not entry["exact"] and kernels.enabled()
-                  and entry["buf"] is not None and self.base()._rcache.get("_k") == k)
+        entry = _live_entry(self.base()._rcache, key, sig, k)
+        gpu = dst.gpu is not None
+        moving = entry is not None and not entry["exact"] and (kernels.enabled() or gpu) and entry["buf"] is not None
         if moving:
             s_now = math.sqrt(abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))
             view = self._local_view(M, 64)
             if view is not None and entry["s"] * 0.45 <= s_now <= entry["s"] and _contains(entry["region"], view):
+                if gpu:
+                    # Resampled straight into the GPU frame: cheaper than reusing a nearby warp.
+                    g = self._warp_geometry(entry["buf"], entry["A"], M)
+                    if g is not None:
+                        from . import gpucomp
+                        gpucomp.warp_over(dst, _entry_tile(entry), g[1], g[0])
+                    return dst
                 if self._moved(entry, M) < WARP_REUSE_PX:
                     b = entry["last"][1]       # a shutter sample within WARP_REUSE_PX of the last warp
                     return dst if b is None else blending.composite(dst, b, "normal", 1.0)
@@ -979,6 +1030,9 @@ class RenderContext:
         if buf is None:
             return dst
         entry = self.base()._rcache.get(key)
+        if gpu and entry is not None and entry["exact"] and entry["buf"] is buf:
+            from . import gpucomp
+            return blending.composite(dst, gpucomp.lend(_entry_tile(entry), buf.x0, buf.y0), "normal", 1.0)
         if (kernels.enabled() and not dst.is_null and entry is not None and entry["exact"]
                 and entry["buf"] is buf and buf.px.dtype == np.float32):
             # A cached run is often sparse (lines, labels): composite only its occupied tiles.
@@ -1396,6 +1450,30 @@ def _crop_alpha(buf: Buf) -> Buf | None:
     cols = np.flatnonzero(cov.any(0))
     y0, y1, x0, x1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
     return Buf(np.ascontiguousarray(buf.px[y0:y1, x0:x1]), buf.x0 + int(x0), buf.y0 + int(y0))
+
+
+def _entry_tile(entry: dict):
+    """The GPU copy of a raster-cache entry's pixels, uploaded on first use and freed with the entry."""
+    t = entry.get("tile")
+    if t is None:
+        from . import gpucomp
+        t = entry["tile"] = gpucomp.shared_upload(entry["buf"].px)
+    return t
+
+
+def _live_entry(cache: dict, key, sig, k: int):
+    """The raster-cache entry for key if it is still valid in window k, else None.
+
+    The caller has proven the content static over window k (with 0.1 s margins); an entry proven static
+    over window k - 1 therefore stays valid, since two overlapping static intervals are one static
+    interval. Rasters so carry over from window to window for as long as their content stays unchanged,
+    instead of being redrawn every RASTER_WINDOW seconds."""
+    entry = cache.get(key)
+    if entry is None or entry["sig"] != sig:      # absent, or the document or a file changed since
+        return None
+    if entry["k"] == k - 1:
+        entry["k"] = k
+    return entry if entry["k"] == k else None
 
 
 def _contains(outer, inner) -> bool:

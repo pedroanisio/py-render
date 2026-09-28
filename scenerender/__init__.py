@@ -14,6 +14,10 @@ def _tune_threads() -> None:
     # of its threads: a 1080p source-over used 46 ms of CPU for 7 ms of wall time (passive: 5 ms CPU,
     # 1.6 ms wall). Read once when the OpenMP runtime loads, so it is set before any kernel runs.
     os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+    # The NVIDIA GL driver spin-waits for the GPU on every readback (3D layers, shader effects): a 3D
+    # shot spent a third of its CPU time in glReadPixels. USLEEP makes it sleep instead, at the same
+    # wall time. Read when the driver loads, so it is set before any GL context exists.
+    os.environ.setdefault("__GL_YIELD", "USLEEP")
     n = os.environ.get("SCENERENDER_BLAS_THREADS", "1")
     if n == "0":
         return

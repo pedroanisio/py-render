@@ -952,16 +952,22 @@ def _down_target(r: Res, w: int, h: int):
     return hit
 
 
-def _read(r: Res, t: Target, rect=None, depth: bool = True, n: int = 1):
+def _read(r: Res, t: Target, rect=None, depth: bool = True, n: int = 1, gpu: bool = False):
     """Resolve and read (colour, depth or None) of rect = (x0, y0, x1, y1) in top-down pixels, reduced
-    by an exact n x n box average (SSAA) on the GPU when n > 1; rect must then be n-aligned."""
+    by an exact n x n box average (SSAA) on the GPU when n > 1; rect must then be n-aligned.
+    gpu: the colour stays on the GPU as a top-down gpucomp.GpuTile (no depth)."""
     ctx = r.ctx
     ctx.copy_framebuffer(t.resolve, t.fbo)
     x0, y0, x1, y1 = rect if rect is not None else (0, 0, t.w, t.h)
+    if gpu:
+        from .. import gpucomp
+        if n <= 1:
+            return gpucomp.from_gl(t.rc_tex, x0, t.h - y1, x1 - x0, y1 - y0), None
+        depth = False
     if n > 1:
         import moderngl
         w, h = (x1 - x0) // n, (y1 - y0) // n
-        fb, _, _ = _down_target(r, w, h)
+        fb, col_tex, _ = _down_target(r, w, h)
         fb.use()
         ctx.viewport = (0, 0, w, h)
         ctx.disable(moderngl.DEPTH_TEST | moderngl.BLEND | moderngl.CULL_FACE)
@@ -973,6 +979,8 @@ def _read(r: Res, t: Target, rect=None, depth: bool = True, n: int = 1):
         _set(r.down, "u_depth", int(bool(depth)))
         _set(r.down, "u_origin", (int(x0), int(t.h - y1)))
         r.down_vao.render(moderngl.TRIANGLE_STRIP)
+        if gpu:
+            return gpucomp.from_gl(col_tex, 0, 0, w, h), None
         col = np.frombuffer(fb.read(components=4, dtype="f4", attachment=0), np.float32)
         col = np.ascontiguousarray(col.reshape(h, w, 4)[::-1])
         dep = None
@@ -1042,9 +1050,10 @@ def render_opaque(r: Res, fr: Frame3D, tex_cache: dict):
     return tex
 
 
-def render_layer(r: Res, fr: Frame3D, obj: ObjDraw, tex_cache: dict, depth: bool = True):
+def render_layer(r: Res, fr: Frame3D, obj: ObjDraw, tex_cache: dict, depth: bool = True, gpu: bool = False):
     """(premultiplied colour, premultiplied view depth or None, (x0, y0)) of one object, read back over
-    its screen rect at the frame's render size; None when it is off screen."""
+    its screen rect at the frame's render size; None when it is off screen. gpu: the colour stays on
+    the GPU (a gpucomp.GpuTile, see _read)."""
     import moderngl
     rect = screen_rect(fr, obj, fr.ssaa)
     if rect is None:
@@ -1063,18 +1072,18 @@ def render_layer(r: Res, fr: Frame3D, obj: ObjDraw, tex_cache: dict, depth: bool
     t.fbo.color_mask = ((True, True, True, True), (True, True, True, True))
     r.ctx.enable(moderngl.BLEND)
     draw_object(r, fr, obj, V, P, tex_cache, fr.opaque)
-    col, dep = _read(r, t, rect, depth, n=fr.ssaa)
+    col, dep = _read(r, t, rect, depth, n=fr.ssaa, gpu=gpu)
     restore_state(r)
     return col, dep, rect[:2]
 
 
-def render_background(r: Res, fr: Frame3D) -> np.ndarray | None:
+def render_background(r: Res, fr: Frame3D, gpu: bool = False):
     if not fr.env.visible:
         return None
     t = target(r, fr.pw, fr.ph)
     _begin(r, t)
     V, P = matrices(fr)
     draw_background(r, fr, V, P)
-    col = _read(r, t, None, False, n=fr.ssaa)[0]
+    col = _read(r, t, None, False, n=fr.ssaa, gpu=gpu)[0]
     restore_state(r)
     return col

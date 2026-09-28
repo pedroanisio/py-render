@@ -216,7 +216,10 @@ def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
             hi.append(b[1])
     sp = model.splats
     if sp is not None and len(sp.positions):          # COLMAP axes (y down, z forward): E-flipped, see build_object
-        slo, shi = sp.positions.min(0), sp.positions.max(0)
+        b = sp.__dict__.get("_bounds")
+        if b is None:
+            b = sp.__dict__["_bounds"] = (sp.positions.min(0), sp.positions.max(0))   # loaded splats are immutable
+        slo, shi = b
         lo.append(np.array([slo[0], -shi[1], -shi[2]]))
         hi.append(np.array([shi[0], -slo[1], -slo[2]]))
     bounds = (np.min(lo, 0), np.max(hi, 0)) if lo else None
@@ -545,19 +548,39 @@ def render_node_layer(rc, el, ctx: Ctx) -> Buf | None:
     if obj is None:
         return None
     r = R.res()
-    got = R.render_layer(r, fr, obj, rc.cache.setdefault("gl-tex", {}), depth=fr.cam.dof and not fr.cam.ortho)
+    gpu = _gpu_layer(rc, fr)
+    got = R.render_layer(r, fr, obj, rc.cache.setdefault("gl-tex", {}), depth=fr.cam.dof and not fr.cam.ortho, gpu=gpu)
     if got is None:
         return None
     col, dep, at = got
+    if gpu:
+        return _gpu_buf(fr, col, at)
     return finish_layer(rc, fr, col, dep, at)
 
 
 def render_background_layer(rc, t: float, root) -> Buf | None:
     fr = frame3d(rc, t, root)
-    col = R.render_background(R.res(), fr)
+    gpu = _gpu_layer(rc, fr)
+    col = R.render_background(R.res(), fr, gpu=gpu)
     if col is None:
         return None
+    if gpu:
+        return _gpu_buf(fr, col, (0, 0))
     return finish_layer(rc, fr, col, None)
+
+
+def _gpu_layer(rc, fr) -> bool:
+    """Can the layer stay on the GPU? When the frame composites there (gpucomp) and finish_layer would
+    only crop it: no depth of field, 2.5D scene matrix or lens distortion, and a linear working space."""
+    cam = fr.cam
+    return (rc._gpu_frame and rc.linear and rc.scene_matrix is None and abs(cam.lens_k) <= 1e-9
+            and not (cam.dof and not cam.ortho))
+
+
+def _gpu_buf(fr, tile, at) -> Buf:
+    """finish_layer for a GPU layer: placed like a read-back one, uncropped (its transparent pixels
+    composite to nothing)."""
+    return Buf(None, int(round(fr.ox)) + at[0] // fr.ssaa, int(round(fr.oy)) + at[1] // fr.ssaa, gpu=tile)
 
 
 def gl_ok() -> bool:

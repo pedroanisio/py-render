@@ -10,7 +10,6 @@ uses linearLight, else sRGB-encoded).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 import cairo
 import numpy as np
@@ -56,19 +55,42 @@ def linear_to_srgb(a: np.ndarray) -> np.ndarray:
     return np.where(a <= 0.0031308, a * 12.92, 1.055 * np.power(a, 1 / 2.4) - 0.055).astype(np.float32)
 
 
-@dataclass
 class Buf:
-    px: np.ndarray          # (h, w, 4) float32, premultiplied
-    x0: int = 0
-    y0: int = 0
+    """px: (h, w, 4) float32, premultiplied, placed at (x0, y0). A Buf may instead hold its pixels on
+    the GPU (gpu: a gpucomp.GpuTile, see gpucomp); reading px then downloads them once."""
+
+    __slots__ = ("_px", "_gpu", "x0", "y0")
+
+    def __init__(self, px: np.ndarray | None, x0: int = 0, y0: int = 0, gpu=None):
+        self._px, self._gpu, self.x0, self.y0 = px, gpu, x0, y0
+
+    @property
+    def px(self) -> np.ndarray:
+        if self._px is None:
+            g, self._gpu = self._gpu, None
+            self._px = g.download()
+            g.release()
+        return self._px
+
+    @px.setter
+    def px(self, value: np.ndarray) -> None:
+        self._px, self._gpu = value, None
+
+    @property
+    def gpu(self):
+        """The GPU tile holding the pixels, or None when they are in px."""
+        return self._gpu if self._px is None else None
+
+    def __repr__(self) -> str:
+        return f"Buf({'gpu' if self._px is None else 'cpu'} {self.w}x{self.h} at {self.x0},{self.y0})"
 
     @property
     def w(self) -> int:
-        return self.px.shape[1]
+        return self._px.shape[1] if self._px is not None else self._gpu.w
 
     @property
     def h(self) -> int:
-        return self.px.shape[0]
+        return self._px.shape[0] if self._px is not None else self._gpu.h
 
     @property
     def rect(self) -> tuple[int, int, int, int]:
@@ -85,7 +107,7 @@ class Buf:
 
     @property
     def is_null(self) -> bool:
-        return self.px.size == 0
+        return self._px is not None and self._px.size == 0
 
     def copy(self) -> "Buf":
         return Buf(self.px.copy(), self.x0, self.y0)
@@ -112,6 +134,8 @@ class Buf:
         x1, y1 = min(self.x0 + self.w, rect[2]), min(self.y0 + self.h, rect[3])
         if x1 <= x0 or y1 <= y0:
             return Buf.empty(x0, y0, 1, 1)
+        if (x0, y0, x1, y1) == self.rect:
+            return self
         return Buf(self.px[y0 - self.y0:y1 - self.y0, x0 - self.x0:x1 - self.x0], x0, y0)
 
     def region(self, rect: tuple[int, int, int, int]) -> np.ndarray:

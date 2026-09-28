@@ -108,7 +108,8 @@ def main(argv=None) -> int:
     p.add_argument("--from", dest="t0", type=float, default=None)
     p.add_argument("--to", dest="t1", type=float, default=None)
     p.add_argument("--frames-dir", help="keep rendered frames here; rerunning resumes")
-    p.add_argument("--jobs", type=int, default=0, help="parallel frame workers (0 = CPU count)")
+    p.add_argument("--jobs", type=int, default=1,
+                   help="frame worker processes (default 1, the least CPU time; 0 = one per CPU, for wall time)")
     p.add_argument("--no-audio", action="store_true")
     p.add_argument("--no-motion-blur", action="store_true", help="ignore project motion blur (fast previews)")
     p.add_argument("--no-gpu", action="store_true", help="never use the GPU (NVENC encoding, GPU effects)")
