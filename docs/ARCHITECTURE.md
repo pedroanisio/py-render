@@ -6,6 +6,7 @@
 
 See [RUNTIME.md](RUNTIME.md) for graphics and import dependencies and
 [SCHEMA-IMPLEMENTATION.md](SCHEMA-IMPLEMENTATION.md) for current conformance work.
+[VPKG.md](VPKG.md) specifies scene video packages (`scenerender-vpkg`); [VPKG-HOWTO.md](VPKG-HOWTO.md) shows how to make and use them.
 
 ## Pipeline
 

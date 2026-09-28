@@ -7,7 +7,7 @@ A scene video package holds one scene-render video and everything needed to rebu
 - pinned downloads for the large inputs
 - credits and a SHA-256 for every file
 
-`scenerender-vpkg` (`python -m scenerender.vpkg`) writes and reads packages. It uses only the Python standard library and never imports the renderer. The manifest schema is [`scenerender/vpkg/schema/vpkg-1.0.schema.json`](../scenerender/vpkg/schema/vpkg-1.0.schema.json).
+`scenerender-vpkg` (`python -m scenerender.vpkg`) writes and reads packages; for step-by-step instructions (packaging a project, writing the pipeline, engine setup, troubleshooting) see [VPKG-HOWTO.md](VPKG-HOWTO.md). It uses only the Python standard library and never imports the renderer. The manifest schema is [`scenerender/vpkg/schema/vpkg-1.0.schema.json`](../scenerender/vpkg/schema/vpkg-1.0.schema.json).
 
 ```bash
 scenerender-vpkg init   PROJECT                 # write a starter PROJECT/vpkg.json
