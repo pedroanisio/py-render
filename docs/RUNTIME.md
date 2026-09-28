@@ -50,6 +50,14 @@ The 2026-09-27 regression environment uses Python 3.12.3, Pycairo 1.25.1, Cairo
 1.18.0 and Mesa llvmpipe. Local HTTP delivery tests require permission to bind
 loopback sockets, and USDZ packaging creates temporary files in `/var/tmp`.
 
+The full test suite also expects the `3d`, `test` and `codes` extras, `cryptography`
+(signed publishing), librsvg's GObject bindings (`gir1.2-rsvg-2.0`), the Noto Color Emoji
+font, and Inter 3.19's variable font (`Inter Variable/Inter.ttf` from the release archive,
+family "Inter"; Inter 4 renamed it "Inter Variable"). The 2026-09-28 run on an NVIDIA
+RTX 6000 Ada (EGL, OpenGL 4.6, CUDA through the `gpu` extra) passes with and without
+`SCENERENDER_GPU=0`; LaTeX formulas, CJK font collections and the MaterialX texture baker
+(which needs a GLX display) are skipped when absent.
+
 These dependencies enable the relevant runtime paths. They do not establish
 complete schema conformance; outstanding implementation work is tracked in
 [SCHEMA-IMPLEMENTATION.md](SCHEMA-IMPLEMENTATION.md).

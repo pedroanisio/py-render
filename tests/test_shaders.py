@@ -134,7 +134,7 @@ def test_transition_compile_error_and_missing_file_fall_back(tmp_path, caplog):
     A, B = pictures(rc)
     with caplog.at_level(logging.WARNING):
         got = run_tr(rc, tr_el(rc, SH / "broken.glsl"), A, B, 0.3, CTX).px
-    assert "undeclared" in caplog.text
+    assert "notDeclared" in caplog.text          # the driver's compile log names the undeclared identifier
     ref = crossfade(rc, tr_el(rc, SH / "broken.glsl"), A, B, 0.3, CTX).px
     np.testing.assert_array_equal(got, ref)
     np.testing.assert_array_equal(run_tr(rc, tr_el(rc, SH / "nope.glsl"), A, B, 0.3, CTX).px, ref)
@@ -508,7 +508,7 @@ def test_effect_compile_error_missing_file_and_no_src_pass_through(tmp_path, til
     with caplog.at_level(logging.WARNING):
         for eid in ("bad", "missing", "none"):
             np.testing.assert_array_equal(fx(rc, eid, tile).px, tile.px)
-    assert "undeclared" in caplog.text and "not found" in caplog.text
+    assert "notDeclared" in caplog.text and "not found" in caplog.text
 
 
 def test_default_comment_parsing():

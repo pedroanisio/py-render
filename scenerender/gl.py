@@ -35,12 +35,18 @@ def context():
     errors = []
     backends = [os.environ["SCENERENDER_GL_BACKEND"]] if os.environ.get("SCENERENDER_GL_BACKEND") else ["egl", None]
     for backend in backends:
-        try:
-            _ctx = moderngl.create_standalone_context(require=330, **({"backend": backend} if backend else {}))
-            log.info("GL context: %s (%s)", _ctx.info.get("GL_RENDERER"), backend or "default")
-            return _ctx
-        except Exception as e:  # noqa: BLE001 — try the next backend
-            errors.append(f"{backend or 'default'}: {e}")
+        # Some drivers (NVIDIA's) create exactly the version requested: ask for the newest first,
+        # so the 3D renderer's 4.1 requirement is met wherever the driver can.
+        for version in (460, 450, 410, 330):
+            try:
+                _ctx = moderngl.create_standalone_context(require=version,
+                                                          **({"backend": backend} if backend else {}))
+                log.info("GL context: %s %s (%s)", _ctx.info.get("GL_RENDERER"), _ctx.version_code,
+                         backend or "default")
+                return _ctx
+            except Exception as e:  # noqa: BLE001 — try an older version, then the next backend
+                error = e
+        errors.append(f"{backend or 'default'}: {error}")
     _failed = "; ".join(errors)
     raise GLUnavailable(_failed)
 
