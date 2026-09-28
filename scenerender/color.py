@@ -491,8 +491,17 @@ def _agx_sigmoid(x: np.ndarray) -> np.ndarray:
     return np.where(x < px, curve(s_toe), curve(s_sh))
 
 
+def _max3(c: np.ndarray) -> np.ndarray:
+    """c.max(-1) for 3 channels: pairwise maxima avoid NumPy's slow reduction over a length-3 axis."""
+    return np.maximum(np.maximum(c[..., 0], c[..., 1]), c[..., 2])
+
+
+def _min3(c: np.ndarray) -> np.ndarray:
+    return np.minimum(np.minimum(c[..., 0], c[..., 1]), c[..., 2])
+
+
 def _rgb_to_hsv(c: np.ndarray):
-    mx, mn = c.max(-1), c.min(-1)
+    mx, mn = _max3(c), _min3(c)
     d = mx - mn
     with np.errstate(invalid="ignore", divide="ignore"):
         s = np.where(mx != 0, d / np.where(mx != 0, mx, 1), 0.0)
@@ -521,11 +530,11 @@ def _guard_2020(rgb: np.ndarray) -> np.ndarray:
     """luminance_compenstation_bt2020.compensate_low_side."""
     L = _AGX_LUM2020
     Y = rgb @ L
-    inv = rgb.max(-1, keepdims=True) - rgb
-    y_comp = inv.max(-1) - inv @ L + Y
-    off = rgb + np.maximum(-rgb.min(-1, keepdims=True), 0.0)
-    inv2 = off.max(-1, keepdims=True) - off
-    y_new = inv2.max(-1) - inv2 @ L + off @ L
+    inv = _max3(rgb)[..., None] - rgb
+    y_comp = _max3(inv) - inv @ L + Y
+    off = rgb + np.maximum(-_min3(rgb)[..., None], 0.0)
+    inv2 = _max3(off)[..., None] - off
+    y_new = _max3(inv2) - inv2 @ L + off @ L
     with np.errstate(invalid="ignore", divide="ignore"):
         ratio = np.where(y_new > y_comp, y_comp / np.where(y_new != 0, y_new, 1), 1.0)
     return ratio[..., None] * off
@@ -540,12 +549,12 @@ def _guard_display(rgb: np.ndarray, to_2020: np.ndarray) -> np.ndarray:
             t = np.clip(np.power(y, 0.08), 0, 1)
         return (1 - t) * yc + t * y
     Y = rgb @ L
-    inv = rgb.max(-1, keepdims=True) - rgb
-    Y = lerp_y(Y, inv.max(-1) - inv @ L + Y)
-    off = rgb + np.maximum(-rgb.min(-1, keepdims=True), 0.0)
-    inv2 = off.max(-1, keepdims=True) - off
+    inv = _max3(rgb)[..., None] - rgb
+    Y = lerp_y(Y, _max3(inv) - inv @ L + Y)
+    off = rgb + np.maximum(-_min3(rgb)[..., None], 0.0)
+    inv2 = _max3(off)[..., None] - off
     yn = off @ L
-    yn = lerp_y(yn, inv2.max(-1) - inv2 @ L + yn)
+    yn = lerp_y(yn, _max3(inv2) - inv2 @ L + yn)
     with np.errstate(invalid="ignore", divide="ignore"):
         ratio = np.where(yn > Y, Y / np.clip(yn, 1e-100, None), 1.0)
     return ratio[..., None] * off

@@ -326,6 +326,9 @@ def composite(dst: Buf, src: Buf, mode: str = "normal", opacity: float = 1.0, gr
             s *= opacity
         dst.px[:] = op(dst.px, s)
         return dst
+    if grow and dst.is_null and op is _normal and src.px.size:
+        # Source-over onto nothing is the source itself.
+        return Buf(src.px * opacity if opacity < 1 else src.px.copy(), src.x0, src.y0)
     if grow:
         dst = dst.expand_to(src.rect)
     r = intersect(dst.rect, src.rect)

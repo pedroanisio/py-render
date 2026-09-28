@@ -79,6 +79,9 @@ class RenderContext:
     threed_routing: bool = True                        # every node of a collapsed 3D group goes through is_threed
     exclude: frozenset = frozenset()                   # nodes left out of this frame (QA before/after renders)
     _node_mb: bool = False
+    mb_interval: tuple | None = None         # (first, last) shutter sample times of the frame being supersampled
+    _mb_nodes: dict | None = None            # node outputs reusable across this frame's shutter samples
+    _mb_static: dict = field(default_factory=dict)
     _flat_depth: int = 0
     _skip_effects: set = field(default_factory=set)
     scene_context: tuple | None = None       # (symbol root, context at its entrance)
@@ -475,7 +478,75 @@ class RenderContext:
             return self.render_node_at(el, self.mb_center, ctx, effects=True)
         elif not self.motion_blur and mode == "on" and not self._node_mb:
             return self._render_node_blurred(el, ctx, PM, box, layout_pos, force)
+        if self._mb_nodes is not None and self.mb_reusable(el, ctx):
+            return self._render_node_reused(el, ctx, PM, box, layout_pos)
         return self._render_node_once(el, ctx, PM, box, layout_pos)
+
+    def _render_node_reused(self, el, ctx: Ctx, PM, box, layout_pos) -> Out | None:
+        """_render_node_once, reusing the output of an earlier shutter sample of this frame when the node
+        provably renders the same pixels at every sample time (see mb_reusable) and is placed identically."""
+        key = (ctx.scope, ctx.vars, box, layout_pos)
+        entries = self._mb_nodes.setdefault(el, [])
+        for k, pm, out in entries:
+            if k == key and np.array_equal(pm, PM):
+                return None if out is None else Out(Buf(out.buf.px.copy(), out.buf.x0, out.buf.y0), out.blend, out.opacity)
+        out = self._render_node_once(el, ctx, PM, box, layout_pos)
+        kept = None if out is None else Out(Buf(out.buf.px.copy(), out.buf.x0, out.buf.y0), out.blend, out.opacity)
+        entries.append((key, np.array(PM, copy=True), kept))
+        return out
+
+    def mb_reusable(self, el, ctx: Ctx) -> bool:
+        """Whether el's rendered output is the same at every time of the shutter interval.
+
+        Conservative: el must sit on the composition clock, and neither its subtree nor anything it
+        references may hold time-varying input (animated keys changing in the interval, expressions,
+        links, simulations, media, effects, 3D, ...) or depend on another node's placement."""
+        if ctx.scope.path or self.mb_interval is None:
+            return False
+        hit = self._mb_static.get(el)
+        if hit is None:
+            hit = self._mb_static[el] = self._subtree_static(el, *self.mb_interval)
+        return hit
+
+    def _subtree_static(self, el, first: float, last: float) -> bool:
+        import re
+        from .document import NODE_TAGS
+        doc = self.doc
+        comp = doc.section("composition")
+        chain = [el, *el.iterancestors()]
+        if comp not in chain:
+            return False     # symbol content runs on its instance's clock
+        # Ancestors reach the node only through its placement (matrix, box, layout: the reuse key) and
+        # its clock: anything that re-times descendants disqualifies it.
+        for a in chain[1:chain.index(comp)]:
+            if (a in doc.clock_shift or ln(a) == "sequence" or a.find("timeRemap") is not None
+                    or float(a.get("timeOffset", 0)) != 0 or float(a.get("timeScale", 1)) != 1):
+                return False
+        if el in doc.clock_shift:
+            return False
+        subtree = set(el.iter())
+        todo, seen = [el], set()
+        while todo:
+            root = todo.pop()
+            for d in root.iter():
+                if d in seen or not isinstance(d.tag, str):
+                    continue
+                seen.add(d)
+                if not static_element(self, d, first, last):
+                    return False
+                if ln(d) in NODE_TAGS and (ln(d) in ("object3D", "camera") or self.is_threed(d)):
+                    return False
+                for value in d.attrib.values():
+                    for token in re.findall(r"[^\s,;()#'\"]+", value):
+                        target = doc.ids.get(token)
+                        if target is None or target in seen:
+                            continue
+                        if ln(target) in NODE_TAGS:
+                            if target not in subtree:
+                                return False     # placed or timed by another node
+                        else:
+                            todo.append(target)
+        return True
 
     def motion_blur_mode(self, el, ctx: Ctx) -> str:
         """Effective node motionBlur: the nearest non-"inherit" value on el or its ancestors."""
@@ -759,3 +830,47 @@ class RenderContext:
             if v is not None:
                 out[n] = v
         return out
+
+
+# Elements whose presence makes rendering time-dependent beyond their animate keys.
+DYNAMIC_TAGS = frozenset({
+    "expression", "link", "motionPath", "particleEmitter", "physics", "rigidBody", "softBody", "deform",
+    "shapeModifier", "shake", "textAnimator", "effect", "transition", "instance", "video", "imageSequence",
+    "lottie", "audiogram", "generator", "generated", "captions", "transformConstraint", "timeRemap"})
+
+
+def static_element(rc, el, first: float, last: float) -> bool:
+    """Whether el alone contributes nothing time-varying over [first, last] (conservative)."""
+    from .document import NODE_TAGS
+    tag = ln(el)
+    if tag == "expression" and not parse_bool(el.get("enabled"), True):
+        return True
+    if tag in DYNAMIC_TAGS or el.get("condition"):
+        return False
+    if tag in NODE_TAGS:
+        start, end = rc.doc.window(el)
+        if first < start <= last or (end is not None and first < end <= last):
+            return False
+        if float(el.get("timeOffset", 0)) != 0 or float(el.get("timeScale", 1)) != 1:
+            return False
+    if tag != "animate":
+        return True
+    owner = el.getparent()
+    keys = rc.ev.keys(owner, el, el.get("property"))
+    if not keys:
+        return True
+    lo, hi = first, last
+    base = el.get("timeBase", "composition")
+    start, end = rc.doc.window(owner)
+    if base in ("local", "normalized"):
+        lo, hi = lo - start, hi - start
+        if base == "normalized":
+            span = end - start if end is not None else 0
+            lo, hi = (lo / span, hi / span) if span > 0 else (0, 0)
+    if hi <= keys[0].time and el.get("extrapolateBefore", "hold") == "hold":
+        return True
+    if lo >= keys[-1].time and el.get("extrapolateAfter", "hold") == "hold":
+        return True
+    # Identical scalar/colour keys are constant unless spatial handles describe a loop between identical positions.
+    return (all(k.value == keys[0].value for k in keys)
+            and not any(k.el.get("spatialIn") or k.el.get("spatialOut") for k in keys))

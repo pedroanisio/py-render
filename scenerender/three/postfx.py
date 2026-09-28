@@ -59,9 +59,13 @@ def _fft_conv(img: np.ndarray, k: np.ndarray) -> np.ndarray:
     kh, kw = k.shape
     # Any padding of at least h + kh gives the same linear convolution; pick fast FFT sizes.
     H, W = _fast_len(h + kh), _fast_len(w + kw)
-    F = np.fft.rfft2(img, s=(H, W), axes=(0, 1))
-    K = np.fft.rfft2(k, s=(H, W))
-    out = np.fft.irfft2(F * K[..., None], s=(H, W), axes=(0, 1))
+    import scipy.fft
+    from .. import threads
+    # Single precision halves the transform cost; the blur's own approximation dwarfs float32 rounding.
+    F = scipy.fft.rfft2(np.asarray(img, np.float32), s=(H, W), axes=(0, 1), workers=threads())
+    K = scipy.fft.rfft2(np.asarray(k, np.float32), s=(H, W))
+    F *= K[..., None]
+    out = scipy.fft.irfft2(F, s=(H, W), axes=(0, 1), workers=threads())
     oy, ox = kh // 2, kw // 2
     return out[oy:oy + h, ox:ox + w]
 

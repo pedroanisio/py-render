@@ -24,40 +24,26 @@ def _kernel(sigma: float) -> np.ndarray:
 
 
 def _blur_axis(a: np.ndarray, sigma: float, axis: int) -> np.ndarray:
+    from scipy.ndimage import correlate1d, uniform_filter1d
     if sigma < 0.3:
         return a
+    if not np.issubdtype(np.asarray(a).dtype, np.floating):
+        a = np.asarray(a, np.float32)
     if sigma > 4:
         # Three box blurs approximate a Gaussian at large radii (much cheaper than a wide kernel).
         w = int(math.sqrt(12 * sigma * sigma / 3 + 1))
         w += (w + 1) % 2
         for _ in range(3):
-            a = _box_axis(a, w, axis)
-        return a
-    k = _kernel(sigma)
-    r = len(k) // 2
-    pad = [(0, 0)] * a.ndim
-    pad[axis] = (r, r)
-    p = np.pad(a, pad, mode="constant")
-    out = np.zeros_like(a)
-    n = a.shape[axis]
-    for i, kv in enumerate(k):
-        sl = [slice(None)] * a.ndim
-        sl[axis] = slice(i, i + n)
-        out += p[tuple(sl)] * kv
-    return out
+            a = uniform_filter1d(a, w, axis=axis, mode="constant", cval=0.0)
+        return a.astype(np.float32, copy=False)
+    # Zero-padded correlation with the sampled kernel (edges treated as transparent).
+    return correlate1d(a, _kernel(sigma), axis=axis, mode="constant", cval=0.0)
 
 
 def _box_axis(a: np.ndarray, w: int, axis: int) -> np.ndarray:
-    r = w // 2
-    pad = [(0, 0)] * a.ndim
-    pad[axis] = (r + 1, r)
-    c = np.cumsum(np.pad(a, pad, mode="constant"), axis=axis, dtype=np.float64)
-    n = a.shape[axis]
-    hi = [slice(None)] * a.ndim
-    lo = [slice(None)] * a.ndim
-    hi[axis] = slice(w, w + n)
-    lo[axis] = slice(0, n)
-    return ((c[tuple(hi)] - c[tuple(lo)]) / w).astype(np.float32)
+    """Centred box mean of odd width w along axis, zero outside."""
+    from scipy.ndimage import uniform_filter1d
+    return uniform_filter1d(np.asarray(a, np.float32), w, axis=axis, mode="constant", cval=0.0)
 
 
 def gaussian(a: np.ndarray, sigma: float, sigma_y: float | None = None) -> np.ndarray:

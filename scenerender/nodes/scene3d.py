@@ -121,7 +121,12 @@ def _cpu_fallback(rc: RenderContext, el, ctx: Ctx):
     buf = cv.to_buf(False)
     if rc.linear:
         from ..raster import srgb_to_linear as s2l
-        a = buf.px[..., 3:4]
-        st = np.where(a > 0, buf.px[..., :3] / np.maximum(a, 1e-6), 0)
-        buf.px[..., :3] = s2l(st) * a
+        # Only the drawn pixels need converting: transparent ones stay zero.
+        drawn = buf.px[..., 3] > 0
+        rows, cols = np.flatnonzero(drawn.any(1)), np.flatnonzero(drawn.any(0))
+        if rows.size:
+            px = buf.px[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
+            a = px[..., 3:4]
+            st = np.where(a > 0, px[..., :3] / np.maximum(a, 1e-6), 0)
+            px[..., :3] = s2l(st) * a
     return buf

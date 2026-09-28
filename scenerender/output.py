@@ -464,6 +464,8 @@ class FrameSource:
                 log.debug("no envelope table: %s", e)
             ctx = mp.get_context("spawn")
             procs = min(workers, len(rest))
+            if hasattr(self.r, "close_sample_pool"):
+                self.r.close_sample_pool()     # frame workers now use the CPUs
             from . import threads
             pool = ctx.Pool(procs, initializer=_winit,
                             initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind, self.size, self.pad,

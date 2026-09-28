@@ -28,6 +28,10 @@ FEATURES.declare("motionBlur", FULL, "shutter supersampling (angle, phase, sampl
 class Renderer:
     doc: document.Document
     rc: RenderContext
+    open_kwargs: dict | None = None      # how to reopen this document (shutter-sample worker processes)
+    _hooks: frozenset = frozenset()      # hook names a freshly opened renderer has
+    _pool: object = None
+    _pool_key: object = None
 
     @classmethod
     def open(cls, path: str, *, scale: float = 1.0, params: dict | None = None, variant: str | None = None,
@@ -43,7 +47,9 @@ class Renderer:
             rc.cache["representation"] = representation
         for name, install in _HOOK_INSTALLERS:
             install(rc)
-        return cls(doc, rc)
+        kwargs = dict(path=path, scale=scale, params=params, variant=variant, layout=layout, strict=strict,
+                      motion_blur=motion_blur, representation=representation, assets_dir=assets_dir)
+        return cls(doc, rc, kwargs, frozenset(rc.hooks))
 
     @property
     def fps(self) -> float:
@@ -78,25 +84,91 @@ class Renderer:
         phase = float(p.get("shutterPhase", -90)) / 360.0 / self.fps
         times = [t + phase + shutter * (i + 0.5) / n for i in range(n)]
         rc.mb_center = t
+        # Nodes proven unchanged over the shutter render once and are reused by the other samples.
+        rc.mb_interval, rc._mb_nodes, rc._mb_static = (times[0], times[-1]), {}, {}
         try:
             if n > 2 and parse_bool(p.get("adaptiveMotionBlur", "true"), True):
                 # Matching endpoints alone cannot establish a still frame: motion
                 # may return to its starting position during the shutter.
-                first, last = rc.render_frame(times[0], frame).px, rc.render_frame(times[-1], frame).px
-                if (self._static_shutter(times[0], times[-1]) and first.shape == last.shape
-                        and float(np.abs(first - last).max(initial=0.0)) < 0.5 / 255):
-                    return (first + last) / 2
-                acc = first + last
-                for ts in times[1:-1]:
-                    acc = acc + rc.render_frame(ts, frame).px
-                return acc / n
-            acc = None
+                if self._static_shutter(times[0], times[-1]):
+                    first, last = rc.render_frame(times[0], frame).px, rc.render_frame(times[-1], frame).px
+                    if first.shape == last.shape and float(np.abs(first - last).max(initial=0.0)) < 0.5 / 255:
+                        return (first + last) / 2
+                    return self._accumulate(times[1:-1], frame, first + last) / n
+                # acc = first + last, then the inner samples in order.
+                return self._accumulate([times[0], times[-1], *times[1:-1]], frame) / n
+            return self._accumulate(times, frame) / n
+        finally:
+            rc.mb_center = None
+            rc.mb_interval, rc._mb_nodes, rc._mb_static = None, None, {}
+
+    # ------------------------------------------------------------ shutter samples
+    def _accumulate(self, times: list[float], frame: int, acc: np.ndarray | None = None) -> np.ndarray:
+        """acc + the frames at times, summed in order. Samples are independent renders, so spare CPUs
+        render them in worker processes; the sum is formed here in the same order either way."""
+        rc = self.rc
+        pool = self._sample_pool(times, frame) if times else None
+        if pool is None:
             for ts in times:
                 px = rc.render_frame(ts, frame).px
                 acc = px if acc is None else acc + px
+            return acc
+        from multiprocessing import shared_memory
+        shape = (rc.height, rc.width, 4)
+        shm = shared_memory.SharedMemory(create=True, size=len(times) * int(np.prod(shape)) * 4)
+        try:
+            out = np.ndarray((len(times),) + shape, np.float32, buffer=shm.buf)
+            chunks = [c.tolist() for c in np.array_split(np.arange(len(times)), pool._processes + 1)]
+            state = (frame, rc.mb_center, rc.mb_interval, shm.name, shape)
+            pending = [(c, pool.apply_async(_sample_render, ([(i, times[i]) for i in c],) + state))
+                       for c in chunks[1:] if c]
+            for i in chunks[0]:
+                out[i] = rc.render_frame(times[i], frame).px
+            for c, res in pending:
+                try:
+                    res.get()
+                except Exception as e:  # noqa: BLE001 — a failed worker's samples are rendered here
+                    log.warning("shutter-sample worker failed (%s); rendering its samples serially", e)
+                    self.close_sample_pool()
+                    for i in c:
+                        out[i] = rc.render_frame(times[i], frame).px
+            for i in range(len(times)):
+                acc = out[i].copy() if acc is None else acc + out[i]
+            del out
+            return acc
         finally:
-            rc.mb_center = None
-        return acc / n
+            shm.close()
+            shm.unlink()
+
+    def _sample_pool(self, times: list[float], frame: int):
+        """Worker processes for shutter samples, or None when rendering here is as fast or not equivalent."""
+        from . import threads
+        n = len(times)
+        workers = min(threads(), n) - 1
+        rc = self.rc
+        # Workers reopen the document: anything changed on this context since open() keeps rendering here.
+        if (workers < 1 or self.open_kwargs is None or frozenset(rc.hooks) != self._hooks or rc.exclude
+                or rc._node_mb or rc.scale != self.open_kwargs["scale"] or "render_frame" in vars(rc)
+                or any(k in rc.cache for k in ("pass360", "camera_override"))):
+            return None
+        state = {k: rc.cache[k] for k in _FORWARDED if k in rc.cache}
+        key = (workers, repr(sorted(state.items(), key=lambda kv: kv[0])))
+        if self._pool is not None and self._pool_key != key:
+            self.close_sample_pool()
+        if self._pool is None:
+            import multiprocessing as mp
+            import weakref
+            with _without_main_reimport():
+                self._pool = mp.get_context("spawn").Pool(workers, initializer=_sample_init,
+                                                          initargs=(self.open_kwargs, state))
+            self._pool_key = key
+            weakref.finalize(self, self._pool.terminate)
+        return self._pool
+
+    def close_sample_pool(self) -> None:
+        if self._pool is not None:
+            self._pool.terminate()
+            self._pool = self._pool_key = None
 
     def _static_shutter(self, first: float, last: float) -> bool:
         """Conservatively prove the scene has no time-varying input in this interval.
@@ -169,6 +241,55 @@ class Renderer:
         rgb = working_to_rgb8(px, self.rc.linear)
         a = (np.clip(px[..., 3:4], 0, 1) * 255 + 0.5).astype(np.uint8)
         return np.concatenate([rgb, a], -1)
+
+
+# Renderer state set after open() that shutter-sample workers must share.
+_FORWARDED = ("output_color", "output_hdr", "burn_captions", "audio_envelopes", "representation")
+_SW: dict = {}
+
+
+class _without_main_reimport:
+    """Spawned workers normally re-run the parent's __main__ script, which may render at import time;
+    the worker functions live in this module, so the main module is hidden while workers start."""
+
+    def __enter__(self):
+        import sys
+        main = sys.modules.get("__main__")
+        self.saved = {k: main.__dict__.pop(k) for k in ("__file__",) if main is not None and k in main.__dict__}
+        self.spec = getattr(main, "__spec__", None)
+        if main is not None:
+            main.__spec__ = None
+        self.main = main
+
+    def __exit__(self, *exc):
+        if self.main is not None:
+            self.main.__dict__.update(self.saved)
+            self.main.__spec__ = self.spec
+
+
+def _sample_init(open_kwargs: dict, state: dict) -> None:
+    import os
+    os.environ["SCENERENDER_THREADS"] = "1"
+    logging.getLogger("scenerender").setLevel(logging.ERROR)
+    kw = dict(open_kwargs)
+    r = Renderer.open(kw.pop("path"), **kw)
+    r.rc.cache.update(state)
+    _SW["r"] = r
+
+
+def _sample_render(samples, frame, center, interval, shm_name, shape) -> None:
+    from multiprocessing import shared_memory
+    rc = _SW["r"].rc
+    shm = shared_memory.SharedMemory(name=shm_name)
+    rc.mb_center, rc.mb_interval, rc._mb_nodes, rc._mb_static = center, interval, {}, {}
+    try:
+        out = np.ndarray((len(shm.buf) // (int(np.prod(shape)) * 4),) + tuple(shape), np.float32, buffer=shm.buf)
+        for i, ts in samples:
+            out[i] = rc.render_frame(ts, frame).px
+        del out
+    finally:
+        rc.mb_center, rc.mb_interval, rc._mb_nodes, rc._mb_static = None, None, None, {}
+        shm.close()
 
 
 # Optional modules add hooks (captions burn-in, finishing/colour management, camera, audio levels).
