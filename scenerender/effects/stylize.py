@@ -25,6 +25,7 @@ import numpy as np
 
 from . import (Params, affine_sample, center, display_rgb, from_display, gaussian, grid, luma,
                over, premul, result, sample, shifted, straight)
+from .. import kernels
 from ..registry import EFFECTS, FULL
 
 
@@ -44,7 +45,7 @@ def _grain_field(rc, p, shape, sigma):
     memo = rc.cache.get("film-grain")
     if memo is not None and memo[0] == key:
         return memo[1]
-    grain = np.random.default_rng(seed).normal(0,1,shape).astype(np.float32)
+    grain = np.random.default_rng(seed).standard_normal(shape).astype(np.float32)   # = normal(0, 1), faster
     grain = gaussian(grain,sigma)
     # Analytic normalization avoids frame-content dependent grain strength.
     grain *= max(1,2*math.sqrt(math.pi)*sigma)
@@ -57,8 +58,12 @@ def _grain_field(rc, p, shape, sigma):
 def film_grain(rc, e, buf, ctx, node):
     from . import linear_pixels, working_pixels
     p = Params(rc, e, ctx)
-    rgb, a = straight(linear_pixels(rc,buf.px))
     sigma = max(0,(p.d("size",1)-1)/2)
+    if rc.linear and kernels.enabled():
+        grain = _grain_field(rc, p, buf.px.shape[:2]+(3,), sigma)
+        strength = np.array([p.param(c,1) for c in ("red","green","blue")],np.float32)
+        return result(buf,kernels.grain(buf.px,grain,.05*p.n("amount",1),max(.01,p.param("response",.5)),strength))
+    rgb, a = straight(linear_pixels(rc,buf.px))
     grain = _grain_field(rc, p, rgb.shape, sigma)
     v = np.clip(rgb,0,1)
     weight = np.maximum(4*v*(1-v),0)**max(.01,p.param("response",.5))

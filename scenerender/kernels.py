@@ -1,0 +1,385 @@
+"""Fused per-pixel kernels (Numba) for the whole-frame effect chains.
+
+Each NumPy effect chains ten or more full-frame passes (straight alpha, transfer functions, the
+operation, premultiply), and at 1080p every pass writes a fresh ~33 MB array. A kernel here runs
+the same per-pixel arithmetic in one pass over rows, in the threads threads() allows. The NumPy
+implementations remain the reference and the fallback: results agree to float32 rounding (the
+order of a few operations differs), which never moves an 8-bit value by more than one level.
+
+SCENERENDER_KERNELS=0 disables the kernels (every effect takes its NumPy path).
+"""
+from __future__ import annotations
+
+import os
+
+import numpy as np
+
+try:
+    import numba as nb
+except ImportError:  # optional: the NumPy paths render identically up to rounding
+    nb = None
+
+
+def enabled() -> bool:
+    return nb is not None and os.environ.get("SCENERENDER_KERNELS", "1") != "0"
+
+
+def _threads() -> None:
+    from . import threads
+    n = max(1, min(threads(), nb.config.NUMBA_NUM_THREADS))
+    if nb.get_num_threads() != n:
+        nb.set_num_threads(n)
+
+
+def _matrix(m) -> tuple[np.ndarray, bool]:
+    return (np.eye(3, dtype=np.float32), False) if m is None else (np.ascontiguousarray(m, np.float32), True)
+
+
+# The sRGB curves over [0, 1], sampled finely enough that linear interpolation stays within 1e-7 of
+# the power functions (a per-pixel powf costs ~20 ns; a table read a few). Values above 1 use pow.
+_LUT_N = 1 << 16
+
+
+def _curve_table(fn) -> np.ndarray:
+    x = np.linspace(0.0, 1.0, _LUT_N + 1)
+    t = fn(x).astype(np.float32)
+    return np.append(t, t[-1])      # x == 1 reads entries N and N + 1
+
+
+# 8-bit sRGB codes straight from linear values: code k starts where linear_to_srgb(x) * 255 + .5 reaches
+# k. A coarse table gives the code at each bin start; a comparison or two finds the exact one.
+_Q8_BINS = 4096
+
+
+def _code_tables() -> tuple[np.ndarray, np.ndarray]:
+    k = np.arange(256, dtype=np.float64)
+    e = np.clip((k - 0.5) / 255, 0, None)
+    start = np.where(e <= 0.04045, e / 12.92, ((e + 0.055) / 1.055) ** 2.4)
+    start[0] = -np.inf
+    start = np.append(start, np.inf).astype(np.float32)
+    base = (np.searchsorted(start[1:256], np.linspace(0, 1, _Q8_BINS + 1, dtype=np.float32), side="right"))
+    return start, base.astype(np.uint8)
+
+
+_Q8_START, _Q8_BASE = _code_tables()
+_L2S = _curve_table(lambda x: np.where(x <= 0.0031308, x * 12.92, 1.055 * x ** (1 / 2.4) - 0.055))
+_S2L = _curve_table(lambda x: np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4))
+
+if nb is not None:
+    F = np.float32
+    _jit = nb.njit(cache=True, inline="always")
+    _par = nb.njit(cache=True, parallel=True)
+
+    @_jit
+    def _lerp(table, x):
+        t = x * F(_LUT_N)
+        i = int(t)
+        return table[i] + (table[i + 1] - table[i]) * (t - F(i))
+
+    @_jit
+    def _l2s(x):
+        """linear_to_srgb for one float32 value."""
+        if x < F(0):
+            x = F(0)
+        if x <= F(0.0031308):
+            return x * F(12.92)
+        if x <= F(1):
+            return _lerp(_L2S, x)
+        return F(1.055) * x ** F(1 / 2.4) - F(0.055)
+
+    @_jit
+    def _s2l(x):
+        """srgb_to_linear for one float32 value."""
+        if x < F(0):
+            x = F(0)
+        if x <= F(0.04045):
+            return x / F(12.92)
+        if x <= F(1):
+            return _lerp(_S2L, x)
+        return ((x + F(0.055)) / F(1.055)) ** F(2.4)
+
+    @_jit
+    def _mul3(m, r, g, b):
+        return (m[0, 0] * r + m[0, 1] * g + m[0, 2] * b,
+                m[1, 0] * r + m[1, 1] * g + m[1, 2] * b,
+                m[2, 0] * r + m[2, 1] * g + m[2, 2] * b)
+
+    @_jit
+    def _clip01(x):
+        return F(0) if x < F(0) else F(1) if x > F(1) else x
+
+    # Display-referred operations, applied in encoded sRGB between display_rgb and from_display.
+    OP_LGG, OP_GRADE = 0, 1
+
+    @_jit
+    def _display_op(op, q, k, r, g, b):
+        """Operation k of a chain; q[k] holds its parameters (indexed, not sliced: a view per pixel
+        costs a reference count update)."""
+        if op == OP_LGG:
+            # q[k]: lift[3], 1/gamma[3], gain[3]
+            r = max(r + q[k, 0] * (F(1) - r), F(0))
+            g = max(g + q[k, 1] * (F(1) - g), F(0))
+            b = max(b + q[k, 2] * (F(1) - b), F(0))
+            r = (r if q[k, 3] == F(1) else r ** q[k, 3]) * q[k, 6]
+            g = (g if q[k, 4] == F(1) else g ** q[k, 4]) * q[k, 7]
+            b = (b if q[k, 5] == F(1) else b ** q[k, 5]) * q[k, 8]
+            return r, g, b
+        # OP_GRADE: q[k]: saturation, contrast, brightness
+        s, c, o = q[k, 0], q[k, 1], q[k, 2]
+        y = F(0.2126) * r + F(0.7152) * g + F(0.0722) * b
+        r = y + (r - y) * s
+        g = y + (g - y) * s
+        b = y + (b - y) * s
+        return (r - F(.5)) * c + F(.5) + o, (g - F(.5)) * c + F(.5) + o, (b - F(.5)) * c + F(.5) + o
+
+    @_par
+    def _display_chain(px, out, ops, params, linear, minv, m, has_m):
+        h, w = px.shape[0], px.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                a = px[y, x, 3]
+                if a > F(1e-6):
+                    r, g, b = px[y, x, 0] / a, px[y, x, 1] / a, px[y, x, 2] / a
+                else:
+                    r = g = b = F(0)
+                # display_rgb
+                if linear:
+                    if has_m:
+                        r, g, b = _mul3(minv, r, g, b)
+                    r, g, b = _l2s(r), _l2s(g), _l2s(b)
+                for k in range(len(ops)):
+                    r, g, b = _display_op(ops[k], params, k, r, g, b)
+                    # from_display clamps colour and alpha. Between operations the encoded colour
+                    # goes straight on: decoding, premultiplying, dividing and re-encoding it
+                    # again only rounds (a transparent pixel restarts from black).
+                    r, g, b = _clip01(r), _clip01(g), _clip01(b)
+                    a = _clip01(a)
+                    if not a > F(1e-6):
+                        r = g = b = F(0)
+                # from_display
+                if linear:
+                    r, g, b = _s2l(r), _s2l(g), _s2l(b)
+                    if has_m:
+                        r, g, b = _mul3(m, r, g, b)
+                out[y, x, 0], out[y, x, 1], out[y, x, 2], out[y, x, 3] = r * a, g * a, b * a, a
+
+    @_par
+    def _exposure(px, out, k):
+        h, w = px.shape[0], px.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                a = px[y, x, 3]
+                for c in range(3):
+                    out[y, x, c] = (px[y, x, c] / a * k) * a if a > F(1e-6) else F(0)
+                out[y, x, 3] = a
+
+    @_par
+    def _grain(px, grain, out, k, response, strength):
+        h, w = px.shape[0], px.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                a = px[y, x, 3]
+                for c in range(3):
+                    s = px[y, x, c] / a if a > F(1e-6) else F(0)
+                    v = _clip01(s)
+                    wt = max(F(4) * v * (F(1) - v), F(0))
+                    wt = np.sqrt(wt) if response == F(.5) else wt ** response
+                    out[y, x, c] = max(s + grain[y, x, c] * k * wt * strength[c], F(0)) * a
+                out[y, x, 3] = a
+
+    @_par
+    def _vignette(px, wmap, out, col):
+        h, w = px.shape[0], px.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                a = px[y, x, 3]
+                f = wmap[y, x, 0] * col[3]
+                for c in range(3):
+                    s = px[y, x, c] / a if a > F(1e-6) else F(0)
+                    out[y, x, c] = (s + (col[c] - s) * f) * a
+                out[y, x, 3] = a
+
+    @_par
+    def _lighting(px, height, out, kinds, dirs, cols, vis, has_vis, intensity):
+        """Ambient and directional lights over the alpha-relief normals (np.gradient differences)."""
+        h, w = px.shape[0], px.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                if x == 0:
+                    gx = height[y, 1] - height[y, 0]
+                elif x == w - 1:
+                    gx = height[y, x] - height[y, x - 1]
+                else:
+                    gx = (height[y, x + 1] - height[y, x - 1]) / F(2)
+                if y == 0:
+                    gy = height[1, x] - height[0, x]
+                elif y == h - 1:
+                    gy = height[y, x] - height[y - 1, x]
+                else:
+                    gy = (height[y + 1, x] - height[y - 1, x]) / F(2)
+                nx, ny = -gx, -gy
+                norm = np.sqrt(nx * nx + ny * ny + F(1))
+                nx, ny, nz = nx / norm, ny / norm, F(1) / norm
+                ir = ig = ib = F(0)
+                for k in range(len(kinds)):
+                    if kinds[k] == 0:
+                        ir += cols[k, 0]
+                        ig += cols[k, 1]
+                        ib += cols[k, 2]
+                        continue
+                    nd = max(nx * dirs[k, 0] + ny * dirs[k, 1] + nz * dirs[k, 2], 0.0)
+                    if has_vis[k]:
+                        nd *= vis[k, y, x]
+                    s = F(nd)
+                    ir += s * cols[k, 0]
+                    ig += s * cols[k, 1]
+                    ib += s * cols[k, 2]
+                a = px[y, x, 3]
+                if a > F(1e-6):
+                    out[y, x, 0] = max(px[y, x, 0] / a * ir * intensity, F(0)) * a
+                    out[y, x, 1] = max(px[y, x, 1] / a * ig * intensity, F(0)) * a
+                    out[y, x, 2] = max(px[y, x, 2] / a * ib * intensity, F(0)) * a
+                else:
+                    out[y, x, 0] = out[y, x, 1] = out[y, x, 2] = F(0)
+                out[y, x, 3] = a
+
+    @_par
+    def _mix(before, after, out, opacity):
+        h, w = before.shape[0], before.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                for c in range(4):
+                    b = before[y, x, c]
+                    out[y, x, c] = b + (after[y, x, c] - b) * opacity
+
+
+    @_jit
+    def _code(x):
+        """uint8(clip(linear_to_srgb(x), 0, 1) * 255 + .5)."""
+        if not x > F(0):
+            return np.uint8(0)
+        if x >= F(1):
+            return np.uint8(255)
+        k = _Q8_BASE[int(x * F(_Q8_BINS))]
+        while x >= _Q8_START[k + 1]:
+            k += 1
+        return np.uint8(k)
+
+    @_par
+    def _to_rgb8(px, out, linear, has_bg, bg):
+        h, w = px.shape[0], px.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                a = px[y, x, 3]
+                r, g, b = px[y, x, 0], px[y, x, 1], px[y, x, 2]
+                if has_bg:
+                    r, g, b, a = r + bg[0] * (F(1) - a), g + bg[1] * (F(1) - a), b + bg[2] * (F(1) - a), F(1)
+                if a > F(1e-6):
+                    d = max(a, F(1e-6))
+                    r, g, b = r / d, g / d, b / d
+                else:
+                    r = g = b = F(0)
+                if linear:
+                    out[y, x, 0], out[y, x, 1], out[y, x, 2] = _code(r), _code(g), _code(b)
+                else:
+                    out[y, x, 0] = np.uint8(_clip01(r) * F(255) + F(.5))
+                    out[y, x, 1] = np.uint8(_clip01(g) * F(255) + F(.5))
+                    out[y, x, 2] = np.uint8(_clip01(b) * F(255) + F(.5))
+
+    @_par
+    def _over(d, s):
+        """Source-over in place: d = d * (1 - s.alpha) + s (any memory layout)."""
+        h, w = d.shape[0], d.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                k = F(1) - s[y, x, 3]
+                for c in range(4):
+                    d[y, x, c] = d[y, x, c] * k + s[y, x, c]
+
+
+def _px(a) -> np.ndarray:
+    return np.ascontiguousarray(a, np.float32)
+
+
+def display_chain(px, ops: list[tuple[int, np.ndarray]], linear: bool) -> np.ndarray:
+    """from_display(op_n(... display_rgb(px))) for consecutive display-referred operations."""
+    from . import raster
+    _threads()
+    px = _px(px)
+    out = np.empty_like(px)
+    minv, has_m = _matrix(raster._WM_INV)
+    m, _ = _matrix(raster._WM)
+    codes = np.array([o for o, _ in ops], np.int64)
+    params = np.zeros((len(ops), 9), np.float32)
+    for i, (_, q) in enumerate(ops):
+        params[i, :len(q)] = q
+    _display_chain(px, out, codes, params, linear, minv, m, has_m)
+    return out
+
+
+def exposure(px, k: float) -> np.ndarray:
+    _threads()
+    px = _px(px)
+    out = np.empty_like(px)
+    _exposure(px, out, np.float32(k))
+    return out
+
+
+def grain(px, field, k: float, response: float, strength) -> np.ndarray:
+    _threads()
+    px = _px(px)
+    out = np.empty_like(px)
+    _grain(px, _px(field), out, np.float32(k), np.float32(response), _px(strength))
+    return out
+
+
+def vignette(px, wmap, color) -> np.ndarray:
+    _threads()
+    px = _px(px)
+    out = np.empty_like(px)
+    _vignette(px, _px(wmap), out, _px(color))
+    return out
+
+
+def lighting(px, height, lights: list, intensity: float) -> np.ndarray:
+    """lights: (kind, direction, rgb, visibility) with kind 0 ambient (rgb only) or 1 directional."""
+    _threads()
+    px, height = _px(px), _px(height)
+    n = len(lights)
+    kinds = np.array([k for k, *_ in lights], np.int64)
+    dirs = np.zeros((n, 3), np.float64)
+    cols = np.zeros((n, 3), np.float32)
+    has_vis = np.zeros(n, np.bool_)
+    vis = np.ones((n,) + height.shape if any(v is not None for *_, v in lights) else (n, 1, 1), np.float32)
+    for i, (k, d, c, v) in enumerate(lights):
+        cols[i] = c
+        if d is not None:
+            dirs[i] = d
+        if v is not None:
+            vis[i], has_vis[i] = v, True
+    out = np.empty_like(px)
+    _lighting(px, height, out, kinds, dirs, cols, vis, has_vis, np.float32(intensity))
+    return out
+
+
+def mix(before, after, opacity: float) -> np.ndarray:
+    _threads()
+    before = _px(before)
+    out = np.empty_like(before)
+    _mix(before, _px(after), out, np.float32(opacity))
+    return out
+
+
+def to_rgb8(px, linear: bool, background=None) -> np.ndarray:
+    _threads()
+    px = _px(px)
+    out = np.empty(px.shape[:2] + (3,), np.uint8)
+    bg = np.zeros(3, np.float32) if background is None else np.asarray(background[:3], np.float32)
+    _to_rgb8(px, out, linear, background is not None, bg)
+    return out
+
+
+def over(d: np.ndarray, s: np.ndarray) -> None:
+    """In-place source-over of float32 (h, w, 4) views that do not overlap."""
+    _threads()
+    _over(d, s)

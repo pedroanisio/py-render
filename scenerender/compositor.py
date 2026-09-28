@@ -82,6 +82,9 @@ class RenderContext:
     mb_interval: tuple | None = None         # (first, last) shutter sample times of the frame being supersampled
     _mb_nodes: dict | None = None            # node outputs reusable across this frame's shutter samples
     _mb_static: dict = field(default_factory=dict)
+    _fx_memo: dict = field(default_factory=dict)   # (node, effects) -> last input and output, see _reuse_effect
+    _fx_const: dict = field(default_factory=dict)  # effect element -> parameters provably constant
+    _fx_gen: int = 0
     _flat_depth: int = 0
     _skip_effects: set = field(default_factory=set)
     scene_context: tuple | None = None       # (symbol root, context at its entrance)
@@ -150,6 +153,9 @@ class RenderContext:
         if r360 is not None:
             return r360(self, t, frame)
         self.frame_cache = {}
+        # Reusable effect results live one frame: entries this frame's predecessor did not use go.
+        self._fx_gen += 1
+        self._fx_memo = {k: v for k, v in self._fx_memo.items() if v[0] >= self._fx_gen - 1}
         self.install_working_primaries()
         ctx = Ctx(t=t, comp_t=t, frame=frame)
         comp = self.doc.section("composition")
@@ -696,6 +702,11 @@ class RenderContext:
         return buf
 
     def apply_effects(self, ids: list[str], buf: Buf, ctx, node=None) -> Buf:
+        from . import kernels
+        from .effects import Params
+        from .effects.color import DISPLAY_OPS
+        fuse = kernels.enabled()
+        pending = []     # consecutive display-referred effects: one kernel pass, one sRGB round trip
         for eid in ids:
             e = self.doc.ids.get(eid)
             if e is None:
@@ -711,7 +722,12 @@ class RenderContext:
             mix = self.ev.num(e, "mix", ctx, 1.0)
             if mix <= 0:
                 continue
-            res = fn(self, e, buf, ctx, node)
+            if fuse and mix >= 1 and typ in DISPLAY_OPS:
+                pending.append((e, DISPLAY_OPS[typ](Params(self, e, ctx))))
+                continue
+            if pending:
+                buf, pending = self._display_run(pending, buf, ctx, node), []
+            res = self._reuse_effect(node, (e,), typ, buf, ctx, lambda: fn(self, e, buf, ctx, node))
             if res is None:
                 continue
             if mix < 1:
@@ -719,7 +735,61 @@ class RenderContext:
                 a, b = buf.region(r), res.region(r)
                 res = Buf(a + (b - a) * mix, r[0], r[1])
             buf = res
+        if pending:
+            buf = self._display_run(pending, buf, ctx, node)
         return buf
+
+    def _display_run(self, run, buf: Buf, ctx, node) -> Buf:
+        from .effects.color import display_chain
+        return self._reuse_effect(node, tuple(e for e, _ in run), "lift-gamma-gain", buf, ctx,
+                                  lambda: display_chain(self, buf, [op for _, op in run]))
+
+    def _reuse_effect(self, node, effects: tuple, typ: str, buf: Buf, ctx, compute):
+        """compute(), or the previous result when these effects already ran on identical input.
+
+        Only for effect types that are functions of their input pixels and parameters alone, with
+        every parameter (and anything it references, such as lights) constant over the timeline and
+        no instance scope: animation "on twos" and held shots feed identical tiles frame after frame."""
+        if (node is None or ctx.scope.path or typ not in PURE_EFFECTS
+                or not all(self._effect_constant(e) for e in effects)):
+            return compute()
+        key = (node, effects)
+        hit = self._fx_memo.get(key)
+        if (hit is not None and hit[1].x0 == buf.x0 and hit[1].y0 == buf.y0
+                and hit[1].px.shape == buf.px.shape and np.array_equal(hit[1].px, buf.px)):
+            self._fx_memo[key] = (self._fx_gen,) + hit[1:]
+            out = hit[2]
+            return None if out is None else Buf(out.px.copy(), out.x0, out.y0)
+        res = compute()
+        self._fx_memo[key] = (self._fx_gen, buf.copy(), None if res is None else res.copy())
+        return res
+
+    def _effect_constant(self, e) -> bool:
+        """The effect's parameters, and the elements they reference, hold one value at every time."""
+        hit = self._fx_const.get(e)
+        if hit is None:
+            hit = self._fx_const[e] = self._references_constant(e)
+        return hit
+
+    def _references_constant(self, e) -> bool:
+        import re
+        from .document import NODE_TAGS
+        todo, seen = [e], set()
+        while todo:
+            for d in todo.pop().iter():
+                if d in seen or not isinstance(d.tag, str):
+                    continue
+                seen.add(d)
+                if ln(d) in NODE_TAGS or d.get("condition"):
+                    return False     # another node's pixels or placement, or a switch
+                if d is not e and not static_element(self, d, -math.inf, math.inf):
+                    return False
+                for value in d.attrib.values():
+                    for token in re.findall(r"[^\s,;()#'\"]+", value):
+                        target = self.doc.ids.get(token)
+                        if target is not None and target not in seen:
+                            todo.append(target)
+        return True
 
     def apply_adjustment(self, el, dst: Buf, ctx, PM, box, fold_opacity) -> Buf:
         if not self.active(el, ctx):
@@ -729,13 +799,19 @@ class RenderContext:
         if opacity <= 0:
             return dst
         region = dst.expand_to(self.frame_rect) if dst.rect != self.frame_rect else dst
-        before = region.copy()
+        from . import kernels
+        masks = [m for m in el if ln(m) == "mask"]
+        # The fused mix below only reads the backdrop; the NumPy blend updates it in place.
+        fused = (kernels.enabled() and not masks and not self.ev.str(el, "matte", nctx)
+                 and self.ev.str(el, "blend", nctx, "normal") == "normal")
+        before = region if fused else region.copy()
         after = self.apply_effects((self.ev.str(el, "effects", nctx) or "").split(), region.copy(), nctx, el)
         after = after.crop_to(before.rect).expand_to(before.rect)
+        if fused:
+            return Buf(kernels.mix(before.px, after.px, opacity), before.x0, before.y0)
         M = self.node_matrix(el, ctx, PM, box, None)
         size = self.node_size(el, nctx, box)
         cov = np.ones(before.px.shape[:2], np.float32) * opacity
-        masks = [m for m in el if ln(m) == "mask"]
         if masks:
             from .masks import mask_coverage
             cov *= mask_coverage(self, masks, before.rect, nctx, M, size)
@@ -834,6 +910,9 @@ class RenderContext:
                 out[n] = v
         return out
 
+
+# Effects whose output depends on the input tile and their parameters alone (no time, frame or seed).
+PURE_EFFECTS = frozenset({"lighting", "drop-shadow", "lift-gamma-gain", "color-grade", "vignette", "exposure"})
 
 # Elements whose presence makes rendering time-dependent beyond their animate keys.
 DYNAMIC_TAGS = frozenset({

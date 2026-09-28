@@ -19,6 +19,7 @@ import numpy as np
 
 from . import (Params, affine_sampler, center, colored, composite, gaussian, grid, linear_pixels,
                luma, premul, result, sample, smoothstep, straight, working_pixels)
+from .. import kernels
 from ..raster import color_to_working
 from ..registry import EFFECTS, FULL, warn_once
 
@@ -91,23 +92,78 @@ def vignette(rc, e, buf, ctx, node):
         w = np.clip(smoothstep(np.clip(threshold, 0, 1), 1.4, d)*intensity, 0, 1)[..., None]
         w.flags.writeable = False
         rc.cache["vignette"] = (key, w)
-    rgb, a = straight(buf.px)
     c = p.color(default=(0,0,0,1))
+    if kernels.enabled():
+        return result(buf, kernels.vignette(buf.px, w, c))
+    rgb, a = straight(buf.px)
     return result(buf, premul(rgb+(c[:3]-rgb)*w*c[3], a))
 
 
-def _shadow(height, x, y, dx, dy, dz, steps, bias, softness):
-    """March from each receiver towards the light through the alpha heightfield."""
-    visibility=np.ones(height.shape,np.float32)
+def _shadow(height, xy, dx, dy, dz, steps, bias, softness):
+    """March from each receiver towards the light through the alpha heightfield.
+
+    xy() gives the receiver pixel grids. None means no step can shadow any pixel (visibility 1)."""
+    visibility=None
     distance=np.sqrt(dx*dx+dy*dy)
+    # Bilinear obstacles (transparent outside the tile) stay within [min(0, lo), max(0, hi)].
+    lo,hi=float(np.min(height)),float(np.max(height))
+    rise=np.min(dz) if np.ndim(dz) else dz
     # Ray step positions exclude the receiver and emitter themselves.
     for u in (np.arange(steps)+1)/(steps+1):
+        # A step whose worst-case clearance is still a full penumbra above the obstacle clips to
+        # visible 1 at every pixel: skipping it leaves the minimum unchanged.
+        least=lo+rise*u+max(bias,1e-4)-max(0.,hi)
+        if least >= max(max(softness,0)*u,1e-4)*(1+1e-6)+1e-9*(abs(rise)+abs(hi)+abs(lo)):
+            continue
+        if visibility is None:
+            visibility=np.ones(height.shape,np.float32)
+            x,y=xy()
         obstacle=sample(height[...,None],x+dx*u,y+dy*u)[...,0]
         clearance=height+dz*u+max(bias,1e-4)-obstacle
         penumbra=max(softness,0)*u
         visible=np.clip(clearance/max(penumbra,1e-4),0,1)
         visibility=np.minimum(visibility,visible)
     return visibility
+
+
+def _light_power(rc, light, lp, ctx):
+    """Working-space colour (rgb) times power, as the lighting loop computes them."""
+    from .color_science import temperature_rgb
+    c=np.asarray(color_to_working(rc.ev.color(light,"color",ctx,(1,1,1,1)),True),np.float32)
+    kelvin=lp.n("colorTemperature",0)
+    if kelvin:
+        c[:3]*=temperature_rgb(kelvin)
+    return c[:3]*(max(0,lp.n("intensity",1))*2**np.clip(lp.n("exposure",0),-32,32)*c[3])
+
+
+def _lighting_fused(rc,p,ids,buf,ctx):
+    """Ambient and single-sample directional lights in one kernel pass; None for other light types."""
+    height=gaussian(buf.px[...,3:4],max(.3,p.param("soften",.5)*rc.scale))[...,0]*p.d("relief",0)
+    count=max(1,min(64,round(p.n("samples",16))))
+    lights=[]
+    for lid in ids:
+        light=rc.doc.ids.get(lid)
+        if light is None:
+            warn_once("effect-light",lid,"light not found")
+            continue
+        lp=Params(rc,light,ctx)
+        if not rc.ev.bool(light,"affectsDiffuse",ctx,True):
+            continue
+        kind=lp.s("type","ambient")
+        if kind == "ambient":
+            lights.append((0,None,_light_power(rc,light,lp,ctx),None))
+            continue
+        if kind != "directional":
+            return None
+        yaw,pitch=[math.radians(lp.n(n,0)) for n in ("yaw","pitch")]
+        d=np.array([math.sin(yaw)*math.cos(pitch),math.sin(pitch),math.cos(yaw)*math.cos(pitch)])
+        visibility=None
+        if rc.ev.bool(light,"castShadow",ctx,False) and np.max(height)>0:
+            dx,dy,dz=d*max(buf.w,buf.h)*2
+            visibility=_shadow(height,lambda:grid(buf),dx,dy,dz,count,
+                               lp.d("shadowBias",.0005),lp.d("shadowSoftness",0))
+        lights.append((1,d,_light_power(rc,light,lp,ctx),visibility))
+    return result(buf,kernels.lighting(buf.px,height,lights,p.n("intensity",1)))
 
 
 @EFFECTS.register("lighting", level=FULL, note="alpha-relief diffuse normals; all 8 light types, area integration, ray-marched cast shadows, kelvin/color/cone/range")
@@ -117,6 +173,10 @@ def lighting(rc,e,buf,ctx,node):
     ids=(p.s("lights","") or "").split()
     if not ids:
         return buf.copy()
+    if rc.linear and kernels.enabled() and buf.w>1 and buf.h>1:
+        out=_lighting_fused(rc,p,ids,buf,ctx)
+        if out is not None:
+            return out
     xx,yy=grid(buf);x,y=xx+buf.x0,yy+buf.y0
     rgb,a=straight(linear_pixels(rc,buf.px))
     height=gaussian(a,max(.3,p.param("soften",.5)*rc.scale))[...,0]*p.d("relief",0)
@@ -192,8 +252,9 @@ def lighting(rc,e,buf,ctx,node):
                     nd*=smoothstep(math.cos(outer),math.cos(min(inner,outer)),to @ direction)
             visibility=1
             if rc.ev.bool(light,"castShadow",ctx,False) and np.max(height)>0:
-                visibility=_shadow(height,xx,yy,dx,dy,dz,count,
+                visibility=_shadow(height,lambda:(xx,yy),dx,dy,dz,count,
                                    lp.d("shadowBias",.0005),lp.d("shadowSoftness",0))
+                visibility=1 if visibility is None else visibility
             strength+=nd*atten*visibility/len(samples)
         illumination+=strength[...,None]*c[:3]*power
     return result(buf,working_pixels(rc,premul(np.maximum(rgb*illumination*p.n("intensity",1),0),a)))

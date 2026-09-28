@@ -21,7 +21,8 @@ import numpy as np
 
 from . import (Params, display_rgb, from_display, gradient_colors, grid, luma,
                premul, result, smoothstep, straight)
-from ..raster import linear_to_srgb, srgb_to_linear
+from .. import kernels
+from ..raster import Buf, linear_to_srgb, srgb_to_linear
 from ..registry import EFFECTS, FULL, warn_once
 
 
@@ -46,9 +47,27 @@ def _channel(rgb, a, channel, fn):
     return rgb, a
 
 
+def _grade_op(p):
+    return kernels.OP_GRADE, np.array([p.n("saturation", 1), p.n("contrast", 1), p.n("brightness", 0)], np.float32)
+
+
+def _lgg_op(p):
+    return kernels.OP_LGG, np.concatenate([p.vec("lift", 0), 1/np.maximum(p.vec("gamma", 1), 1e-4), p.vec("gain", 1)])
+
+
+# Display-referred effects the fused kernel runs; consecutive ones share one pass (see apply_effects).
+DISPLAY_OPS = {"color-grade": _grade_op, "lift-gamma-gain": _lgg_op}
+
+
+def display_chain(rc, buf, ops):
+    return Buf(kernels.display_chain(buf.px, ops, rc.linear), buf.x0, buf.y0)
+
+
 @EFFECTS.register("color-grade", level=FULL, note="encoded sRGB saturation, centred contrast, additive brightness")
 def color_grade(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
+    if kernels.enabled():
+        return display_chain(rc, buf, [_grade_op(p)])
     rgb, a = display_rgb(rc, buf.px)
     rgb = (_saturate(rgb, p.n("saturation", 1))-.5)*p.n("contrast", 1)+.5+p.n("brightness", 0)
     return from_display(rc, buf, rgb, a)
@@ -57,6 +76,8 @@ def color_grade(rc, e, buf, ctx, node):
 @EFFECTS.register("lift-gamma-gain", level=FULL, note="encoded sRGB lift, inverse gamma, gain per channel")
 def lift_gamma_gain(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
+    if kernels.enabled():
+        return display_chain(rc, buf, [_lgg_op(p)])
     rgb, a = display_rgb(rc, buf.px)
     rgb = np.maximum(rgb + p.vec("lift", 0)*(1-rgb), 0)
     rgb = np.power(rgb, 1/np.maximum(p.vec("gamma", 1), 1e-4))*p.vec("gain", 1)
@@ -178,6 +199,8 @@ def white_balance(rc, e, buf, ctx, node):
 @EFFECTS.register("exposure", level=FULL, note="linear-light RGB multiplied by 2**exposure, preserving HDR values")
 def exposure(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
+    if rc.linear and kernels.enabled():
+        return result(buf, kernels.exposure(buf.px, np.exp2(np.clip(p.n("exposure", 0), -64, 64))))
     rgb, a = straight(buf.px)
     rgb = rgb if rc.linear else srgb_to_linear(rgb)
     rgb = rgb * np.exp2(np.clip(p.n("exposure", 0), -64, 64))

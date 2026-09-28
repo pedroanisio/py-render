@@ -341,7 +341,10 @@ def composite(dst: Buf, src: Buf, mode: str = "normal", opacity: float = 1.0, gr
     if op is _normal and not np.may_share_memory(d, s):
         # In-place source-over: the same arithmetic as _normal without full-tile temporaries;
         # a fully opaque source simply replaces a finite backdrop.
-        if (s[..., 3] == 1).all() and np.isfinite(d).all():
+        from . import kernels
+        if kernels.enabled() and d.dtype == s.dtype == np.float32:
+            kernels.over(d, s)    # per pixel, d * 0 + s is that replacement already
+        elif (s[..., 3] == 1).all() and np.isfinite(d).all():
             d[:] = s
         else:
             d *= 1 - s[..., 3:4]

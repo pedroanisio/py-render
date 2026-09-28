@@ -470,7 +470,10 @@ class FrameSource:
             pool = ctx.Pool(procs, initializer=_winit,
                             initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind, self.size, self.pad,
                                       max(1, threads() // procs)))
-            results = iter(pool.imap(_wframe, [self.times[i] for i in rest], chunksize=1))
+            # Runs of consecutive frames per worker: held and on-twos content lets a worker reuse the
+            # previous frame's effect results (results still arrive in order; ~procs runs are in flight).
+            run = max(1, min(8, len(rest) // (procs * 2)))
+            results = iter(pool.imap(_wframe, [self.times[i] for i in rest], chunksize=run))
             rest_set = set(rest)
         else:
             rest_set = set()

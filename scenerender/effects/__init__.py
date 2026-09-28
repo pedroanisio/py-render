@@ -236,6 +236,15 @@ def affine_sampler(px):
 
 
 def shifted(px, dx, dy):
+    if float(dx).is_integer() and float(dy).is_integer():
+        # Whole-pixel offsets: bilinear sampling reads exactly one tap, so this is a padded copy.
+        h, w = px.shape[:2]
+        dx, dy = int(dx), int(dy)
+        out = np.zeros(px.shape, np.result_type(px.dtype, np.float32))
+        if abs(dx) < w and abs(dy) < h:
+            out[max(dy, 0):h + min(dy, 0), max(dx, 0):w + min(dx, 0)] = \
+                px[max(-dy, 0):h - max(dy, 0), max(-dx, 0):w - max(dx, 0)]
+        return out
     y, x = np.indices(px.shape[:2], dtype=np.float32)
     return sample(px, x - dx, y - dy)
 

@@ -22,6 +22,15 @@ or later is required by the 3D renderer; a software Mesa implementation can be
 used. MaterialX procedural baking also needs an accessible graphics display.
 FFmpeg is supplied by `imageio-ffmpeg` unless configured otherwise.
 
+Whole-frame effect chains (lighting, colour grading, exposure, film grain, vignette,
+compositing and the final 8-bit conversion) run as fused Numba kernels. Numba compiles
+them on first use and caches the machine code beside the package (or in
+`NUMBA_CACHE_DIR`), so the first render after an install pays a few seconds of
+compilation. Kernel results agree with the NumPy implementations to float32 rounding,
+which moves an 8-bit output value by at most one level on rare pixels.
+`SCENERENDER_KERNELS=0` selects the NumPy implementations; they are also used when Numba
+is not installed.
+
 The 2026-09-27 regression environment uses Python 3.12.3, Pycairo 1.25.1, Cairo
 1.18.0 and Mesa llvmpipe. Local HTTP delivery tests require permission to bind
 loopback sockets, and USDZ packaging creates temporary files in `/var/tmp`.

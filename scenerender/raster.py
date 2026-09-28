@@ -235,6 +235,9 @@ def rgba8_to_working(rgba: np.ndarray, linear: bool, premultiplied: bool = False
 
 def working_to_rgb8(px: np.ndarray, linear: bool, background=None) -> np.ndarray:
     """Premultiplied working-space frame -> straight 8-bit RGB (composited over background if given)."""
+    from . import kernels
+    if kernels.enabled() and px.dtype == np.float32:
+        return kernels.to_rgb8(px, linear, background)
     a = px[..., 3:4]
     rgb = px[..., :3]
     if background is not None:
