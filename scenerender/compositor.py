@@ -532,6 +532,9 @@ class RenderContext:
                 if d in seen or not isinstance(d.tag, str):
                     continue
                 seen.add(d)
+                # A re-timed descendant runs its subtree on a local clock the key times are not on.
+                if d in doc.clock_shift or ln(d) == "sequence" or ln(d) == "timeRemap":
+                    return False
                 if not static_element(self, d, first, last):
                     return False
                 if ln(d) in NODE_TAGS and (ln(d) in ("object3D", "camera") or self.is_threed(d)):

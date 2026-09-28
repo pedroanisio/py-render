@@ -127,14 +127,20 @@ class Renderer:
             with thread_limit(1):     # the other CPUs are rendering the workers' samples
                 for i in chunks[0]:
                     out[i] = rc.render_frame(times[i], frame).px
+            failed = False
             for c, res in pending:
-                try:
-                    res.get()
-                except Exception as e:  # noqa: BLE001 — a failed worker's samples are rendered here
-                    log.warning("shutter-sample worker failed (%s); rendering its samples serially", e)
-                    self.close_sample_pool()
-                    for i in c:
-                        out[i] = rc.render_frame(times[i], frame).px
+                if not failed:
+                    try:
+                        res.get()
+                        continue
+                    except Exception as e:  # noqa: BLE001 — a failed worker's samples are rendered here
+                        log.warning("shutter-sample worker failed (%s); rendering remaining samples serially", e)
+                        # The terminated pool never completes the other pending chunks: render them here too.
+                        # The buffer stays open: out still points into it (closing it unmaps it under out).
+                        self._terminate_pool()
+                        failed = True
+                for i in c:
+                    out[i] = rc.render_frame(times[i], frame).px
             for i in range(len(times)):
                 acc = out[i].copy() if acc is None else acc + out[i]
             del out
@@ -192,10 +198,13 @@ class Renderer:
         return self._pool
 
     def close_sample_pool(self) -> None:
+        self._terminate_pool()
+        self._release_buffer()
+
+    def _terminate_pool(self) -> None:
         if self._pool is not None:
             self._pool.terminate()
             self._pool = self._pool_key = None
-        self._release_buffer()
 
     def _static_shutter(self, first: float, last: float) -> bool:
         """Conservatively prove the scene has no time-varying input in this interval.
