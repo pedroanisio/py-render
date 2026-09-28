@@ -621,8 +621,16 @@ void main() {
     mat3 S = mat3(in_covA.x, in_covA.y, in_covA.z, in_covA.y, in_covB.x, in_covB.y, in_covA.z, in_covB.y, in_covB.z);
     float z = -cam.z;
     if (z <= 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+    // The EWA Jacobian is only valid near the view axis: for Gaussians far outside the frustum
+    // x/z and y/z blow the projected footprint up to cover the screen. Like the reference 3DGS
+    // rasterizer, clamp them to 1.3x the frustum half-extent, and cull centres beyond that.
+    float limx = 1.3 * 0.5 * u_vpSize.x / u_fx;
+    float limy = 1.3 * 0.5 * u_vpSize.y / u_fy;
+    float tx = cam.x / z; float ty = cam.y / z;
+    if (u_ortho == 0 && (abs(tx) > limx || abs(ty) > limy)) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+    tx = clamp(tx, -limx, limx); ty = clamp(ty, -limy, limy);
     mat3 J = u_ortho == 1 ? mat3(u_fx, 0.0, 0.0, 0.0, u_fy, 0.0, 0.0, 0.0, 0.0)
-                          : mat3(u_fx / z, 0.0, 0.0, 0.0, u_fy / z, 0.0, u_fx * cam.x / (z * z), u_fy * cam.y / (z * z), 0.0);
+                          : mat3(u_fx / z, 0.0, 0.0, 0.0, u_fy / z, 0.0, u_fx * tx / z, u_fy * ty / z, 0.0);
     mat3 W = mat3(u_view);
     mat3 T = J * W;
     mat3 cov = T * S * transpose(T);
