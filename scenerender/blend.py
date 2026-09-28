@@ -333,7 +333,11 @@ def composite(dst: Buf, src: Buf, mode: str = "normal", opacity: float = 1.0, gr
     if opacity < 1:
         s = s * opacity
     d = dst.px[r[1] - dst.y0:r[3] - dst.y0, r[0] - dst.x0:r[2] - dst.x0]
-    if getattr(op, "with_origin", False):
+    if op is _normal and not np.may_share_memory(d, s):
+        # In-place source-over: the same arithmetic as _normal without full-tile temporaries.
+        d *= 1 - s[..., 3:4]
+        d += s
+    elif getattr(op, "with_origin", False):
         d[:] = op(d, s, origin=(r[0], r[1]))
     else:
         d[:] = op(d, s)

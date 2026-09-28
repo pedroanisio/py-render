@@ -365,8 +365,10 @@ def _resize(img: np.ndarray, size: tuple[int, int]) -> np.ndarray:
 _W: dict = {}
 
 
-def _winit(open_kwargs, cache, envelopes, kind, size, pad_even):
+def _winit(open_kwargs, cache, envelopes, kind, size, pad_even, threads=None):
     logging.getLogger("scenerender").setLevel(logging.ERROR)
+    if threads:
+        os.environ["SCENERENDER_THREADS"] = str(threads)
     try:        # never share a parent's live ffmpeg decoder pipes (matters if the pool ever forks)
         from .assets import video as _video
         if hasattr(_video, "_close_all"):
@@ -461,8 +463,11 @@ class FrameSource:
             except Exception as e:  # noqa: BLE001
                 log.debug("no envelope table: %s", e)
             ctx = mp.get_context("spawn")
-            pool = ctx.Pool(min(workers, len(rest)), initializer=_winit,
-                            initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind, self.size, self.pad))
+            procs = min(workers, len(rest))
+            from . import threads
+            pool = ctx.Pool(procs, initializer=_winit,
+                            initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind, self.size, self.pad,
+                                      max(1, threads() // procs)))
             results = iter(pool.imap(_wframe, [self.times[i] for i in rest], chunksize=1))
             rest_set = set(rest)
         else:

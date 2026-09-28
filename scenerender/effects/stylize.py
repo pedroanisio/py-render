@@ -37,19 +37,32 @@ def noise(rc, e, buf, ctx, node):
     return from_display(rc, buf, rgb+random*p.n("amount", 1), a)
 
 
+def _grain_field(rc, p, shape, sigma):
+    """Normalized grain for this frame; motion-blur samples of one frame share it, so it is kept."""
+    seed = rc.ev.seed_for(p.el, f"{p.n('seed', 0)}:{p.ctx.frame}")
+    key = (seed, shape, sigma)
+    memo = rc.cache.get("film-grain")
+    if memo is not None and memo[0] == key:
+        return memo[1]
+    grain = np.random.default_rng(seed).normal(0,1,shape).astype(np.float32)
+    grain = gaussian(grain,sigma)
+    # Analytic normalization avoids frame-content dependent grain strength.
+    grain *= max(1,2*math.sqrt(math.pi)*sigma)
+    grain.flags.writeable = False
+    rc.cache["film-grain"] = (key, grain)
+    return grain
+
+
 @EFFECTS.register("film-grain", level=FULL, note="linear-light emulsion grain, per-channel exposure response, size and deterministic temporal seed")
 def film_grain(rc, e, buf, ctx, node):
     from . import linear_pixels, working_pixels
     p = Params(rc, e, ctx)
     rgb, a = straight(linear_pixels(rc,buf.px))
-    grain = p.rng().normal(0,1,rgb.shape).astype(np.float32)
     sigma = max(0,(p.d("size",1)-1)/2)
-    grain = gaussian(grain,sigma)
-    # Analytic normalization avoids frame-content dependent grain strength.
-    grain *= max(1,2*math.sqrt(math.pi)*sigma)
+    grain = _grain_field(rc, p, rgb.shape, sigma)
     v = np.clip(rgb,0,1)
     weight = np.maximum(4*v*(1-v),0)**max(.01,p.param("response",.5))
-    strength = np.array([p.param(c,1) for c in ("red","green","blue")])
+    strength = np.array([p.param(c,1) for c in ("red","green","blue")],np.float32)
     rgb = np.maximum(rgb+grain*.05*p.n("amount",1)*weight*strength,0)
     return result(buf,working_pixels(rc,premul(rgb,a)))
 
@@ -91,11 +104,12 @@ def chromatic_aberration(rc, e, buf, ctx, node):
     b=buf.pad(pad)
     x,y=grid(b);cx,cy=cx+pad,cy+pad
     channels=[]
-    for scale,sigma in zip(scales,sigmas):
-        src=gaussian(b.px,sigma)
+    for i,(scale,sigma) in enumerate(zip(scales,sigmas)):
+        # Each pass keeps only its own colour channel and alpha (channels blur and sample independently).
+        src=gaussian(b.px[...,(i,3)],sigma)
         channels.append(sample(src,cx+(x-cx)/max(scale,.01),cy+(y-cy)/max(scale,.01)))
-    return result(b,np.stack([channels[i][...,i] for i in range(3)]+
-                            [np.maximum.reduce([c[...,3] for c in channels])],-1))
+    return result(b,np.stack([c[...,0] for c in channels]+
+                            [np.maximum.reduce([c[...,1] for c in channels])],-1))
 
 
 def _glitch(p, buf):

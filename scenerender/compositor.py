@@ -157,6 +157,9 @@ class RenderContext:
         for name in ("captions", "finish"):
             hook = self.hooks.get(name)
             if hook:
+                if name == "finish":
+                    # Finishing is per pixel: spill outside the frame would be graded and then discarded.
+                    out = out.crop_to(self.frame_rect)
                 out = hook(self, out, ctx)
         return out.crop_to(self.frame_rect).expand_to(self.frame_rect)
 

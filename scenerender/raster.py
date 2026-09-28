@@ -173,21 +173,34 @@ class Canvas:
 
 def bgra_to_working(raw: np.ndarray, linear: bool) -> np.ndarray:
     """Premultiplied 8-bit BGRA (cairo) -> premultiplied float RGBA in the working space."""
+    # Premultiplied pixels with zero alpha are zero in every channel, so only the bounding box of the
+    # drawn pixels needs converting; canvases are often much larger than what was drawn on them.
+    out = np.zeros(raw.shape[:2] + (4,), np.float32)
+    drawn = raw[..., 3] != 0
+    rows = np.flatnonzero(drawn.any(1))
+    if not rows.size:
+        return out
+    cols = np.flatnonzero(drawn[rows[0]:rows[-1] + 1].any(0))
+    box = (slice(rows[0], rows[-1] + 1), slice(cols[0], cols[-1] + 1))
+    _bgra_to_working(raw[box], linear, out[box])
+    return out
+
+
+def _bgra_to_working(raw: np.ndarray, linear: bool, out: np.ndarray) -> None:
     a = raw[..., 3].astype(np.float32) / 255.0
-    out = np.empty(raw.shape[:2] + (4,), np.float32)
     if not linear:
         out[..., 0] = raw[..., 2] / 255.0
         out[..., 1] = raw[..., 1] / 255.0
         out[..., 2] = raw[..., 0] / 255.0
         out[..., 3] = a
-        return out
-    alpha = raw[..., 3]
+        return
+    # Flat (alpha << 8 | channel) indices into the 256x256 table gather faster than 2-D indexing.
+    alpha = raw[..., 3].astype(np.intp) << 8
     for dst, src in ((0, 2), (1, 1), (2, 0)):
-        out[..., dst] = _PREMUL_LIN[alpha, raw[..., src]]
+        np.take(_PREMUL_LIN_FLAT, alpha | raw[..., src], out=out[..., dst], mode="clip")
     out[..., 3] = a
     if _WM is not None:
         out[..., :3] = out[..., :3] @ _WM.T
-    return out
 
 
 def _premul_lin_table() -> np.ndarray:
@@ -200,6 +213,7 @@ def _premul_lin_table() -> np.ndarray:
 
 
 _PREMUL_LIN = _premul_lin_table()
+_PREMUL_LIN_FLAT = _PREMUL_LIN.ravel()
 
 
 def rgba8_to_working(rgba: np.ndarray, linear: bool, premultiplied: bool = False) -> np.ndarray:

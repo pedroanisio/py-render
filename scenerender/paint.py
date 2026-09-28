@@ -103,7 +103,6 @@ def _dither_pattern(cr, pattern):
     consistently and keeps rendering independent of thread order/random state.
     The pattern is sampled in device space, so transforms retain pixel resolution.
     """
-    from .assets import array_to_surface
     matrix = cr.get_matrix()
     x0, y0, x1, y1 = cr.clip_extents()
     corners = [matrix.transform_point(x, y) for x in (x0, x1) for y in (y0, y1)]
@@ -114,6 +113,38 @@ def _dither_pattern(cr, pattern):
     transform = cairo.Matrix(*matrix)
     transform.x0 -= left
     transform.y0 -= top
+    key = _gradient_key(pattern, transform, left, top, width, height)
+    cached = _DITHERED.get(key) if key is not None else None
+    if cached is None:
+        cached = _dither_surface(pattern, transform, left, top, width, height)
+        if key is not None:
+            if len(_DITHERED) >= 16:
+                _DITHERED.pop(next(iter(_DITHERED)))
+            _DITHERED[key] = cached
+    out = cairo.SurfacePattern(cached)
+    out.set_matrix(transform)
+    out.set_filter(cairo.FILTER_NEAREST)
+    return out
+
+
+# Dithered gradient rasters by exact definition: motion-blur samples and still frames repaint the same ones.
+_DITHERED: dict = {}
+
+
+def _gradient_key(pattern, transform, left, top, width, height):
+    """Everything that determines a linear/radial gradient's device raster, or None (not cached)."""
+    if isinstance(pattern, cairo.LinearGradient):
+        geometry = ("linear", pattern.get_linear_points())
+    elif isinstance(pattern, cairo.RadialGradient):
+        geometry = ("radial", pattern.get_radial_circles())
+    else:
+        return None
+    return (geometry, tuple(pattern.get_color_stops_rgba()), tuple(pattern.get_matrix()), pattern.get_extend(),
+            pattern.get_filter(), tuple(transform), left, top, width, height)
+
+
+def _dither_surface(pattern, transform, left, top, width, height):
+    from .assets import array_to_surface
     surf = cairo.ImageSurface(cairo.FORMAT_RGBA128F, width, height)
     paint = cairo.Context(surf)
     paint.set_matrix(transform)
@@ -125,16 +156,20 @@ def _dither_pattern(cr, pattern):
     ranks = np.array([[0.]], np.float32)
     for _ in range(3):
         ranks = np.block([[4*ranks, 4*ranks+2], [4*ranks+3, 4*ranks+1]])
-    yy, xx = np.ogrid[top:top+height, left:left+width]
-    noise = ((ranks[yy % 8, xx % 8] + .5) / 64 - .5)[..., None]
+    # The threshold tile repeats every 8 device pixels: roll it to the surface origin and tile it.
+    tile = np.roll((ranks + .5) / 64 - .5, (-(top % 8), -(left % 8)), axis=(0, 1))
+    noise = np.tile(tile, (-(-height // 8), -(-width // 8)))[:height, :width, None]
     alpha = np.clip(pixels[..., 3:4], 0, 1)
     a8 = np.floor(alpha * 255 + .5)
-    rgb = np.clip(np.floor(pixels[..., :3] * 255 + .5 + noise * alpha), 0, a8)
-    bgra = np.concatenate((rgb[..., ::-1], a8), axis=-1).astype(np.uint8)
-    out = cairo.SurfacePattern(array_to_surface(bgra))
-    out.set_matrix(transform)
-    out.set_filter(cairo.FILTER_NEAREST)
-    return out
+    rgb = pixels[..., :3] * 255
+    rgb += .5
+    rgb += noise * alpha
+    np.floor(rgb, out=rgb)
+    np.clip(rgb, 0, a8, out=rgb)
+    bgra = np.empty((height, width, 4), np.uint8)
+    bgra[..., :3] = rgb[..., ::-1]
+    bgra[..., 3:] = a8
+    return array_to_surface(bgra)
 
 
 def _unknown(rc, el, w, h, ctx):

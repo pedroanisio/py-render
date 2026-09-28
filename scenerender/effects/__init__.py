@@ -72,11 +72,16 @@ def luma(px: np.ndarray) -> np.ndarray:
 
 def straight(px: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     a = px[..., 3:4]
-    return np.where(a > 1e-6, px[..., :3] / np.maximum(a, 1e-6), 0), a
+    rgb = np.zeros(px.shape[:-1] + (3,), np.result_type(px.dtype, np.float32))
+    np.divide(px[..., :3], a, out=rgb, where=a > 1e-6)
+    return rgb, a
 
 
 def premul(rgb: np.ndarray, a: np.ndarray) -> np.ndarray:
-    return np.concatenate([rgb * a, a], -1).astype(np.float32)
+    out = np.empty(np.broadcast_shapes(np.shape(rgb), np.shape(a))[:-1] + (4,), np.float32)
+    np.multiply(rgb, a, out=out[..., :3], casting="same_kind")
+    out[..., 3:] = a
+    return out
 
 
 class Params:
@@ -185,16 +190,25 @@ def sample(px, x, y, mode="transparent"):
     x0, y0 = np.floor(x).astype(np.int32), np.floor(y).astype(np.int32)
     fx, fy = x - x0.astype(np.float32), y - y0.astype(np.float32)
     out = np.zeros(np.broadcast_shapes(np.shape(x), np.shape(y)) + (px.shape[-1],), np.float32)
+    # One flat row index per tap gathers every channel at once (cheaper than 2-D fancy indexing).
+    flat = px.reshape(h * w, px.shape[-1])
+    cols = {}
+    rows = {}
+    for d in (0, 1):
+        if mode == "wrap":
+            cols[d], rows[d] = (x0 + d) % w, ((y0 + d) % h) * w
+        else:
+            cols[d], rows[d] = np.clip(x0 + d, 0, w-1), np.clip(y0 + d, 0, h-1) * w
+    if mode == "transparent":
+        inx = {d: (x0 + d >= 0) & (x0 + d < w) for d in (0, 1)}
+        iny = {d: (y0 + d >= 0) & (y0 + d < h) for d in (0, 1)}
     for dx, dy, weight in ((0, 0, (1-fx)*(1-fy)), (1, 0, fx*(1-fy)),
                            (0, 1, (1-fx)*fy), (1, 1, fx*fy)):
-        ix, iy = x0 + dx, y0 + dy
-        if mode == "wrap":
-            v = px[iy % h, ix % w]
-        else:
-            v = px[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
-            if mode == "transparent":
-                weight = weight * ((ix >= 0) & (ix < w) & (iy >= 0) & (iy < h))
-        out += v * weight[..., None]
+        v = np.take(flat, rows[dy] + cols[dx], axis=0)
+        if mode == "transparent":
+            weight = weight * (inx[dx] & iny[dy])
+        np.multiply(v, weight[..., None], out=v, casting="same_kind")
+        out += v
     return out
 
 
@@ -267,6 +281,8 @@ def morphology(a, radius, grow=True):
 
 
 def smoothstep(lo, hi, x):
+    # Python scalars keep float32 inputs in float32 (NumPy float64 scalars would promote).
+    lo, hi = (float(v) if np.ndim(v) == 0 else v for v in (lo, hi))
     u = np.clip((x - lo) / max(1e-7, hi - lo), 0, 1)
     return u * u * (3 - 2*u)
 

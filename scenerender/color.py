@@ -79,6 +79,7 @@ import os
 
 import numpy as np
 
+from . import threads
 from .registry import FEATURES, FULL, PARTIAL, warn_once
 from .render import hook_installer
 from .values import parse_bool
@@ -655,7 +656,14 @@ def _cpu(cfg, transform, key):
 def ocio_apply(cpu, rgb: np.ndarray) -> np.ndarray:
     a = np.ascontiguousarray(rgb, np.float32).copy()
     flat = a.reshape(-1, 3)
-    cpu.applyRGB(flat)
+    n = min(threads(), len(flat) // 65536)
+    if n > 1:
+        # CPU processors are thread-safe and release the GIL: apply to row bands in parallel.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(n) as pool:
+            list(pool.map(cpu.applyRGB, np.array_split(flat, n)))
+    else:
+        cpu.applyRGB(flat)
     return flat.reshape(rgb.shape)
 
 
@@ -1076,21 +1084,39 @@ def process_rgb(rc, rgb: np.ndarray, plan) -> np.ndarray:
     return _encode_final(rc, x, wp, plan, 10000.0)
 
 
-def finish(rc, buf, ctx):
-    plan = _plan(rc)
-    if plan is None:
-        return buf
-    px = buf.px
+def _finish_px(rc, px: np.ndarray, plan) -> np.ndarray:
     a = px[..., 3:4]
     safe = np.maximum(a, 1e-6)
     rgb = np.where(a > 1e-6, px[..., :3] / safe, 0)
     if not rc.linear:
         rgb = decode(rgb, "srgb")
     out = process_rgb(rc, rgb, plan)
-    from .raster import Buf
     res = np.empty_like(px)
     res[..., :3] = out * a
     res[..., 3:] = a
+    return res
+
+
+def finish(rc, buf, ctx):
+    plan = _plan(rc)
+    if plan is None:
+        return buf
+    from .raster import Buf
+    px = buf.px
+    # The finishing transform is per pixel, so successive renders (motion-blur samples, frames of a
+    # mostly still shot) only need to grade the pixels whose premultiplied value changed.
+    memo = rc.cache.get("finish-memo")
+    if memo is not None and memo[0] is plan and memo[1].shape == px.shape and memo[1].dtype == px.dtype:
+        _, prev_in, prev_out = memo
+        changed = (px != prev_in).any(-1)
+        n = np.count_nonzero(changed)
+        if n <= changed.size // 2:
+            if n:
+                prev_in[changed] = px[changed]
+                prev_out[changed] = _finish_px(rc, prev_in[changed], plan)
+            return Buf(prev_out.copy(), buf.x0, buf.y0)
+    res = _finish_px(rc, px, plan)
+    rc.cache["finish-memo"] = (plan, px.copy(), res.copy())
     return Buf(res, buf.x0, buf.y0)
 
 
