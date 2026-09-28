@@ -287,6 +287,52 @@ if nb is not None:
                     out[y, x, 2] = np.uint8(_clip01(b) * F(255) + F(.5))
 
     @_par
+    def _warp_affine(src, hi, ox, oy, out):
+        """out[y, x] = bilinear sample of src at hi . (ox + x + .5, oy + y + .5) - .5 (pixel centres;
+        texels outside src are transparent), as raster.warp_projective does for an affine map. The
+        source point advances by (hi00, hi10) per output pixel along a row."""
+        h, w = src.shape[0], src.shape[1]
+        oh, ow = out.shape[0], out.shape[1]
+        a00, a01, a02 = hi[0, 0], hi[0, 1], hi[0, 2]
+        a10, a11, a12 = hi[1, 0], hi[1, 1], hi[1, 2]
+        for y in nb.prange(oh):
+            gy = np.float64(oy + y) + 0.5
+            gx0 = np.float64(ox) + 0.5
+            sx = a00 * gx0 + a01 * gy + a02 - 0.5
+            sy = a10 * gx0 + a11 * gy + a12 - 0.5
+            for x in range(ow):
+                ix = int(np.floor(sx))
+                iy = int(np.floor(sy))
+                fx = F(sx - ix)
+                fy = F(sy - iy)
+                if ix >= 0 and iy >= 0 and ix + 1 < w and iy + 1 < h:
+                    w00 = (F(1) - fx) * (F(1) - fy)
+                    w10 = fx * (F(1) - fy)
+                    w01 = (F(1) - fx) * fy
+                    w11 = fx * fy
+                    for c in range(4):
+                        out[y, x, c] = (src[iy, ix, c] * w00 + src[iy, ix + 1, c] * w10
+                                        + src[iy + 1, ix, c] * w01 + src[iy + 1, ix + 1, c] * w11)
+                elif ix < -1 or iy < -1 or ix >= w or iy >= h:
+                    for c in range(4):
+                        out[y, x, c] = F(0)
+                else:
+                    for c in range(4):
+                        acc = F(0)
+                        for dy in range(2):
+                            jy = iy + dy
+                            if jy < 0 or jy >= h:
+                                continue
+                            wy = fy if dy == 1 else F(1) - fy
+                            for dx in range(2):
+                                jx = ix + dx
+                                if 0 <= jx < w:
+                                    acc += src[jy, jx, c] * wy * (fx if dx == 1 else F(1) - fx)
+                        out[y, x, c] = acc
+                sx += a00
+                sy += a10
+
+    @_par
     def _over(d, s):
         """Source-over in place: d = d * (1 - s.alpha) + s (any memory layout)."""
         h, w = d.shape[0], d.shape[1]
@@ -498,6 +544,15 @@ def to_rgb8(px, linear: bool, background=None) -> np.ndarray:
     out = np.empty(px.shape[:2] + (3,), np.uint8)
     bg = np.zeros(3, np.float32) if background is None else np.asarray(background[:3], np.float32)
     _to_rgb8(px, out, linear, background is not None, bg)
+    return out
+
+
+def warp_affine(src: np.ndarray, hi: np.ndarray, rect) -> np.ndarray:
+    """(rect h, rect w, 4) float32: src resampled through the inverse affine map hi (frame -> src pixels)."""
+    _threads()
+    x0, y0, x1, y1 = rect
+    out = np.empty((y1 - y0, x1 - x0, 4), np.float32)
+    _warp_affine(_px(src), np.ascontiguousarray(hi, np.float64), int(x0), int(y0), out)
     return out
 
 

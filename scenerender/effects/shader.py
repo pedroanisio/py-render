@@ -220,37 +220,133 @@ def write_uniform(u, vals) -> None:
     u.write(np.nan_to_num(arr).astype(dtype).tobytes())
 
 
-def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray]) -> np.ndarray:
-    """Run the program over a w x h target. Samplers are (h, w, 4) arrays, row 0 on top."""
+class PremulInput:
+    """A sampler given as premultiplied working-space pixels: draw() converts it on the GPU to what
+    to_shader(rc, px, space) returns; `code` is one of the IN_* conversions (see gpu_codes)."""
+
+    def __init__(self, px: np.ndarray, code: int):
+        self.px, self.code = px, code
+        self.shape = px.shape
+
+
+# to_shader / from_shader on the GPU for the spaces they handle without a matrix:
+# in:  0 straight as is (srgb, non-linear pipeline)   1 sRGB-encode (srgb, linear pipeline)
+#      2 clamp at 0 (linear-srgb, linear pipeline)     3 sRGB-decode (linear-srgb, non-linear pipeline)
+# out: 0 clip [0, 1] (srgb, non-linear)                1 clip [0, 1] + sRGB-decode (srgb, linear)
+#      2 clamp at 0 (linear-srgb, linear)              3 clip [0, 1] + sRGB-encode (linear-srgb, non-linear)
+def gpu_codes(space: str, linear: bool):
+    if space == "srgb":
+        return (1, 1) if linear else (0, 0)
+    if space == "linear-srgb":
+        return (2, 2) if linear else (3, 3)
+    return None
+
+
+_CONV_FS = """
+#version 330
+uniform sampler2D src;
+uniform int mode;          // 0: to_shader (premultiplied -> shader), 1: from_shader (shader -> premultiplied)
+uniform int code;          // see gpu_codes
+out vec4 color;
+float l2s(float x) { x = max(x, 0.0); return x <= 0.0031308 ? x * 12.92 : 1.055 * pow(x, 1.0 / 2.4) - 0.055; }
+float s2l(float x) { x = max(x, 0.0); return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4); }
+void main() {
+    vec4 p = texelFetch(src, ivec2(gl_FragCoord.xy), 0);
+    if (mode == 0) {
+        vec3 c = p.a > 1e-6 ? p.rgb / p.a : vec3(0.0);
+        if (code == 1) c = vec3(l2s(c.r), l2s(c.g), l2s(c.b));
+        else if (code == 2) c = max(c, vec3(0.0));
+        else if (code == 3) c = vec3(s2l(c.r), s2l(c.g), s2l(c.b));
+        color = vec4(c, p.a);
+    } else {
+        // np.nan_to_num (NaN -> 0, +-inf -> +-max float), then from_shader.
+        p = vec4(isnan(p.r) ? 0.0 : p.r, isnan(p.g) ? 0.0 : p.g, isnan(p.b) ? 0.0 : p.b, isnan(p.a) ? 0.0 : p.a);
+        p = clamp(p, vec4(-3.4028235e38), vec4(3.4028235e38));
+        float a = clamp(p.a, 0.0, 1.0);
+        vec3 c;
+        if (code == 0) c = clamp(p.rgb, 0.0, 1.0);
+        else if (code == 1) { c = clamp(p.rgb, 0.0, 1.0); c = vec3(s2l(c.r), s2l(c.g), s2l(c.b)); }
+        else if (code == 2) c = max(p.rgb, vec3(0.0));
+        else { c = clamp(p.rgb, 0.0, 1.0); c = vec3(l2s(c.r), l2s(c.g), l2s(c.b)); }
+        color = vec4(c * a, a);
+    }
+}
+"""
+
+
+def _convert_pass(tex, w: int, h: int, mode: int, code: int):
+    """Run _CONV_FS over tex into a new RGBA32F framebuffer (returned; caller releases)."""
+    import moderngl
+    ctx = gl.context()
+    prog, vao = program(_CONV_FS, CAT, "colour conversion")
+    fbo = gl.framebuffer(w, h)
+    fbo.use()
+    ctx.viewport = (0, 0, w, h)
+    ctx.disable(moderngl.BLEND)
+    tex.use(0)
+    prog["src"].value = 0
+    prog["mode"].value = mode
+    prog["code"].value = int(code)
+    vao.render(moderngl.TRIANGLE_STRIP)
+    return fbo
+
+
+def _release_fbo(fbo) -> None:
+    for a in fbo.color_attachments:
+        a.release()
+    fbo.release()
+
+
+def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: int | None = None) -> np.ndarray:
+    """Run the program over a w x h target. Samplers are (h, w, 4) arrays, row 0 on top, or PremulInput
+    (converted on the GPU). premul_out (an out code of gpu_codes) returns from_shader of the result,
+    computed on the GPU, instead of the raw output."""
     import moderngl
     ctx = gl.context()
     prog, vao = prog_vao
     limit = int(ctx.info.get("GL_MAX_TEXTURE_SIZE", 16384))
     if max(w, h) > limit:
         raise gl.GLUnavailable(f"{w}x{h} exceeds GL_MAX_TEXTURE_SIZE {limit}")
-    owned, unit = [], 0
+    owned, fbos, unit, converted = [], [], 0, {}
     for name, u in uniforms(prog).items():
         if is_sampler(u):
             px = samplers.get(name)
-            tex = gl.texture_from(np.ascontiguousarray((px if px is not None else np.zeros((1, 1, 4), np.float32))[::-1]))
+            if isinstance(px, PremulInput):
+                hit = converted.get(id(px))
+                if hit is None:
+                    raw = gl.texture_from(np.ascontiguousarray(px.px[::-1]))
+                    owned.append(raw)
+                    ph, pw = px.shape[:2]
+                    cf = _convert_pass(raw, pw, ph, 0, px.code)
+                    fbos.append(cf)
+                    hit = converted[id(px)] = cf.color_attachments[0]
+                    hit.filter = (moderngl.LINEAR, moderngl.LINEAR)
+                    hit.repeat_x = hit.repeat_y = False
+                tex = hit
+            else:
+                tex = gl.texture_from(np.ascontiguousarray((px if px is not None else np.zeros((1, 1, 4), np.float32))[::-1]))
+                owned.append(tex)
             tex.use(unit)
             u.value = unit
-            owned.append(tex)
             unit += 1
     fbo = gl.framebuffer(w, h)
+    fbos.append(fbo)
     try:
         fbo.use()
         ctx.viewport = (0, 0, w, h)
         ctx.disable(moderngl.BLEND)
         fbo.clear(0.0, 0.0, 0.0, 0.0)
         vao.render(moderngl.TRIANGLE_STRIP)
+        if premul_out is not None:
+            post = _convert_pass(fbo.color_attachments[0], w, h, 1, premul_out)
+            fbos.append(post)
+            return gl.read_rgba(post, w, h)
         return np.nan_to_num(gl.read_rgba(fbo, w, h))
     finally:
         for t in owned:
             t.release()
-        for a in fbo.color_attachments:
-            a.release()
-        fbo.release()
+        for f in fbos:
+            _release_fbo(f)
 
 
 # ------------------------------------------------------------------ colour spaces
@@ -744,7 +840,11 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
     work = Buf(buf.region((buf.x0 - l, buf.y0 - t, buf.x0 + buf.w + r, buf.y0 + buf.h + b)),
                buf.x0 - l, buf.y0 - t) if (t or r or b or l) else buf
     w, h = work.w, work.h
-    inp = to_shader(rc, work.px, space)
+    # Single-pass shaders in the sRGB space (the common case) convert on the GPU: the pixels go up and
+    # come back premultiplied, with the same arithmetic as to_shader / from_shader.
+    codes = gpu_codes(space, bool(rc.linear)) if not header else None
+    gpu_conv = codes is not None
+    inp = PremulInput(np.ascontiguousarray(work.px, np.float32), codes[0]) if gpu_conv else to_shader(rc, work.px, space)
     src = None
     if rc.ev.str(e, "source", ctx):
         sb = source_buf(rc, e, ctx, node)
@@ -833,7 +933,8 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
         bi = {**B, "RENDERSIZE": (pw, ph), "PASSINDEX": i}
         resolve_uniforms(rc, e, ctx, prog[0], builtins=bi, defaults=defaults, space=space,
                          attr_value=attr_value, reserved=("padding",))
-        out = draw(prog, pw, ph, samplers)
+        last = i == len(passes) - 1
+        out = draw(prog, pw, ph, samplers, premul_out=codes[1] if gpu_conv and last and (pw, ph) == (w, h) else None)
         if ps.get("TARGET"):
             samplers[ps["TARGET"]] = out
     if persistent:
@@ -842,5 +943,5 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
         resize = program('''#version 330
             in vec2 uv; uniform sampler2D image; out vec4 color;
             void main() { color = texture(image, uv); }''', CAT, "ISF output resize")
-        out = draw(resize, w, h, {"image": out})
-    return Buf(from_shader(rc, out, space), work.x0, work.y0)
+        out = draw(resize, w, h, {"image": out}, premul_out=codes[1] if gpu_conv else None)
+    return Buf(out if gpu_conv else from_shader(rc, out, space), work.x0, work.y0)

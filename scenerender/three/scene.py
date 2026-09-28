@@ -207,8 +207,13 @@ def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
         item = _gpu(rc, ("mesh",) + tuple(it.key) + (path, m.key), build) if static else build()
         out.append((item, m, static))
         if len(pos):
-            lo.append(np.min(pos, 0))
-            hi.append(np.max(pos, 0))
+            b = it.__dict__.get("_bounds") if static else None
+            if b is None:
+                b = (np.min(pos, 0), np.max(pos, 0))
+                if static:
+                    it.__dict__["_bounds"] = b       # rest-pose items are memoised (Model.pose)
+            lo.append(b[0])
+            hi.append(b[1])
     sp = model.splats
     if sp is not None and len(sp.positions):          # COLMAP axes (y down, z forward): E-flipped, see build_object
         slo, shi = sp.positions.min(0), sp.positions.max(0)

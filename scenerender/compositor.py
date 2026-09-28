@@ -91,6 +91,9 @@ class RenderContext:
     _skip_effects: set = field(default_factory=set)
     scene_context: tuple | None = None       # (symbol root, context at its entrance)
     scene_matrix: np.ndarray | None = None   # symbol canvas -> output frame
+    _rcache: dict = field(default_factory=dict)    # raster cache entries, see _render_cached
+    _rc_ok: dict = field(default_factory=dict)     # (node, window) -> content provably static
+    _rc_inside: int = 0                            # > 0 while rendering a raster-cache entry
 
     def __post_init__(self):
         import cairo
@@ -203,7 +206,34 @@ class RenderContext:
         ds = self.hooks.get("depth_sort")
         if ds is not None and self.ev.bool(parent, "collapse", ctx):
             order = ds(self, parent, order, ctx)   # collapsed 3D group: farthest first
+        runs = {}
+        collapsed = ds is not None and self.ev.bool(parent, "collapse", ctx)
+        if fold_opacity == 1.0 and len(order) > 1 and not collapsed and self._rc_usable(ctx):
+            # Consecutive static, normal-blend siblings form one cached raster (see _cached_draw).
+            k = self._rc_window(ctx)
+            i = 0
+            while i < len(order):
+                j = i
+                while j < len(order) and self._run_member(order[j], ctx, k, layout, active_tr, hidden_mattes):
+                    j += 1
+                if j - i >= 2:
+                    runs[order[i]] = order[i:j]
+                i = max(j, i + 1)
+        skip = set()
         for child in order:
+            if child in skip:
+                continue
+            run = runs.get(child)
+            if run is not None:
+                skip.update(run[1:])
+                key = ("run", parent, tuple(run), self.scale, tuple(np.round(box, 6)))
+                sig = tuple(self._raster_signature(c, self._rc_static(c, k, False)[1]) for c in run)
+                buf = self._cached_draw(key, sig, k, M, lambda rc, A, run=run: rc._render_run(run, ctx, A, box))
+                if buf is not _NOT_CACHED:
+                    if buf is not None:
+                        dst = blending.composite(dst, buf, "normal", 1.0)
+                    continue
+                skip.difference_update(run[1:])
             if child in hidden_mattes or child in self.exclude:
                 continue
             tr = next((tr for tr in active_tr if child in tr[1:3]), None)
@@ -668,14 +698,265 @@ class RenderContext:
         if abs(M[2, 0]) + abs(M[2, 1]) > 1e-12:
             buf = self._render_projective(el, handler, nctx, M, size, PM, box)
         else:
-            buf = handler(self, el, nctx, M, size)
-            if isinstance(buf, Out):
-                return buf
-            if buf is not None:
-                buf = self.finish_node(el, buf, nctx, M, size, PM, box)
+            cached = self._render_cached(el, handler, nctx, M, size, PM, box)
+            if cached is not _NOT_CACHED:
+                buf = cached
+            else:
+                buf = handler(self, el, nctx, M, size)
+                if isinstance(buf, Out):
+                    return buf
+                if buf is not None:
+                    buf = self.finish_node(el, buf, nctx, M, size, PM, box)
         if buf is None:
             return None
         return Out(buf, self.ev.str(el, "blend", nctx, "normal"), opacity)
+
+    # ------------------------------------------------------------ raster cache
+    def _rc_usable(self, ctx) -> bool:
+        return (RASTER_CACHE and not self._rc_inside and not self._flat_depth and self.scene_matrix is None
+                and self.scene_context is None and not ctx.scope.path and not ctx.vars
+                and not self.cache.get("pass360"))
+
+    def _rc_window(self, ctx) -> int:
+        tc = self.mb_center if self.mb_center is not None else ctx.comp_t
+        return int(math.floor(tc / RASTER_WINDOW))
+
+    def _rc_static(self, el, k: int, own_placement: bool):
+        """(content provably static over window k, referenced elements), memoised."""
+        base = self.base()
+        hit = base._rc_ok.get((el, k, own_placement))
+        if hit is None:
+            refs = []
+            hit = base._rc_ok[(el, k, own_placement)] = (
+                self._content_static(el, max(0.0, k * RASTER_WINDOW - 0.1), (k + 1) * RASTER_WINDOW + 0.1, refs,
+                                     own_placement), refs)
+            if len(base._rc_ok) > 50000:
+                base._rc_ok.clear()
+        return hit
+
+    def _render_cached(self, el, handler, ctx, M, size, PM, box):
+        """A node whose content is provably unchanged over a window of RASTER_WINDOW seconds renders
+        once per window and is reused (see _cached_draw). Its own placement and opacity may animate;
+        masks and pointwise effects are part of the raster. _NOT_CACHED: render normally.
+        SCENERENDER_RASTER_CACHE=0 disables the cache."""
+        if ln(el) not in RASTER_TAGS or not self._rc_usable(ctx) or el.get("matte") or self.is_threed(el):
+            return _NOT_CACHED
+        k = self._rc_window(ctx)
+        ok, refs = self._rc_static(el, k, True)
+        if not ok:
+            return _NOT_CACHED
+        key = ("node", el, self.scale, tuple(np.round(size, 6)))
+        return self._cached_draw(key, self._raster_signature(el, refs), k, M,
+                                 lambda rc, A: rc._render_content(el, handler, ctx, A, size, PM, box))
+
+    def _render_content(self, el, handler, ctx, A, size, PM, box):
+        buf = handler(self, el, ctx, A, size)
+        if isinstance(buf, Out):
+            return _NOT_CACHED
+        return None if buf is None else self.finish_node(el, buf, ctx, A, size, PM, box)
+
+    def _run_member(self, child, ctx, k: int, layout, active_tr, hidden) -> bool:
+        """Can child join a cached run of siblings (static in the parent's space, normal blend)?"""
+        if (ln(child) not in RASTER_TAGS or child in hidden or child in self.exclude or layout.get(child) is not None
+                or child.get("matte") or child.get("blend", "normal") != "normal" or self.is_threed(child)
+                or any(child in tr[1:3] for tr in active_tr)):
+            return False
+        return self._rc_static(child, k, False)[0]
+
+    def _render_run(self, run, ctx, A, box):
+        dst = Buf.null()
+        for child in run:
+            out = self.render_node(child, ctx, A, box, None)
+            if out is not None:
+                dst = blending.composite(dst, out.buf, out.blend, out.opacity)
+        return None if dst.is_null else dst
+
+    def _cached_draw(self, key, sig, k: int, M, draw):
+        """draw(rc, A) renders content whose placement in the frame is M. The first render in a window is
+        exact (A = M) and is reused while M is unchanged; a changed M resamples a raster drawn at 15%
+        above the current scale over a 25% margin around the view (redrawn when the view leaves it or
+        zooms past it)."""
+        base = self.base()
+        cache = base._rcache
+        if cache.get("_k") != k:          # a new window: the previous window's rasters are stale
+            cache.clear()
+            cache["_k"] = k
+        entry = cache.get(key)
+        if entry is not None and entry["sig"] != sig:      # the document or a file changed since
+            entry = None
+        if entry is None:
+            buf = self._draw_with(draw, M, None)
+            if buf is _NOT_CACHED:
+                return _NOT_CACHED
+            cache[key] = {"exact": True, "M": np.array(M, copy=True), "buf": buf, "sig": sig}
+            return None if buf is None else Buf(buf.px.copy(), buf.x0, buf.y0)
+        if entry["exact"] and np.array_equal(entry["M"], M):
+            b = entry["buf"]
+            return None if b is None else Buf(b.px.copy(), b.x0, b.y0)
+        s_now = math.sqrt(abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))
+        view = self._local_view(M, 64)
+        if view is None:
+            return _NOT_CACHED
+        if (not entry["exact"] and entry["s"] * 0.45 <= s_now <= entry["s"]
+                and _contains(entry["region"], view)):
+            return self._warp_raster(entry, M)
+        s_r = s_now * 1.15
+        region = self._local_view(M, 0.25 * max(self.width, self.height) + 64)
+        rw, rh = math.ceil((region[2] - region[0]) * s_r), math.ceil((region[3] - region[1]) * s_r)
+        if rw * rh > RASTER_MAX_PIXELS:
+            return _NOT_CACHED
+        A = np.array([[s_r, 0, -region[0] * s_r], [0, s_r, -region[1] * s_r], [0, 0, 1]], np.float64)
+        buf = self._draw_with(draw, A, (rw, rh))
+        if buf is _NOT_CACHED:
+            return _NOT_CACHED
+        if buf is not None:
+            buf = _crop_alpha(buf)
+        entry = cache[key] = {"exact": False, "A": A, "s": s_r, "region": region, "buf": buf, "sig": sig}
+        return self._warp_raster(entry, M)
+
+    def _draw_with(self, draw, A, dims):
+        """draw(rc, A) into the frame (dims None) or into a dims-sized raster through a sized copy."""
+        from copy import copy
+        rc = self
+        if dims is not None:
+            rc = copy(self)
+            rc._root = self.base()
+            rc.width, rc.height = dims
+            rc.frame_rect = (0, 0, dims[0], dims[1])
+            rc.frame_cache, rc._mb_nodes, rc._fx_memo = {}, None, {}
+        rc._rc_inside += 1
+        try:
+            return draw(rc, A)
+        finally:
+            rc._rc_inside -= 1
+
+    def _local_view(self, M, margin: float):
+        """Node-local bounding box of the frame rect grown by margin, through the inverse of M."""
+        try:
+            Mi = np.linalg.inv(M)
+        except np.linalg.LinAlgError:
+            return None
+        x0, y0, x1, y1 = self.frame_rect
+        pts = np.array([[x0 - margin, y0 - margin, 1], [x1 + margin, y0 - margin, 1],
+                        [x0 - margin, y1 + margin, 1], [x1 + margin, y1 + margin, 1]], np.float64) @ Mi.T
+        return (float(pts[:, 0].min()), float(pts[:, 1].min()), float(pts[:, 0].max()), float(pts[:, 1].max()))
+
+    def _warp_raster(self, entry, M) -> Buf | None:
+        from .raster import warp_projective
+        src = entry["buf"]
+        if src is None:
+            return None
+        H = M @ np.linalg.inv(entry["A"])
+        from . import kernels
+        if not kernels.enabled():
+            return warp_projective(src, H, self.frame_rect)
+        corners = np.array([[src.x0, src.y0, 1], [src.x0 + src.w, src.y0, 1], [src.x0, src.y0 + src.h, 1],
+                            [src.x0 + src.w, src.y0 + src.h, 1]], np.float64) @ H.T
+        fr = (self.frame_rect[0] - 64, self.frame_rect[1] - 64, self.frame_rect[2] + 64, self.frame_rect[3] + 64)
+        rect = intersect((int(math.floor(corners[:, 0].min())) - 1, int(math.floor(corners[:, 1].min())) - 1,
+                          int(math.ceil(corners[:, 0].max())) + 1, int(math.ceil(corners[:, 1].max())) + 1), fr)
+        if rect is None:
+            return None
+        hi = np.linalg.inv(H)
+        # sample coordinates relative to the source tile's origin
+        hi = np.array([[1, 0, -src.x0], [0, 1, -src.y0], [0, 0, 1]], np.float64) @ hi
+        return Buf(kernels.warp_affine(src.px, hi[:2], rect), rect[0], rect[1])
+
+    def _raster_signature(self, el, refs) -> tuple:
+        """What a raster-cache entry was drawn from: the node's XML, the elements it references and the
+        files they name (size, mtime), so edits between renders are never served stale."""
+        key = ("rc-sig", el)
+        hit = self.frame_cache.get(key)
+        if hit is None:
+            import os
+            from lxml import etree
+            files = []
+            for r in refs:
+                for attr in ("src", "proxy"):
+                    v = r.get(attr)
+                    if v and not v.startswith("data:"):
+                        try:
+                            path = self.doc.resolve_path(v)
+                            st = os.stat(path)
+                            files.append((path, st.st_size, st.st_mtime_ns))
+                        except (OSError, TypeError, ValueError):
+                            files.append((v, None, None))
+            hit = self.frame_cache[key] = (etree.tostring(el), tuple(etree.tostring(r) for r in refs), tuple(files))
+        return hit
+
+    def _content_static(self, el, first: float, last: float, refs: list | None = None,
+                        own_placement: bool = True) -> bool:
+        """_subtree_static for a raster-cache entry: el's own placement and opacity may animate (they
+        are applied outside the raster); effects are allowed when static and pointwise. Referenced
+        non-node elements (assets, effects, paints, ...) are appended to refs."""
+        import re
+        from .document import NODE_TAGS
+        doc = self.doc
+        comp = doc.section("composition")
+        chain = [el, *el.iterancestors()]
+        if comp not in chain:
+            return False
+        for a in chain[1:chain.index(comp)]:
+            if (a in doc.clock_shift or ln(a) == "sequence" or a.find("timeRemap") is not None
+                    or float(a.get("timeOffset", 0)) != 0 or float(a.get("timeScale", 1)) != 1):
+                return False
+        if el in doc.clock_shift:
+            return False
+        subtree = set(el.iter())
+        todo, seen = [el], set()
+        while todo:
+            root = todo.pop()
+            for d in root.iter():
+                if d in seen or not isinstance(d.tag, str):
+                    continue
+                seen.add(d)
+                tag = ln(d)
+                if d in doc.clock_shift or tag in ("sequence", "timeRemap"):
+                    return False
+                if tag == "effect":
+                    if not self._pointwise_effect(d, first, last):
+                        return False
+                    if refs is not None and d not in subtree:
+                        refs.append(d)
+                    continue
+                if own_placement and tag == "animate" and d.getparent() is el and d.get("property") in SELF_PLACEMENT:
+                    continue
+                if not static_element(self, d, first, last):
+                    return False
+                if tag in NODE_TAGS and (tag in ("object3D", "camera", "instance") or self.is_threed(d)):
+                    return False
+                for value in d.attrib.values():
+                    for token in re.findall(r"[^\s,;()#'\"]+", value):
+                        target = doc.ids.get(token)
+                        if target is None or target in seen:
+                            continue
+                        if ln(target) in NODE_TAGS:
+                            if target not in subtree:
+                                return False
+                        else:
+                            todo.append(target)
+                            if refs is not None and target not in subtree and ln(target) != "effect":
+                                refs.append(target)
+        return True
+
+    def _pointwise_effect(self, e, first: float, last: float) -> bool:
+        """A static effect whose every output pixel depends only on the same input pixel (so it commutes
+        with resampling): the display-referred colour operations, and GLSL that samples its input only
+        at uv and reads no time, position or resolution."""
+        if e.get("condition") or e.get("source"):
+            return False
+        for d in e.iter():
+            if d is not e and isinstance(d.tag, str) and not static_element(self, d, first, last):
+                return False
+        typ = e.get("type")
+        if typ in ("color-grade", "lift-gamma-gain"):
+            return True
+        if typ != "shader":
+            return False
+        hit = self.base().cache.get(("pointwise-shader", e.get("src")))
+        if hit is None:
+            hit = self.base().cache[("pointwise-shader", e.get("src"))] = _pointwise_glsl(self, e)
+        return hit
 
     def _render_projective(self, el, handler, ctx, H, size, PM, box) -> Buf | None:
         """Perspective: draw the node flat at a resolution matching its projected size, run its
@@ -959,6 +1240,60 @@ class RenderContext:
 PURE_EFFECTS = frozenset({"lighting", "drop-shadow", "lift-gamma-gain", "color-grade", "vignette", "exposure"})
 
 # Elements whose presence makes rendering time-dependent beyond their animate keys.
+_NOT_CACHED = object()
+RASTER_TAGS = frozenset({"group", "shape", "layer"})
+SELF_PLACEMENT = frozenset({"x", "y", "scaleX", "scaleY", "rotation", "anchorX", "anchorY", "skewX", "skewY", "opacity"})
+RASTER_WINDOW = 1.0                    # seconds a raster-cache entry may live
+RASTER_MAX_PIXELS = 16_000_000         # larger resampling rasters are not cached
+import os as _os
+RASTER_CACHE = _os.environ.get("SCENERENDER_RASTER_CACHE", "1") != "0"
+
+
+def _crop_alpha(buf: Buf) -> Buf | None:
+    """buf cropped to its non-transparent pixels (a raster is warped every sample: keep it tight)."""
+    cov = buf.px[..., 3] > 0
+    rows = np.flatnonzero(cov.any(1))
+    if len(rows) == 0:
+        return None
+    cols = np.flatnonzero(cov.any(0))
+    y0, y1, x0, x1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    return Buf(np.ascontiguousarray(buf.px[y0:y1, x0:x1]), buf.x0 + int(x0), buf.y0 + int(y0))
+
+
+def _contains(outer, inner) -> bool:
+    return outer[0] <= inner[0] and outer[1] <= inner[1] and outer[2] >= inner[2] and outer[3] >= inner[3]
+
+
+_GLSL_POSITIONAL = ("time", "iTime", "TIME", "localTime", "iFrame", "frame", "FRAMEINDEX", "iTimeDelta", "timeDelta",
+                    "gl_FragCoord", "fragCoord", "iResolution", "resolution", "RENDERSIZE", "iOffset", "tileOffset",
+                    "frameResolution", "iFrameResolution", "iMouse", "iDate", "DATE", "seed", "texelFetch",
+                    "textureSize", "textureLod", "dFdx", "dFdy", "fwidth", "sourceTexture", "iChannel1", "iChannel2",
+                    "iChannel3", "IMG_PIXEL", "IMG_NORM_PIXEL", "IMG_THIS_PIXEL", "isf_FragNormCoord", "padding",
+                    "mainImage", "centerX", "centerY", "center", "radius", "offsetX", "offsetY")
+
+
+def _pointwise_glsl(rc, e) -> bool:
+    import re
+    from .effects.shader import CAT, load_source
+    uri = e.get("src")
+    if not uri or any(ln(c) == "param" and c.get("name") == "padding" for c in e):
+        return False
+    loaded = load_source(rc, uri, CAT)
+    if loaded is None:
+        return False
+    if re.search(r"/\*\s*\{", loaded[0]):
+        return False          # ISF header: passes, persistent buffers, declared inputs
+    code = re.sub(r"//[^\n]*|/\*.*?\*/", " ", loaded[0], flags=re.S)
+    idents = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", code))
+    if (idents & set(_GLSL_POSITIONAL) or any(i.startswith("IMG_") for i in idents) or "#include" in code
+            or "import" in idents):
+        return False
+    # uv may appear only as the coordinate of an input lookup at the pixel itself.
+    rest = re.sub(r"texture(?:2D)?\s*\(\s*(?:inputTexture|iChannel0)\s*,\s*uv\s*\)", " ", code)
+    rest = re.sub(r"\bin\s+vec2\s+uv\s*;", " ", rest)
+    return re.search(r"\buv\b", rest) is None
+
+
 DYNAMIC_TAGS = frozenset({
     "expression", "link", "motionPath", "particleEmitter", "physics", "rigidBody", "softBody", "deform",
     "shapeModifier", "shake", "textAnimator", "effect", "transition", "instance", "video", "imageSequence",

@@ -142,8 +142,16 @@ class Model:
 
     def pose(self, clip: Clip | None, t: float, morph_override: list | None = None,
              variant: str | None = None) -> list[DrawItem]:
-        """Posed draw items at clip time t (seconds; already looped by the caller)."""
+        """Posed draw items at clip time t (seconds; already looped by the caller). The rest pose (no
+        clip, no morph override) does not depend on t and is computed once per material variant;
+        callers must not modify the returned arrays in place."""
         from .animation import pose_model
+        if clip is None and morph_override is None:
+            memo = self.__dict__.setdefault("_rest_pose", {})
+            hit = memo.get(variant)
+            if hit is None:
+                hit = memo[variant] = pose_model(self, None, 0.0, None, variant)
+            return hit
         return pose_model(self, clip, t, morph_override, variant)
 
     def bounds(self) -> tuple[np.ndarray, np.ndarray]:

@@ -608,14 +608,38 @@ def draw_depth(r: Res, obj: ObjDraw, VP: np.ndarray, mode: int, lp=(0, 0, 0), ld
         item_vao(ctx, item, prog, obj.inst_buf).render(item.mode, instances=len(obj.instances))
 
 
+_SPLAT_ORDER: dict = {}      # id(splat set) -> (splats, eye, fwd, uploaded instance buffer)
+
+
+def _sorted_splats(ctx, sp, cam):
+    """Instance buffer of the splats sorted far to near. The previous one is reused while the camera
+    has moved less than 0.5% of the splats' depth range and turned less than 0.5 degree (e.g. the
+    shutter samples of one frame): the depth order cannot change enough to be visible."""
+    hit = _SPLAT_ORDER.get(id(sp))
+    if hit is not None and hit[0] is sp:
+        _, eye, fwd, span, buf = hit
+        if np.linalg.norm(cam.eye - eye) < 0.005 * span and float(np.dot(cam.fwd, fwd)) > math.cos(math.radians(0.5)):
+            return buf, False
+    cam_z = (sp.centers - cam.eye) @ cam.fwd
+    order = np.argsort(-cam_z, kind="stable")
+    data = np.concatenate([sp.centers[order], sp.colors[order], sp.cov[order]], 1).astype(np.float32)
+    buf = ctx.buffer(np.ascontiguousarray(data).tobytes())
+    span = float(cam_z.max() - cam_z.min()) if len(cam_z) else 0.0
+    prev = _SPLAT_ORDER.pop(id(sp), None)
+    if prev is not None:
+        prev[4].release()
+    while len(_SPLAT_ORDER) >= 4:                       # a few splat objects at a time
+        _SPLAT_ORDER.pop(next(iter(_SPLAT_ORDER)))[4].release()
+    _SPLAT_ORDER[id(sp)] = (sp, np.array(cam.eye, copy=True), np.array(cam.fwd, copy=True), span, buf)
+    return buf, True
+
+
 def draw_splats(r: Res, fr: Frame3D, obj: ObjDraw, V, P) -> None:
     import moderngl
     ctx = r.ctx
     sp = obj.splats
-    cam_z = (sp.centers - fr.cam.eye) @ fr.cam.fwd
-    order = np.argsort(-cam_z, kind="stable")
-    data = np.concatenate([sp.centers[order], sp.colors[order], sp.cov[order]], 1).astype(np.float32)
-    ibuf = ctx.buffer(np.ascontiguousarray(data).tobytes())
+    ibuf, _ = _sorted_splats(ctx, sp, fr.cam)
+    n_splats = len(sp.centers)
     prog = r.splat
     vao = ctx.vertex_array(prog, [(r.splat_corners, "2f", "in_corner"),
                                   (ibuf, "3f 4f 3f 3f/i", "in_center", "in_color", "in_covA", "in_covB")],
@@ -632,10 +656,9 @@ def draw_splats(r: Res, fr: Frame3D, obj: ObjDraw, V, P) -> None:
     _set(prog, "u_exposure", float(2.0 ** cam.exposure))
     ctx.disable(moderngl.CULL_FACE)
     ctx.depth_mask = False
-    vao.render(moderngl.TRIANGLE_STRIP, vertices=4, instances=len(order))
+    vao.render(moderngl.TRIANGLE_STRIP, vertices=4, instances=n_splats)
     ctx.depth_mask = True
     vao.release()
-    ibuf.release()
 
 
 def draw_background(r: Res, fr: Frame3D, V, P) -> bool:

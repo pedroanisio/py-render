@@ -523,3 +523,26 @@ def test_demo_fixture_renders(tmp_path):
     for t in (1.0, 3.0, 4.5, 6.0, 9.0):
         px = rc.render_frame(t).px
         assert np.isfinite(px).all() and px[..., 3].min() > 0.99
+
+
+@pytest.mark.parametrize("space", ["srgb", "linear-srgb"])
+@pytest.mark.parametrize("linear", [True, False])
+def test_gpu_colour_conversion_matches_cpu_path(tmp_path, monkeypatch, space, linear):
+    """Single-pass shaders convert to and from the shader's space on the GPU (effects.shader.gpu_codes):
+    same results as to_shader / from_shader, including HDR, negative and transparent pixels."""
+    from scenerender.effects import shader
+    from scenerender.evaluator import Ctx
+    code = urllib.parse.quote("void main() { fragColor = texture(inputTexture, uv); }")
+    rc = make_doc(tmp_path, effects=f'<effect id="id" type="shader" space="{space}" src="data:,{code}"/>', linear=linear)
+    rng = np.random.default_rng(7)
+    px = rng.normal(0.4, 0.8, (32, 48, 4)).astype(np.float32)
+    px[..., 3] = np.clip(rng.random((32, 48)) * 1.2 - 0.1, 0, 1)
+    px[::5, ::3, 3] = 0
+    px[..., :3] *= px[..., 3:]
+    e = rc.doc.ids["id"]
+    ctx = Ctx(t=0.0, comp_t=0.0)
+    gpu = shader.shader_effect(rc, e, Buf(px.copy(), 3, 2), ctx)
+    monkeypatch.setattr(shader, "gpu_codes", lambda *a: None)
+    cpu = shader.shader_effect(rc, e, Buf(px.copy(), 3, 2), ctx)
+    assert (gpu.x0, gpu.y0) == (cpu.x0, cpu.y0) == (3, 2)
+    np.testing.assert_allclose(gpu.px, cpu.px, rtol=2e-6, atol=2e-6)
