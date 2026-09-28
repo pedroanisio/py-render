@@ -58,6 +58,7 @@ class _Undefined:
 
 
 UNDEFINED = _Undefined()
+_MISSING = object()          # a name absent from the environment (in prefix cache keys)
 _FORBIDDEN = frozenset({"constructor", "prototype", "__proto__", "caller", "callee", "arguments"})
 
 
@@ -70,6 +71,9 @@ def _check_name(name: str) -> None:
 
 def _py(v: object) -> object:
     """Normalise a host value into the expression value domain."""
+    t = type(v)
+    if t is float or t is list or t is str:
+        return v
     if v is None or v is UNDEFINED or isinstance(v, (bool, str, float, list, dict)):
         return v
     if isinstance(v, int):
@@ -140,6 +144,8 @@ def _str_to_num(s: str) -> float:
 
 def to_num(v: object) -> float:
     """ECMAScript ToNumber (a one-element list converts like its element)."""
+    if type(v) is float:
+        return v
     if isinstance(v, bool):
         return 1.0 if v else 0.0
     if isinstance(v, (int, float)):
@@ -339,6 +345,15 @@ _BINOPS: dict[str, Callable[[_Ctx, object, object], object]] = {
 }
 
 
+# Number (op) number: the same results as _BINOPS gives once both sides are floats (to_num of a float
+# is itself), without the conversions; other operand kinds take the general path.
+_FLOAT_BINOPS: dict[str, Callable[[float, float], object]] = {
+    "+": lambda x, y: x + y, "-": lambda x, y: x - y, "*": lambda x, y: x * y, "/": _div, "%": _mod, "**": _pow,
+    "<": lambda x, y: x < y, ">": lambda x, y: x > y, "<=": lambda x, y: x <= y, ">=": lambda x, y: x >= y,
+    "==": lambda x, y: x == y, "!=": lambda x, y: x != y, "===": lambda x, y: x == y, "!==": lambda x, y: x != y,
+}
+
+
 def _neg(ctx: _Ctx, v: object) -> object:
     if isinstance(v, list):
         ctx.tick(len(v))
@@ -367,6 +382,8 @@ def _member(obj: object, key: str) -> object:
 
 
 def _index(obj: object, key: object) -> object:
+    if type(obj) is list and type(key) is float and 0 <= key < len(obj) and key == int(key):
+        return _py(obj[int(key)])
     if isinstance(obj, (list, str)) and isinstance(key, (int, float)) and not isinstance(key, bool):
         if 0 <= key < len(obj) and key == int(key):
             return _py(obj[int(key)])
@@ -539,6 +556,8 @@ class _Parser:
         self.toks = _tokenize(src)
         self.i = 0
         self.level = 0
+        self.names: set[str] = set()   # identifiers the current statement reads
+        self.pure = True               # ... and whether it calls only Math.* functions
 
     def peek(self) -> _Tok:
         return self.toks[self.i]
@@ -578,11 +597,14 @@ class _Parser:
     # statements
     def program(self) -> list[Stmt]:
         stmts: list[Stmt] = []
+        self.info: list[tuple] = []    # per statement: (tokens, names read, pure)
         while self.peek().kind != "eof":
             if self.is_op(";"):
                 self.next()
                 continue
             t, t2 = self.peek(), self.toks[self.i + 1]
+            start, first = self.i, len(stmts)
+            self.names, self.pure = set(), True
             if t.kind == "id" and t.val in _DECL:
                 self.next()
                 while True:
@@ -604,6 +626,9 @@ class _Parser:
             end = self.peek()
             if not (self.is_op(";", end) or end.nl):
                 raise self.error(end)
+            text = tuple((tok.kind, tok.val) for tok in self.toks[start:self.i])
+            for k in range(first, len(stmts)):
+                self.info.append((text, frozenset(self.names), self.pure))
         if not any(kind != "decl" for kind, _, _ in stmts):
             raise ExprError("expression has no result: it must end with an expression")
         return stmts
@@ -620,7 +645,9 @@ class _Parser:
         return left
 
     def const(self, v: object) -> _Node:
-        return _Node(lambda ctx: v, 1)
+        fn = lambda ctx: v  # noqa: E731
+        fn.value = v        # type: ignore[attr-defined]  (constant folding reads it)
+        return _Node(fn, 1)
 
     def prefix(self, t: _Tok) -> _Node:
         if t.kind in ("num", "str"):
@@ -634,10 +661,14 @@ class _Parser:
             if name in _RESERVED:
                 raise self.error(t, "unsupported keyword")
             _check_name(name)
+            self.names.add(name)
 
             def lookup(ctx: _Ctx) -> object:
-                ctx.tick()
-                return ctx.lookup(name)
+                ctx.steps += 1
+                if ctx.steps > ctx.max_steps:
+                    ctx.tick(0)
+                local = ctx.locals
+                return local[name] if name in local else ctx.lookup(name)
             return _Node(lookup, 1, name)
         if t.kind == "op":
             if t.val == "(":
@@ -647,6 +678,16 @@ class _Parser:
             if t.val == "[":
                 items = self.items("]")
                 fns = [n.fn for n in items]
+                if all(hasattr(f, "value") for f in fns):
+                    # A literal of constants: built once; each evaluation still counts the steps the
+                    # elements would take (1 per negated number) and gets its own list.
+                    values = [f.value for f in fns]  # type: ignore[attr-defined]
+                    steps = 1 + len(fns) + sum(getattr(f, "steps", 0) for f in fns)
+
+                    def const_array(ctx: _Ctx) -> object:
+                        ctx.tick(steps)
+                        return list(values)
+                    return self.node(const_array, *items)
 
                 def array(ctx: _Ctx) -> object:
                     ctx.tick(1 + len(fns))
@@ -663,6 +704,7 @@ class _Parser:
         f, x = _UNOPS[op], operand.fn
         if op == "typeof" and operand.name is not None and "." not in operand.name:
             name = operand.name
+            self.pure = False     # typeof of an undefined name does not raise: not modelled as a read
 
             def typeof_name(ctx: _Ctx) -> object:
                 ctx.tick()
@@ -675,6 +717,8 @@ class _Parser:
         def run(ctx: _Ctx) -> object:
             ctx.tick()
             return f(ctx, x(ctx))
+        if op == "-" and type(getattr(x, "value", None)) is float:
+            run.value, run.steps = -x.value, 1   # type: ignore[attr-defined]  (a negative literal)
         return self.node(run, operand)
 
     def items(self, close: str) -> list[_Node]:
@@ -717,6 +761,8 @@ class _Parser:
                 return _index(a(ctx), b(ctx))
             return self.node(subscript, left, index)
         if op == "(":
+            if not (left.name or "").startswith("Math."):
+                self.pure = False
             args = self.items(")")
             fns, desc = [n.fn for n in args], left.name or "expression"
 
@@ -745,21 +791,71 @@ class _Parser:
                     return v if truthy(v) else b(ctx)
                 return b(ctx) if v is None or v is UNDEFINED else v
             return self.node(logical, left, right)
-        f = _BINOPS[op]
+        f, fast = _BINOPS[op], _FLOAT_BINOPS.get(op)
+        if fast is None:
+            def binary(ctx: _Ctx) -> object:
+                ctx.tick()
+                return f(ctx, a(ctx), b(ctx))
+            return self.node(binary, left, right)
 
-        def binary(ctx: _Ctx) -> object:
-            ctx.tick()
-            return f(ctx, a(ctx), b(ctx))
-        return self.node(binary, left, right)
+        def binary_num(ctx: _Ctx) -> object:
+            ctx.steps += 1
+            if ctx.steps > ctx.max_steps:
+                ctx.tick(0)
+            x, y = a(ctx), b(ctx)
+            if type(x) is float and type(y) is float:
+                return fast(x, y)
+            return f(ctx, x, y)
+        return self.node(binary_num, left, right)
+
+
+# Results of pure statement prefixes: (prefix id, values of the names it reads) -> (locals, steps).
+# Expressions of one element often open with the same declarations (a streak's x, y, rotation and
+# opacity all derive its position from index and time): the longest prefix already evaluated for
+# the same inputs is reused, whichever expression evaluated it.
+_PREFIXES: dict = {}
+_PREFIX_IDS: dict = {}       # prefix token sequence -> small id
+_PREFIX_STORED: set = set()  # ids with results in _PREFIXES
+_PREFIX_LIMIT = 16384
+
+
+def _frozen(v: object) -> object:
+    """A hashable stand-in for an environment value (lists by content), or raise TypeError."""
+    if type(v) is list:
+        return tuple(_frozen(x) for x in v)
+    hash(v)
+    return v
 
 
 class Expr:
     """A compiled expression program; call it with an environment mapping."""
 
-    __slots__ = ("src", "_stmts")
+    __slots__ = ("src", "_stmts", "_prefix", "_prefix_ids", "_prefix_reads")
 
-    def __init__(self, src: str, stmts: Sequence[Stmt]) -> None:
+    def __init__(self, src: str, stmts: Sequence[Stmt], info: Sequence[tuple] = ()) -> None:
         self.src, self._stmts = src, tuple(stmts)
+        # The leading declarations/assignments that read only variables and call only Math.*;
+        # for each length k: its id and the environment names it reads.
+        declared: set[str] = set()
+        reads: set[str] = set()
+        ids, reads_k = [None], [()]
+        for (kind, name, _), (text, names, pure) in zip(self._stmts, info):
+            if kind == "expr" or not pure:
+                break
+            reads |= names - declared
+            declared.add(name)  # type: ignore[arg-type]
+            tokens = tuple(t for t, _, _ in info[:len(ids)])
+            ids.append(_PREFIX_IDS.setdefault(tokens, len(_PREFIX_IDS)))
+            reads_k.append(tuple(sorted(reads)))
+        self._prefix = len(ids) - 1
+        self._prefix_ids, self._prefix_reads = tuple(ids), tuple(reads_k)
+
+    def _key(self, k: int, env: Mapping[str, object]):
+        try:
+            return self._prefix_ids[k], tuple(_frozen(_py(env[n])) if n in env else _MISSING
+                                              for n in self._prefix_reads[k])
+        except TypeError:
+            return None
 
     def __repr__(self) -> str:
         return f"Expr({self.src if len(self.src) < 60 else self.src[:57] + '...'!r})"
@@ -769,7 +865,25 @@ class Expr:
         token = _CURRENT.set(ctx)
         try:
             result: object = UNDEFINED
-            for kind, name, node in self._stmts:
+            n, begin = self._prefix, 0
+            for k in range(n, 0, -1):        # the longest prefix evaluated before for these inputs
+                if self._prefix_ids[k] in _PREFIX_STORED:
+                    hit = _PREFIXES.get(self._key(k, env))
+                    if hit is not None:
+                        ctx.locals = dict(hit[0])
+                        ctx.tick(hit[1])
+                        begin = k
+                        break
+            for i in range(begin, len(self._stmts)):
+                if i == n and begin < n:
+                    key = self._key(n, env)
+                    if key is not None:
+                        if len(_PREFIXES) >= _PREFIX_LIMIT:
+                            _PREFIXES.clear()
+                            _PREFIX_STORED.clear()
+                        _PREFIXES[key] = (dict(ctx.locals), ctx.steps)
+                        _PREFIX_STORED.add(key[0])
+                kind, name, node = self._stmts[i]
                 v = node.fn(ctx)
                 if name is not None:
                     ctx.locals[name] = v
@@ -790,7 +904,8 @@ def compile_expr(src: str) -> Expr:
     if len(src) > MAX_SOURCE_BYTES // 4 and len(src.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise ExprError(f"expression longer than {MAX_SOURCE_BYTES} bytes")
     try:
-        return Expr(src, _Parser(src).program())
+        parser = _Parser(src)
+        return Expr(src, parser.program(), parser.info)
     except RecursionError as e:
         raise ExprError("expression nested too deeply") from e
 
@@ -818,7 +933,7 @@ def _float_bits(x: float) -> int:
     return struct.unpack("<Q", struct.pack("<d", float(x) + 0.0))[0]
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=8192)       # one per seed in use: scenes seed elements individually
 def _perm(seed: int) -> tuple[int, ...]:
     p = list(range(256))
     for i in range(255, 0, -1):
@@ -913,10 +1028,11 @@ def make_wiggle(value: object, seed: int, time: float) -> Callable[..., object]:
     Each component of a list ``value`` gets an independent offset; the result is
     smooth in ``t`` and depends only on (seed, t, arguments).
     """
-    perm, base = _perm(int(seed)), _py(value)
+    seed, base = int(seed), _py(value)
 
     def wiggle(freq: object, amp: object, octaves: object = 1.0, amp_mult: object = 0.5,
                t: object = time) -> object:
+        perm = _perm(seed)
         f, a, m, tt, o = map(to_num, (freq, amp, amp_mult, t, octaves))
         n = int(_clamp(o, 1, MAX_OCTAVES)) if o == o else 1
 
@@ -937,7 +1053,7 @@ def builtin_functions(seed: int, time: float, value: object = None) -> dict[str,
     current expression evaluation, so the returned dict may be reused across
     evaluations. ``wiggle`` wiggles ``value`` (0 when ``None``).
     """
-    seed, perm, tbits = int(seed), _perm(int(seed)), _float_bits(time)
+    seed, tbits = int(seed), _float_bits(time)     # the noise table is built on first use
     fallback = [0]
 
     def draw() -> float:
@@ -961,7 +1077,7 @@ def builtin_functions(seed: int, time: float, value: object = None) -> dict[str,
     def noise(x: object = 0.0, y: object = 0.0, z: object = 0.0) -> float:
         if isinstance(x, list):
             x, y, z = (list(x) + [0.0, 0.0, 0.0])[:3]
-        return _perlin(perm, *(to_num(c) + o for c, o in zip((x, y, z), _NOISE_OFFSET)))
+        return _perlin(_perm(seed), *(to_num(c) + o for c, o in zip((x, y, z), _NOISE_OFFSET)))
 
     return {
         "clamp": lambda v, a, b: _vmap(_clamp, v, a, b),

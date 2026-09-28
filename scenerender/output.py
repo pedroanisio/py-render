@@ -132,6 +132,48 @@ def ffmpeg_exe() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
+def gpu_enabled() -> bool:
+    """GPU paths are used whenever they work, unless SCENERENDER_GPU=0 (render --no-gpu)."""
+    return os.environ.get("SCENERENDER_GPU", "1") != "0"
+
+
+_NVENC: dict = {}
+
+
+def nvenc_ffmpeg(codec: str = "h264_nvenc") -> str | None:
+    """An ffmpeg that can encode with NVENC on this machine (SCENERENDER_FFMPEG, the bundled build or
+    PATH's), found by a short test encode; None without a usable NVIDIA encoder. Probed once."""
+    if codec in _NVENC:
+        return _NVENC[codec]
+    candidates = [os.environ.get("SCENERENDER_FFMPEG"), ffmpeg_exe(), shutil.which("ffmpeg")]
+    found = None
+    for exe in dict.fromkeys(c for c in candidates if c):
+        try:
+            r = subprocess.run([exe, "-v", "error", "-nostdin", "-f", "lavfi", "-i", "color=black:s=256x256:r=24:d=0.25",
+                                "-c:v", codec, "-f", "null", "-"], capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0:
+            found = exe
+            break
+    _NVENC[codec] = found
+    return found
+
+
+# NVENC rejects small frames (the minimum depends on the GPU); below this x264 encodes them.
+_NVENC_MIN = (256, 128)
+
+
+def gpu_encoder(job: Job, two_pass: bool = False, dims: tuple[int, int] | None = None) -> str | None:
+    """The ffmpeg to encode job on the GPU with, when that applies (single-pass H.264 of frames at
+    least _NVENC_MIN)."""
+    if job.codec != "h264" or two_pass or not gpu_enabled() or job.a("encoder") == "cpu":
+        return None
+    if dims is not None and (dims[0] < _NVENC_MIN[0] or dims[1] < _NVENC_MIN[1]):
+        return None
+    return nvenc_ffmpeg("h264_nvenc")
+
+
 # ====================================================================== jobs
 @dataclass
 class Job:
@@ -387,6 +429,21 @@ def _wframe(t: float):
     return img.shape, img.dtype.str, img.tobytes()
 
 
+def _wframes(ts: list[float]) -> list:
+    return [_wframe(t) for t in ts]
+
+
+def _runs(n: int, procs: int, longest: int = 48, shortest: int = 4) -> list[tuple[int, int]]:
+    """Guided runs of consecutive frames: long ones first (a worker reuses the previous frame's
+    effect results and noise lattices within a run), shrinking so every worker finishes together."""
+    runs, i = [], 0
+    while i < n:
+        size = max(shortest, min(longest, (n - i) // (procs * 2)))
+        runs.append((i, min(n, i + size)))
+        i += size
+    return runs
+
+
 class FrameSource:
     """Frames for times[i] in order: from --frames-dir when present, else rendered (maybe in parallel).
     `tap(img)` (QA flash analysis) sees every frame as it streams."""
@@ -450,10 +507,9 @@ class FrameSource:
         pool = None
         results = None
         if workers > 1 and missing:
-            # render the first missing frame here (surfaces warnings once), the rest in workers
+            # render the first missing frame here (surfaces warnings once) while the workers start
+            # on the rest
             first = missing[0]
-            cached[first] = render_frame(self.r, self.times[first], self.kind, self.size, self.pad)
-            self._save(first, cached[first])
             rest = missing[1:]
             import multiprocessing as mp
             envelopes = {}
@@ -470,11 +526,15 @@ class FrameSource:
             pool = ctx.Pool(procs, initializer=_winit,
                             initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind, self.size, self.pad,
                                       max(1, threads() // procs)))
-            # Runs of consecutive frames per worker: held and on-twos content lets a worker reuse the
-            # previous frame's effect results (results still arrive in order; ~procs runs are in flight).
-            run = max(1, min(8, len(rest) // (procs * 2)))
-            results = iter(pool.imap(_wframe, [self.times[i] for i in rest], chunksize=run))
+            runs = [[self.times[i] for i in rest[a:b]] for a, b in _runs(len(rest), procs)]
+            results = (frame for run in pool.imap(_wframes, runs) for frame in run)
             rest_set = set(rest)
+            try:
+                cached[first] = render_frame(self.r, self.times[first], self.kind, self.size, self.pad)
+            except BaseException:
+                pool.terminate()
+                raise
+            self._save(first, cached[first])
         else:
             rest_set = set()
         try:
@@ -600,8 +660,10 @@ def _rate_args(job: Job, codec: str, duration: float, audio_bps: int, force_bitr
 
 
 def video_codec_args(job: Job, duration: float, audio_bps: int, force_bitrate: int | None = None,
-                     webp_quality: int | None = None) -> tuple[list[str], str | None, bool, list[str]]:
-    """-> (output args, -vf filter, bitrate_mode, extra filters for filter_complex)"""
+                     webp_quality: int | None = None, gpu: bool = False) -> tuple[list[str], str | None, bool, list[str]]:
+    """-> (output args, -vf filter, bitrate_mode, extra filters for filter_complex)
+
+    gpu: encode H.264 with NVENC (see gpu_encoder); crf becomes its constant-quality target."""
     c = job.codec
     fps = float(job.fps)
     preset = str(job.a("preset", "medium"))
@@ -613,7 +675,23 @@ def video_codec_args(job: Job, duration: float, audio_bps: int, force_bitrate: i
     bitrate_mode = False
     if job.alpha and c in ("h264", "h265", "av1", "dnxhr"):
         warn_once("output", f"alpha-{c}", f"{c} has no alpha channel; rendered opaque")
-    if c == "h264":
+    if c == "h264" and gpu:
+        # p6 + hq tuning with lookahead and spatial AQ: NVENC's high-quality settings, at 300+ fps.
+        a += ["-c:v", "h264_nvenc", "-preset", "p6", "-tune", "hq", "-rc-lookahead", "32", "-spatial-aq", "1",
+              "-pix_fmt", pf or "yuv420p"]
+        ra, bitrate_mode = _rate_args(job, c, duration, audio_bps, force_bitrate)
+        if "-crf" in ra:
+            i = ra.index("-crf")
+            ra[i:i + 2] = ["-rc", "vbr", "-cq", ra[i + 1], "-b:v", "0"]
+        a += ra
+        if job.a("profile"):
+            a += ["-profile:v", job.a("profile")]
+        if job.a("level"):
+            a += ["-level:v", job.a("level")]
+        a += ["-g", str(gop)]
+        if job.a("bFrames") is not None:
+            a += ["-bf", str(job.a("bFrames"))]
+    elif c == "h264":
         a += ["-c:v", "libx264", "-preset", preset, "-pix_fmt", pf or "yuv420p"]
         ra, bitrate_mode = _rate_args(job, c, duration, audio_bps, force_bitrate)
         a += ra
@@ -1026,10 +1104,15 @@ def _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, pr
     else:
         vin, frames = raw_in, iter(src)
 
+    gpu_ff = gpu_encoder(job, two_pass or fit, (w, h))
+    if gpu_ff:
+        log.info("%s: encoding on the GPU (h264_nvenc)", job.name)
+
     def encode(force_bitrate: int | None = None, webp_q: int | None = None) -> int:
-        va, _, _, _ = video_codec_args(job, duration, abps, force_bitrate, webp_q)
+        va, _, _, _ = video_codec_args(job, duration, abps, force_bitrate, webp_q, gpu=bool(gpu_ff))
         if not two_pass:
-            cmd = [ff, "-y", "-v", "error", "-nostdin", *vin, *ain, *fargs, *maps, *va, *aargs, *movflags, *meta, *fmt, *tail]
+            cmd = [gpu_ff or ff, "-y", "-v", "error", "-nostdin", *vin, *ain, *fargs, *maps, *va, *aargs, *movflags, *meta,
+                   *fmt, *tail]
             _run_ffmpeg(cmd + [job.path], frames, progress if frames is not None else None)
             return os.path.getsize(job.path)
         log_prefix = os.path.join(tmp, "passlog")

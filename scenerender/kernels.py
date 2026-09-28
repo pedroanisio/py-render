@@ -297,27 +297,137 @@ if nb is not None:
                     d[y, x, c] = d[y, x, c] * k + s[y, x, c]
 
 
+    @_par
+    def _noise_octave(out, t0, t1, jx0, jx1, fxs, jy0, jy1, fys, f, weight, turbulent, shaping):
+        """One fractal octave from its two phase lattices (value_noise, the phase blend and the
+        kind's shaping, in the float32/float64 steps fractal() takes); t0/t1[j, k] hold lattice
+        values at compacted row/column indices."""
+        h, w = out.shape
+        for y in nb.prange(h):
+            a0, a1, fy = jy0[y], jy1[y], fys[y]
+            for x in range(w):
+                b0, b1, fx = jx0[x], jx1[x], fxs[x]
+                a = t0[a0, b0] * (F(1) - fx) + t0[a0, b1] * fx
+                b = t0[a1, b0] * (F(1) - fx) + t0[a1, b1] * fx
+                z0 = a * (F(1) - fy) + b * fy
+                a = t1[a0, b0] * (F(1) - fx) + t1[a0, b1] * fx
+                b = t1[a1, b0] * (F(1) - fx) + t1[a1, b1] * fx
+                z1 = a * (F(1) - fy) + b * fy
+                z = np.float64(z0) * (1.0 - f) + np.float64(z1) * f
+                if turbulent:
+                    z = abs(2 * z - 1)
+                if shaping == 1:
+                    z = z * z
+                elif shaping == 2:
+                    z = z * z * (3 - 2 * z)
+                elif shaping == 3:
+                    z = min(max(z * 3 - .5, 0.0), 1.0)
+                elif shaping == 4:
+                    z = (1 - z) ** 6
+                out[y, x] = np.float32(np.float64(out[y, x]) + z * weight)
+
+
+    @_par
+    def _dither(pixels, tile, top, left, out):
+        """paint._dither_surface's quantization: premultiplied float -> ordered-dithered BGRA8."""
+        h, w = out.shape[0], out.shape[1]
+        for y in nb.prange(h):
+            ty = (y + top) % 8
+            for x in range(w):
+                n = tile[ty, (x + left) % 8]
+                alpha = min(max(pixels[y, x, 3], F(0)), F(1))
+                a8 = np.floor(alpha * F(255) + F(.5))
+                for c in range(3):
+                    v = pixels[y, x, c] * F(255)
+                    v = v + F(.5)
+                    v = v + n * alpha
+                    v = min(max(np.floor(v), F(0)), a8)
+                    out[y, x, 2 - c] = np.uint8(v)
+                out[y, x, 3] = np.uint8(a8)
+
+    @_par
+    def _bgra_lin(raw, table, out):
+        """raster._bgra_to_working (linear, no primaries matrix): premultiplied 8-bit -> linear float."""
+        h, w = raw.shape[0], raw.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                a = np.int64(raw[y, x, 3]) << 8
+                out[y, x, 0] = table[a | raw[y, x, 2]]
+                out[y, x, 1] = table[a | raw[y, x, 1]]
+                out[y, x, 2] = table[a | raw[y, x, 0]]
+                out[y, x, 3] = F(raw[y, x, 3]) / F(255)
+
+
+    @_jit
+    def _grad(grad3, perm, h, dx, dy, dz):
+        k = perm[h] & 15
+        return grad3[k, 0] * dx + grad3[k, 1] * dy + grad3[k, 2] * dz
+
+    @_jit
+    def _fade(t):
+        return t * t * t * (t * (t * 6 - 15) + 10)
+
+    @_jit
+    def _perlin3(x, y, z, perm, grad3):
+        """assets.generator.perlin3 for one float64 sample (the same operations in the same order)."""
+        xf, yf, zf = np.floor(x), np.floor(y), np.floor(z)
+        X, Y, Z = np.int64(xf) & 255, np.int64(yf) & 255, np.int64(zf) & 255
+        x, y, z = x - xf, y - yf, z - zf
+        u, v, w = _fade(x), _fade(y), _fade(z)
+        A, B = perm[X] + Y, perm[X + 1] + Y
+        AA, AB, BA, BB = perm[A] + Z, perm[A + 1] + Z, perm[B] + Z, perm[B + 1] + Z
+        g0 = _grad(grad3, perm, AA, x, y, z)
+        x1 = g0 + u * (_grad(grad3, perm, BA, x - 1, y, z) - g0)
+        g0 = _grad(grad3, perm, AB, x, y - 1, z)
+        x2 = g0 + u * (_grad(grad3, perm, BB, x - 1, y - 1, z) - g0)
+        y1 = x1 + v * (x2 - x1)
+        g0 = _grad(grad3, perm, AA + 1, x, y, z - 1)
+        x3 = g0 + u * (_grad(grad3, perm, BA + 1, x - 1, y, z - 1) - g0)
+        g0 = _grad(grad3, perm, AB + 1, x, y - 1, z - 1)
+        x4 = g0 + u * (_grad(grad3, perm, BB + 1, x - 1, y - 1, z - 1) - g0)
+        y2 = x3 + v * (x4 - x3)
+        return y1 + w * (y2 - y1)
+
+    @_par
+    def _fbm(x, y, z, perm, grad3, octaves, out):
+        h, w = x.shape
+        for i in nb.prange(h):
+            for j in range(w):
+                total, amp = 0.0, 1.0
+                for o in range(octaves):
+                    f = 2.0 ** o
+                    total += amp * _perlin3(x[i, j] * f + 17.3 * o, y[i, j] * f + 5.1 * o, z * (1 + 0.5 * o),
+                                            perm, grad3)
+                    amp *= 0.5
+                out[i, j] = total
+
+
 def _px(a) -> np.ndarray:
     return np.ascontiguousarray(a, np.float32)
 
 
 def display_chain(px, ops: list[tuple[int, np.ndarray]], linear: bool) -> np.ndarray:
     """from_display(op_n(... display_rgb(px))) for consecutive display-referred operations."""
-    from . import raster
-    _threads()
+    from . import gpu, raster
     px = _px(px)
-    out = np.empty_like(px)
     minv, has_m = _matrix(raster._WM_INV)
     m, _ = _matrix(raster._WM)
     codes = np.array([o for o, _ in ops], np.int64)
     params = np.zeros((len(ops), 9), np.float32)
     for i, (_, q) in enumerate(ops):
         params[i, :len(q)] = q
+    if gpu.worth(px):
+        return gpu.display_chain(px, codes, params, linear, minv, m, has_m)
+    _threads()
+    out = np.empty_like(px)
     _display_chain(px, out, codes, params, linear, minv, m, has_m)
     return out
 
 
 def exposure(px, k: float) -> np.ndarray:
+    from . import gpu
+    if gpu.worth(px):
+        return gpu.exposure(_px(px), k)
     _threads()
     px = _px(px)
     out = np.empty_like(px)
@@ -326,6 +436,9 @@ def exposure(px, k: float) -> np.ndarray:
 
 
 def grain(px, field, k: float, response: float, strength) -> np.ndarray:
+    from . import gpu
+    if gpu.worth(px):
+        return gpu.grain(_px(px), field, k, response, strength)
     _threads()
     px = _px(px)
     out = np.empty_like(px)
@@ -334,6 +447,9 @@ def grain(px, field, k: float, response: float, strength) -> np.ndarray:
 
 
 def vignette(px, wmap, color) -> np.ndarray:
+    from . import gpu
+    if gpu.worth(px):
+        return gpu.vignette(_px(px), wmap, color)
     _threads()
     px = _px(px)
     out = np.empty_like(px)
@@ -363,6 +479,9 @@ def lighting(px, height, lights: list, intensity: float) -> np.ndarray:
 
 
 def mix(before, after, opacity: float) -> np.ndarray:
+    from . import gpu
+    if gpu.worth(before):
+        return gpu.mix(_px(before), after, opacity)
     _threads()
     before = _px(before)
     out = np.empty_like(before)
@@ -371,6 +490,9 @@ def mix(before, after, opacity: float) -> np.ndarray:
 
 
 def to_rgb8(px, linear: bool, background=None) -> np.ndarray:
+    from . import gpu
+    if gpu.worth(px):
+        return gpu.to_rgb8(_px(px), linear, background)
     _threads()
     px = _px(px)
     out = np.empty(px.shape[:2] + (3,), np.uint8)
@@ -383,3 +505,32 @@ def over(d: np.ndarray, s: np.ndarray) -> None:
     """In-place source-over of float32 (h, w, 4) views that do not overlap."""
     _threads()
     _over(d, s)
+
+
+def noise_octave(out, t0, t1, jx0, jx1, fxs, jy0, jy1, fys, f: float, weight: float, turbulent: bool,
+                 shaping: int) -> None:
+    _threads()
+    _noise_octave(out, t0, t1, jx0, jx1, fxs, jy0, jy1, fys, float(f), float(weight), bool(turbulent), int(shaping))
+
+
+def dither(pixels, tile, top: int, left: int) -> np.ndarray:
+    """(h, w, 4) BGRA8 whose rows are ARGB32-stride aligned (width * 4 bytes)."""
+    _threads()
+    out = np.empty(pixels.shape[:2] + (4,), np.uint8)
+    _dither(pixels, np.ascontiguousarray(tile, np.float32), int(top), int(left), out)
+    return out
+
+
+def bgra_to_linear(raw, table, out) -> None:
+    _threads()
+    _bgra_lin(raw, table, out)
+
+
+def fbm(x, y, z: float, perm, grad3, octaves: int) -> np.ndarray:
+    """The octave sum of assets.generator.fbm (before its normalization)."""
+    _threads()
+    x, y = np.asarray(x, np.float64), np.asarray(y, np.float64)
+    out = np.empty(x.shape, np.float64)
+    _fbm(x, y, float(z), np.ascontiguousarray(perm, np.int64), np.ascontiguousarray(grad3, np.float32),
+         max(1, int(octaves)), out)
+    return out

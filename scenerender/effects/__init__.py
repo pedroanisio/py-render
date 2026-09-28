@@ -291,6 +291,11 @@ def smoothstep(lo, hi, x):
     return u * u * (3 - 2*u)
 
 
+def _lattice(x, y, seed):
+    v = np.sin(x * 127.1 + y * 311.7 + seed % 65521) * 43758.5453
+    return v - np.floor(v)
+
+
 def value_noise(x, y, seed):
     """Coordinate-stable smooth lattice noise, independent of render order/tile size."""
     ix, iy = np.floor(x), np.floor(y)
@@ -298,8 +303,7 @@ def value_noise(x, y, seed):
     fx, fy = fx*fx*(3-2*fx), fy*fy*(3-2*fy)
 
     def lattice(x, y):
-        v = np.sin(x * 127.1 + y * 311.7 + seed % 65521) * 43758.5453
-        return v - np.floor(v)
+        return _lattice(x, y, seed)
 
     a = lattice(ix, iy)*(1-fx) + lattice(ix+1, iy)*fx
     b = lattice(ix, iy+1)*(1-fx) + lattice(ix+1, iy+1)*fx

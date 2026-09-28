@@ -89,6 +89,7 @@ class Evaluator:
     doc: Document
     audio_amplitude: Any = None        # callable(track_id, band, t) -> float, installed by the audio module
     _keys: dict = field(default_factory=dict)
+    _statics: dict = field(default_factory=dict)   # (el, prop) -> (authored, value) of undriven properties
     _depth: int = 0
 
     # ------------------------------------------------------------ public
@@ -295,6 +296,8 @@ class Evaluator:
             if comp in node.iterancestors():
                 return node, self._within_context(node, comp, Ctx(ctx.comp_t, ctx.comp_t, frame=ctx.frame))
             return node, self.node_ctx(node, ctx)
+        if "/" not in ref:
+            return None, ctx     # only an instance path (below) can name an unknown ID
         # Authored IDs can contain '/' after include expansion; match the longest
         # instance ID, then resolve the remaining path inside that instance only.
         boundary = self.doc.section("composition")
@@ -333,8 +336,20 @@ class Evaluator:
         return None, ctx
 
     def get(self, el, prop: str, ctx: Ctx, default: Any = None) -> Any:
-        base = self.base(el, prop, ctx, default)
         anims = self._anims(el, prop)
+        if not anims and not ctx.scope.overrides:
+            # Undriven and not overridden: the authored (or schema default) value, parsed once per
+            # attribute text (documents can be edited between evaluations).
+            key = (el, prop)
+            raw = el.get(prop)
+            hit = self._statics.get(key)
+            if hit is None or hit[0] != raw:
+                marker = object()
+                v = self.base(el, prop, ctx, marker)
+                hit = self._statics[key] = (raw, False, None) if v is marker else \
+                    (raw, True, self._resolve_value(el, prop, v))
+            return hit[2] if hit[1] else default
+        base = self.base(el, prop, ctx, default)
         if not anims:
             return self._resolve_value(el, prop, base)
         if self._depth > 64:

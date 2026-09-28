@@ -83,7 +83,7 @@ def displacement_map(rc, e, buf, ctx, node):
 
 
 def _noise_warp(rc, e, buf, ctx, heat=False):
-    from .fields import fractal
+    from .fields import fractal, fractal_grid
     p = Params(rc, e, ctx)
     x, y = grid(buf)
     amount = p.d("amount", 1)
@@ -99,8 +99,28 @@ def _noise_warp(rc, e, buf, ctx, heat=False):
     octaves = p.param("octaves", 6)
     if heat:
         ny -= time  # rising refractive cells; independent boiling evolution
-    dx = (fractal(nx, ny, seed, octaves, evolution, kind)*2-1)*amount
-    dy = (fractal(nx+37, ny+17, seed+7, octaves, evolution, kind)*2-1)*amount
+    from .. import gpu, kernels
+    mode = p.param("displacement", "turbulent")
+    pin = np.clip(p.param("pinning", 0),0,1)
+    if kernels.enabled() and gpu.worth(buf.px) and not pin and mode != "bulge":
+        # Fields, displacement and sampling on the GPU (the lattice tables are evaluated here).
+        xs, ys = nx[0], ny[:, 0]
+        memo = rc.cache.setdefault(("noise-warp-rows", e), ({}, {}))
+        f1 = fractal_grid(xs, ys, seed, octaves, evolution, kind, memo=memo[0], device=True)
+        f2 = fractal_grid(xs+37, ys+17, seed+7, octaves, evolution, kind, memo=memo[1], device=True)
+        code = {"horizontal": 1, "vertical": 2, "twist": 3}.get(mode, 0)
+        vertical = p.param("vertical", .15 if heat else 0) if (mode == "horizontal" or heat) else 0
+        falloff = max(0, p.param("falloff", 1)) if heat else 1
+        return result(buf, gpu.noise_warp(buf.px, f1, f2, amount, code, vertical, heat, falloff))
+    if kernels.enabled():
+        # The coordinates vary by column (x) and by row (y) only: the separable, memoized path.
+        xs, ys = nx[0], ny[:, 0]
+        memo = rc.cache.setdefault(("noise-warp-rows", e), ({}, {}))
+        dx = (fractal_grid(xs, ys, seed, octaves, evolution, kind, memo=memo[0])*2-1)*amount
+        dy = (fractal_grid(xs+37, ys+17, seed+7, octaves, evolution, kind, memo=memo[1])*2-1)*amount
+    else:
+        dx = (fractal(nx, ny, seed, octaves, evolution, kind)*2-1)*amount
+        dy = (fractal(nx+37, ny+17, seed+7, octaves, evolution, kind)*2-1)*amount
     mode = p.param("displacement", "turbulent")
     if mode == "horizontal" or heat:
         dy *= p.param("vertical", .15 if heat else 0)

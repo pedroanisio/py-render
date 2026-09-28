@@ -80,6 +80,10 @@ def _hash01(i: np.ndarray, j: np.ndarray, seed: int, k: int = 0) -> np.ndarray:
 
 
 def fbm(x, y, z, perm, octaves: int) -> np.ndarray:
+    from .. import kernels
+    if kernels.enabled() and np.ndim(z) == 0 and np.shape(x) == np.shape(y) and np.ndim(x) == 2:
+        norm = sum(0.5 ** o for o in range(max(1, octaves)))
+        return kernels.fbm(x, y, float(z), perm, _GRAD3, octaves) / norm
     total, amp, norm = np.zeros(np.shape(x)), 1.0, 0.0
     for o in range(max(1, octaves)):
         f = 2.0 ** o

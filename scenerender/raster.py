@@ -194,6 +194,10 @@ def _bgra_to_working(raw: np.ndarray, linear: bool, out: np.ndarray) -> None:
         out[..., 2] = raw[..., 0] / 255.0
         out[..., 3] = a
         return
+    from . import kernels
+    if kernels.enabled() and _WM is None and raw.dtype == np.uint8:
+        kernels.bgra_to_linear(raw, _PREMUL_LIN_FLAT, out)
+        return
     # Flat (alpha << 8 | channel) indices into the 256x256 table gather faster than 2-D indexing.
     alpha = raw[..., 3].astype(np.intp) << 8
     for dst, src in ((0, 2), (1, 1), (2, 0)):

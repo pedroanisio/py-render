@@ -31,6 +31,21 @@ which moves an 8-bit output value by at most one level on rare pixels.
 `SCENERENDER_KERNELS=0` selects the NumPy implementations; they are also used when Numba
 is not installed.
 
+With an NVIDIA GPU, rendering and encoding use it automatically:
+
+- Whole-frame effect kernels (heat haze and turbulent displacement, colour grading,
+  exposure, film grain, vignette, adjustment mixing and the 8-bit conversion) run as CUDA
+  kernels through CuPy, for tiles of 2^18 pixels or more. Install the `gpu` extra
+  (`uv pip install -e '.[gpu]'`). The kernels are compiled without fused multiply-add and
+  follow the CPU kernels operation for operation; noise lattices are still evaluated on
+  the CPU, so the GPU path renders the same pixels.
+- Single-pass H.264 outputs of at least 256x128 pixels encode with NVENC (`h264_nvenc`,
+  constant quality at the output's `crf`). The engine probes `SCENERENDER_FFMPEG`, the
+  bundled ffmpeg and the `ffmpeg` on `PATH`, in that order, for one that can open the
+  encoder; without one, or for two-pass and `maxFileSize` outputs, x264 encodes as before.
+
+`SCENERENDER_GPU=0` (or `render --no-gpu`) keeps all work on the CPU.
+
 The 2026-09-27 regression environment uses Python 3.12.3, Pycairo 1.25.1, Cairo
 1.18.0 and Mesa llvmpipe. Local HTTP delivery tests require permission to bind
 loopback sockets, and USDZ packaging creates temporary files in `/var/tmp`.

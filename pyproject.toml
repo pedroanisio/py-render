@@ -13,6 +13,8 @@ dependencies = ["lxml>=5", "numpy>=1.26", "pillow>=10", "pycairo>=1.25", "imagei
 # pycairo may also be taken from system site-packages when >= 1.25.
 # create the venv with `uv venv --system-site-packages`.
 test = ["pytest>=8", "zxing-cpp>=3"]
+# NVIDIA GPU effects (CUDA 12 via CuPy); GPU H.264 encoding needs an ffmpeg with NVENC instead.
+gpu = ["cupy-cuda12x[ctk]>=13.4"]
 # Data Matrix and PDF417 code assets (also used by the tests to decode every barcode kind).
 codes = ["zxing-cpp>=3"]
 # 3D asset formats and materials: USD/USDZ (usd-core), FBX (ufbx), OpenEXR environments, MaterialX.

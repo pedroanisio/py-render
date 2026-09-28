@@ -85,6 +85,7 @@ class RenderContext:
     _fx_memo: dict = field(default_factory=dict)   # (node, effects) -> last input and output, see _reuse_effect
     _fx_const: dict = field(default_factory=dict)  # effect element -> parameters provably constant
     _fx_gen: int = 0
+    _mb_mode: dict = field(default_factory=dict)   # node -> (undriven chain, its motionBlur mode)
     _flat_depth: int = 0
     _skip_effects: set = field(default_factory=set)
     scene_context: tuple | None = None       # (symbol root, context at its entrance)
@@ -559,6 +560,20 @@ class RenderContext:
 
     def motion_blur_mode(self, el, ctx: Ctx) -> str:
         """Effective node motionBlur: the nearest non-"inherit" value on el or its ancestors."""
+        if not ctx.scope.path and not ctx.scope.overrides:
+            # Outside instances, an undriven chain has one answer per set of motionBlur attributes.
+            chain = [n for n in [el, *el.iterancestors()] if isinstance(n.tag, str)]
+            authored = tuple(n.get("motionBlur") for n in chain)
+            hit = self._mb_mode.get(el)
+            if hit is None or hit[0] != chain or hit[1] != authored:
+                static = not any(self.ev._anims(n, "motionBlur") for n in chain)
+                hit = self._mb_mode[el] = (chain, authored, static,
+                                           self._motion_blur_mode(el, ctx) if static else None)
+            if hit[2]:
+                return hit[3]
+        return self._motion_blur_mode(el, ctx)
+
+    def _motion_blur_mode(self, el, ctx: Ctx) -> str:
         for n in [el, *el.iterancestors()]:
             if not isinstance(n.tag, str):
                 continue
@@ -750,10 +765,14 @@ class RenderContext:
         Only for effect types that are functions of their input pixels and parameters alone, with
         every parameter (and anything it references, such as lights) constant over the timeline and
         no instance scope: animation "on twos" and held shots feed identical tiles frame after frame."""
-        if (node is None or ctx.scope.path or typ not in PURE_EFFECTS
-                or not all(self._effect_constant(e) for e in effects)):
+        if node is None or ctx.scope.path or typ not in PURE_EFFECTS:
             return compute()
-        key = (node, effects)
+        # The effects and everything they reference, as authored now (documents may be edited
+        # between frames): part of the key, and what the constant-parameter proof holds for.
+        signature = tuple(self._effect_signature(e) for e in effects)
+        if not all(self._effect_constant(e, sig) for e, sig in zip(effects, signature)):
+            return compute()
+        key = (node, effects, signature)
         hit = self._fx_memo.get(key)
         if (hit is not None and hit[1].x0 == buf.x0 and hit[1].y0 == buf.y0
                 and hit[1].px.shape == buf.px.shape and np.array_equal(hit[1].px, buf.px)):
@@ -764,31 +783,49 @@ class RenderContext:
         self._fx_memo[key] = (self._fx_gen, buf.copy(), None if res is None else res.copy())
         return res
 
-    def _effect_constant(self, e) -> bool:
+    def _effect_constant(self, e, signature) -> bool:
         """The effect's parameters, and the elements they reference, hold one value at every time."""
-        hit = self._fx_const.get(e)
+        key = (e, signature)
+        hit = self._fx_const.get(key)
         if hit is None:
-            hit = self._fx_const[e] = self._references_constant(e)
+            hit = self._fx_const[key] = self._references_constant(e)
         return hit
 
-    def _references_constant(self, e) -> bool:
+    def _effect_signature(self, e) -> bytes:
+        """The serialized effect and the elements it references (see _references)."""
+        from lxml import etree
+        return b"".join(etree.tostring(d) for d in self._references(e))
+
+    def _references(self, e) -> list:
+        """e and the elements its attributes (and its children's) reference by ID, transitively."""
         import re
-        from .document import NODE_TAGS
-        todo, seen = [e], set()
+        out, todo, seen = [], [e], set()
         while todo:
-            for d in todo.pop().iter():
-                if d in seen or not isinstance(d.tag, str):
+            root = todo.pop()
+            if root in seen:
+                continue
+            out.append(root)
+            for d in root.iter():
+                if not isinstance(d.tag, str):
                     continue
                 seen.add(d)
-                if ln(d) in NODE_TAGS or d.get("condition"):
-                    return False     # another node's pixels or placement, or a switch
-                if d is not e and not static_element(self, d, -math.inf, math.inf):
-                    return False
                 for value in d.attrib.values():
                     for token in re.findall(r"[^\s,;()#'\"]+", value):
                         target = self.doc.ids.get(token)
                         if target is not None and target not in seen:
                             todo.append(target)
+        return out
+
+    def _references_constant(self, e) -> bool:
+        from .document import NODE_TAGS
+        for root in self._references(e):
+            for d in root.iter():
+                if not isinstance(d.tag, str):
+                    continue
+                if ln(d) in NODE_TAGS or d.get("condition"):
+                    return False     # another node's pixels or placement, or a switch
+                if d is not e and not static_element(self, d, -math.inf, math.inf):
+                    return False
         return True
 
     def apply_adjustment(self, el, dst: Buf, ctx, PM, box, fold_opacity) -> Buf:

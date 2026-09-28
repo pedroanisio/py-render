@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from . import _box_axis, gaussian, sample, value_noise
+from . import _box_axis, _lattice, gaussian, sample, value_noise
 
 
 def fractal(x, y, seed, octaves=6, evolution=0, kind="basic", roughness=.5):
@@ -36,6 +36,78 @@ def fractal(x, y, seed, octaves=6, evolution=0, kind="basic", roughness=.5):
         out += z*weight
         total += weight
     return out/max(total, 1e-7)
+
+
+_TURBULENT = ("turbulent", "turbulent-smooth", "turbulent-sharp", "rocky", "strings")
+_SHAPING = {"sharp": 1, "turbulent-sharp": 1, "smooth": 2, "turbulent-smooth": 2, "rocky": 3, "strings": 4}
+
+
+def fractal_grid(xs, ys, seed, octaves=6, evolution=0, kind="basic", roughness=.5, memo=None, device=False):
+    """fractal() over the grid x = xs[column], y = ys[row] (float32).
+
+    value_noise reads its lattice only at integer points: each octave and phase evaluates the
+    lattice once for the columns and rows some pixel uses (with the same float32 steps), and a
+    kernel interpolates and accumulates per pixel. With a memo dict, lattice rows are kept across
+    calls: a field drifting along y or evolving by phase recomputes only the rows it newly needs."""
+    from .. import kernels
+    xs, ys = np.asarray(xs, np.float32), np.asarray(ys, np.float32)
+    if device:     # accumulated on the GPU: the result is a device array (lattice tables stay CPU-exact)
+        from ..gpu import FractalField
+        field = FractalField(len(ys), len(xs))
+    out, total = np.zeros((len(ys), len(xs)), np.float32) if not device else None, 0.0
+    octaves = float(np.clip(octaves, 1, 12))
+    phase = np.floor(evolution)
+    f = evolution-phase
+    f = f*f*(3-2*f)
+
+    def axis(v):
+        iv = np.floor(v)
+        fv = v - iv
+        points = np.union1d(iv, iv+1)
+        return points, np.searchsorted(points, iv), np.searchsorted(points, iv+1), fv*fv*(3-2*fv)
+
+    for i in range(int(np.ceil(octaves))):
+        weight = roughness**i*min(1, octaves-i)
+        px_, jx0, jx1, fxs = axis(xs*2**i)
+        py_, jy0, jy1, fys = axis(ys*2**i)
+        t0, t1 = (_lattice_rows(px_, py_, seed+i*101+(int(phase)+k)*7919, memo) for k in (0, 1))
+        if device:
+            field.octave(t0, t1, jx0, jx1, fxs, jy0, jy1, fys, f, weight, kind in _TURBULENT, _SHAPING.get(kind, 0))
+        else:
+            kernels.noise_octave(out, t0, t1, jx0, jx1, fxs, jy0, jy1, fys, f, weight,
+                                 kind in _TURBULENT, _SHAPING.get(kind, 0))
+        total += weight
+    if memo is not None:
+        used = memo.pop("_used", set())
+        for key in [k for k in memo if k not in used]:
+            del memo[key]
+    if device:
+        return field.normalized(total)
+    return out/max(total, 1e-7)
+
+
+def _lattice_rows(xs, ys, seed, memo):
+    """_lattice at every (ys[j], xs[k]), reusing memoized rows (each row is the same elementwise
+    computation whichever rows are evaluated with it)."""
+    if memo is None:
+        return _lattice(xs[None, :], ys[:, None], seed)
+    key = (seed, xs.tobytes())
+    known, table = memo.get(key, (np.empty(0, np.float32), np.empty((0, len(xs)), np.float32)))
+    # ys is sorted and unique (lattice points): locate the rows already evaluated.
+    at = np.minimum(np.searchsorted(known, ys), max(len(known) - 1, 0))
+    have = (known[at] == ys) if len(known) else np.zeros(len(ys), bool)
+    if not have.all():
+        missing = ys[~have]
+        known = np.concatenate([known, missing])
+        table = np.concatenate([table, _lattice(xs[None, :], missing[:, None], seed)])
+        order = np.argsort(known, kind="stable")
+        known, table = known[order], table[order]
+        at = np.searchsorted(known, ys)
+    out = table[at]
+    # Keep this call's rows only: the next frame needs about the same ones.
+    memo[key] = (ys.copy(), out)
+    memo.setdefault("_used", set()).add(key)
+    return out
 
 
 def resize(px, h, w):

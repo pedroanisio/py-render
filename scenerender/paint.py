@@ -131,6 +131,17 @@ def _dither_pattern(cr, pattern):
 _DITHERED: dict = {}
 
 
+def _bayer() -> np.ndarray:
+    # Bayer recursion produces every rank 0..63 exactly once in an 8x8 tile.
+    ranks = np.array([[0.]], np.float32)
+    for _ in range(3):
+        ranks = np.block([[4*ranks, 4*ranks+2], [4*ranks+3, 4*ranks+1]])
+    return (ranks + .5) / 64 - .5
+
+
+_BAYER = _bayer()
+
+
 def _gradient_key(pattern, transform, left, top, width, height):
     """Everything that determines a linear/radial gradient's device raster, or None (not cached)."""
     if isinstance(pattern, cairo.LinearGradient):
@@ -152,12 +163,13 @@ def _dither_surface(pattern, transform, left, top, width, height):
     paint.paint()
     surf.flush()
     pixels = np.frombuffer(surf.get_data(), np.float32).reshape(height, surf.get_stride() // 4)[:, :4*width].reshape(height, width, 4)
-    # Bayer recursion produces every rank 0..63 exactly once in an 8x8 tile.
-    ranks = np.array([[0.]], np.float32)
-    for _ in range(3):
-        ranks = np.block([[4*ranks, 4*ranks+2], [4*ranks+3, 4*ranks+1]])
+    from . import kernels
+    if kernels.enabled():
+        bgra = kernels.dither(pixels, _BAYER, top, left)
+        return cairo.ImageSurface.create_for_data(memoryview(bgra).cast("B"), cairo.FORMAT_ARGB32, width, height,
+                                                  width * 4)
     # The threshold tile repeats every 8 device pixels: roll it to the surface origin and tile it.
-    tile = np.roll((ranks + .5) / 64 - .5, (-(top % 8), -(left % 8)), axis=(0, 1))
+    tile = np.roll(_BAYER, (-(top % 8), -(left % 8)), axis=(0, 1))
     noise = np.tile(tile, (-(-height // 8), -(-width // 8)))[:height, :width, None]
     alpha = np.clip(pixels[..., 3:4], 0, 1)
     a8 = np.floor(alpha * 255 + .5)

@@ -53,6 +53,8 @@ def cmd_still(args) -> int:
 
 def cmd_render(args) -> int:
     from .output import render_outputs
+    if args.no_gpu:
+        os.environ["SCENERENDER_GPU"] = "0"     # frame workers inherit it
     r = _open(args)
     return render_outputs(r, args)
 
@@ -109,6 +111,7 @@ def main(argv=None) -> int:
     p.add_argument("--jobs", type=int, default=0, help="parallel frame workers (0 = CPU count)")
     p.add_argument("--no-audio", action="store_true")
     p.add_argument("--no-motion-blur", action="store_true", help="ignore project motion blur (fast previews)")
+    p.add_argument("--no-gpu", action="store_true", help="never use the GPU (NVENC encoding, GPU effects)")
     p.add_argument("--crf", type=int)
     p.add_argument("--publish", action="store_true",
                    help="upload to non-file <destination>s (s3, gcs, azure-blob, http-put, sftp, webhook)")
