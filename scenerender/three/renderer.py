@@ -653,16 +653,95 @@ def _sorted_splats(ctx, sp, cam):
     return buf, True
 
 
+_SPLAT_GPU: dict = {}        # id(splat set) -> _GpuSplats (GL 4.3 path, see _gpu_sorted_splats)
+
+
+class _GpuSplats:
+    """A splat set on the GPU: attributes and centres uploaded once, keys and order sorted there."""
+
+    def __init__(self, ctx, sp):
+        self.sp, self.n = sp, len(sp.centers)
+        self.pad = 1 << max(0, (self.n - 1).bit_length())
+        packed = np.concatenate([sp.centers, sp.colors, sp.cov], 1).astype(np.float32)
+        self.attr = ctx.buffer(np.ascontiguousarray(packed))
+        self.centres = ctx.buffer(np.ascontiguousarray(sp.centers, np.float64))
+        self.keys = ctx.buffer(reserve=self.pad * 8)
+        self.vals = ctx.buffer(reserve=self.pad * 4)
+        self.eye = self.fwd = None
+        self.span = 0.0
+
+    def release(self):
+        for b in (self.attr, self.centres, self.keys, self.vals):
+            b.release()
+
+
+def _gpu_sort_programs(r: Res):
+    progs = getattr(r, "splat_sort", None)
+    if progs is None:
+        from . import shaders
+        progs = r.splat_sort = (r.ctx.compute_shader(shaders.SPLAT_KEYS_CS), r.ctx.compute_shader(shaders.SPLAT_SORT_CS),
+                                r.ctx.program(vertex_shader=shaders.SPLAT_VS_SSBO, fragment_shader=shaders.SPLAT_FS))
+    return progs
+
+
+def _gpu_sorted_splats(r: Res, sp, cam) -> "_GpuSplats":
+    """The splat set on the GPU with its order buffer sorted far to near for cam: the order of
+    _sorted_splats (a stable sort of the negated depths; depths equal to within float64 rounding may
+    differ), computed by a bitonic sort in compute shaders. Reused under the same conditions."""
+    g = _SPLAT_GPU.get(id(sp))
+    if g is None or g.sp is not sp:
+        while len(_SPLAT_GPU) >= 4:
+            _SPLAT_GPU.pop(next(iter(_SPLAT_GPU))).release()
+        g = _SPLAT_GPU[id(sp)] = _GpuSplats(r.ctx, sp)
+    if g.eye is not None and np.linalg.norm(cam.eye - g.eye) < 0.005 * g.span \
+            and float(np.dot(cam.fwd, g.fwd)) > math.cos(math.radians(0.5)):
+        return g
+    keys_cs, sort_cs, _ = _gpu_sort_programs(r)
+    g.centres.bind_to_storage_buffer(0)
+    g.keys.bind_to_storage_buffer(1)
+    g.vals.bind_to_storage_buffer(2)
+    groups = -(-g.pad // 256)
+    keys_cs["u_n"].value, keys_cs["u_pad"].value = g.n, g.pad
+    keys_cs["u_eye"].value = tuple(float(v) for v in cam.eye)
+    keys_cs["u_fwd"].value = tuple(float(v) for v in cam.fwd)
+    keys_cs.run(groups)
+    sort_cs["u_pad"].value = g.pad
+    uk, uj = sort_cs["u_k"], sort_cs["u_j"]
+    k = 2
+    while k <= g.pad:
+        uk.value = k
+        j = k >> 1
+        while j > 0:
+            uj.value = j
+            r.ctx.memory_barrier()
+            sort_cs.run(groups)
+            j >>= 1
+        k <<= 1
+    r.ctx.memory_barrier()
+    # The depth span sets the reuse threshold, as on the CPU path (the eye cancels out).
+    cz = sp.centers @ cam.fwd
+    g.span = float(cz.max() - cz.min())
+    g.eye, g.fwd = np.array(cam.eye, copy=True), np.array(cam.fwd, copy=True)
+    return g
+
+
 def draw_splats(r: Res, fr: Frame3D, obj: ObjDraw, V, P) -> None:
     import moderngl
     ctx = r.ctx
     sp = obj.splats
-    ibuf, _ = _sorted_splats(ctx, sp, fr.cam)
     n_splats = len(sp.centers)
-    prog = r.splat
-    vao = ctx.vertex_array(prog, [(r.splat_corners, "2f", "in_corner"),
-                                  (ibuf, "3f 4f 3f 3f/i", "in_center", "in_color", "in_covA", "in_covB")],
-                           skip_errors=True)
+    if ctx.version_code >= 430 and n_splats > 0:
+        g = _gpu_sorted_splats(r, sp, fr.cam)
+        prog = _gpu_sort_programs(r)[2]
+        g.attr.bind_to_storage_buffer(0)
+        g.vals.bind_to_storage_buffer(1)
+        vao = ctx.vertex_array(prog, [(r.splat_corners, "2f", "in_corner")], skip_errors=True)
+    else:
+        ibuf, _ = _sorted_splats(ctx, sp, fr.cam)
+        prog = r.splat
+        vao = ctx.vertex_array(prog, [(r.splat_corners, "2f", "in_corner"),
+                                      (ibuf, "3f 4f 3f 3f/i", "in_center", "in_color", "in_covA", "in_covB")],
+                               skip_errors=True)
     _write(prog, "u_view", V.T)
     _write(prog, "u_proj", P.T)
     cam = fr.cam

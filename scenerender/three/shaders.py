@@ -646,6 +646,64 @@ void main() {
 }
 """
 
+# SPLAT_VS with the attributes read from storage buffers (GL 4.3): `order` lists the splats far to
+# near (sorted on the GPU, see SPLAT_SORT_CS), `attr` holds 13 floats per splat in load order
+# (centre, colour, covariance A, covariance B).
+SPLAT_VS_SSBO = SPLAT_VS.replace("#version 410", "#version 430").replace(
+    "in vec3 in_center; in vec4 in_color; in vec3 in_covA; in vec3 in_covB;",
+    """layout(std430, binding = 0) readonly buffer Attr { float attr[]; };
+layout(std430, binding = 1) readonly buffer Order { uint order[]; };""").replace(
+    "void main() {\n    vec4 cam = u_view * vec4(in_center, 1.0);",
+    """void main() {
+    uint at = order[gl_InstanceID] * 13u;
+    vec3 in_center = vec3(attr[at], attr[at + 1u], attr[at + 2u]);
+    vec4 in_color = vec4(attr[at + 3u], attr[at + 4u], attr[at + 5u], attr[at + 6u]);
+    vec3 in_covA = vec3(attr[at + 7u], attr[at + 8u], attr[at + 9u]);
+    vec3 in_covB = vec3(attr[at + 10u], attr[at + 11u], attr[at + 12u]);
+    vec4 cam = u_view * vec4(in_center, 1.0);""")
+
+# Depth sort of the splats far to near: keys -dot(centre - eye, fwd) in double precision with the splat
+# index as tie-break (the order of a stable sort of the keys), padded to a power of two with +inf.
+SPLAT_KEYS_CS = """
+#version 430
+layout(local_size_x = 256) in;
+layout(std430, binding = 0) readonly buffer Centres { double c[]; };
+layout(std430, binding = 1) buffer Keys { double key[]; };
+layout(std430, binding = 2) buffer Vals { uint val[]; };
+uniform uint u_n; uniform uint u_pad;
+uniform dvec3 u_eye; uniform dvec3 u_fwd;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= u_pad) return;
+    val[i] = i;
+    if (i < u_n) {
+        dvec3 p = dvec3(c[3u * i], c[3u * i + 1u], c[3u * i + 2u]) - u_eye;
+        key[i] = -(p.x * u_fwd.x + p.y * u_fwd.y + p.z * u_fwd.z);
+    } else {
+        key[i] = packDouble2x32(uvec2(0u, 0x7FF00000u));     // +inf: padding sorts last
+    }
+}
+"""
+
+SPLAT_SORT_CS = """
+#version 430
+layout(local_size_x = 256) in;
+layout(std430, binding = 1) buffer Keys { double key[]; };
+layout(std430, binding = 2) buffer Vals { uint val[]; };
+uniform uint u_k; uniform uint u_j; uniform uint u_pad;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    uint l = i ^ u_j;
+    if (i >= u_pad || l <= i) return;
+    double ki = key[i], kl = key[l];
+    uint vi = val[i], vl = val[l];
+    bool after = ki > kl || (ki == kl && vi > vl);          // (key, index) of i sorts after l's
+    if (((i & u_k) == 0u) == after) {
+        key[i] = kl; key[l] = ki; val[i] = vl; val[l] = vi;
+    }
+}
+"""
+
 SPLAT_FS = """
 #version 410
 in vec4 v_color; in vec2 v_off; in float v_vdepth;

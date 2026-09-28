@@ -13,15 +13,31 @@ from .document import ln
 from .values import parse_fps, parse_float
 
 
+_TIMING = ("start", "end", "startMarker", "endMarker")
+
+
 def authored_window(ev, el, ctx, *, timing_ctx=None):
     """Authored window, before a sequence adds its accumulated offset."""
     doc = ev.doc
-    s = doc.markers.get(el.get("startMarker"), parse_float(el.get("start"), 0.))
-    e = doc.markers.get(el.get("endMarker"))
-    if e is None and el.get("end") is not None:
-        e = parse_float(el.get("end"))
-    if not any(ctx.scope.lookup(el.get("id"), p) is not None or ev._anims(el, p)
-               for p in ("start", "end", "startMarker", "endMarker")):
+    raw = (el.get("start"), el.get("end"), el.get("startMarker"), el.get("endMarker"))
+    memo = None
+    if not ctx.scope.overrides:
+        # Without instance overrides the window of a node with undriven timing depends on its four
+        # attributes alone: remembered per node while they read the same (edits are seen).
+        memo = ev.__dict__.setdefault("_authored_windows", {})
+        hit = memo.get(el)
+        if hit is not None and hit[0] == raw and hit[1] is doc.markers:
+            if hit[2] is not None:
+                return hit[2]
+            memo = None
+    s = doc.markers.get(raw[2], parse_float(raw[0], 0.))
+    e = doc.markers.get(raw[3])
+    if e is None and raw[1] is not None:
+        e = parse_float(raw[1])
+    undriven = not any(ev._anims(el, p) for p in _TIMING)
+    if memo is not None:
+        memo[el] = (raw, doc.markers, (s, e) if undriven else None)
+    if undriven and not any(ctx.scope.lookup(el.get("id"), p) is not None for p in _TIMING):
         return s, e
     seed = timing_ctx if timing_ctx is not None else replace(ctx, node_start=s, node_end=e)
     sm, em = ev.str(el, "startMarker", seed), ev.str(el, "endMarker", seed)
