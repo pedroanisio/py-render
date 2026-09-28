@@ -287,6 +287,18 @@ if nb is not None:
                     out[y, x, 2] = np.uint8(_clip01(b) * F(255) + F(.5))
 
     @_par
+    def _lut_rgba(raw, lut_c, lut_a, out):
+        """out[..., c] = lut_c[raw[..., c]] for the colour channels, lut_a for alpha (lut_a[255] when raw
+        has none); tables and output are integer views, so the values are copied bit for bit."""
+        h, w, n = raw.shape[0], raw.shape[1], raw.shape[2]
+        for y in nb.prange(h):
+            for x in range(w):
+                out[y, x, 0] = lut_c[raw[y, x, 0]]
+                out[y, x, 1] = lut_c[raw[y, x, 1]]
+                out[y, x, 2] = lut_c[raw[y, x, 2]]
+                out[y, x, 3] = lut_a[raw[y, x, 3]] if n == 4 else lut_a[255]
+
+    @_par
     def _warp_affine(src, hi, ox, oy, out):
         """out[y, x] = bilinear sample of src at hi . (ox + x + .5, oy + y + .5) - .5 (pixel centres;
         texels outside src are transparent), as raster.warp_projective does for an affine map. The
@@ -741,6 +753,15 @@ def to_rgb8(px, linear: bool, background=None) -> np.ndarray:
     out = np.empty(px.shape[:2] + (3,), np.uint8)
     bg = np.zeros(3, np.float32) if background is None else np.asarray(background[:3], np.float32)
     _to_rgb8(px, out, linear, background is not None, bg)
+    return out
+
+
+def lut_rgba(raw: np.ndarray, lut_c: np.ndarray, lut_a: np.ndarray) -> np.ndarray:
+    """(h, w, 4) of lut_c's dtype: 8-bit RGB(A) raw through the 256-entry tables (alpha 255 without)."""
+    _threads()
+    bits = {2: np.uint16, 4: np.uint32}[lut_c.dtype.itemsize]
+    out = np.empty(raw.shape[:2] + (4,), lut_c.dtype)
+    _lut_rgba(np.ascontiguousarray(raw), lut_c.view(bits), lut_a.view(bits), out.view(bits))
     return out
 
 

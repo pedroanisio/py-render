@@ -235,13 +235,12 @@ def decode_image(src: bytes | str, srgb: bool, half: bool = True) -> np.ndarray:
         # (a 4K RGBA map: 134 MB instead of 268 MB).
         raw = np.asarray(im if im.mode in ("RGB", "RGBA") else im.convert("RGBA"))
         lut = _code_table(srgb, np.float16 if half else np.float32)
+        from .. import kernels
+        if kernels.enabled():
+            return kernels.lut_rgba(raw, lut[0], lut[1])
         out = np.empty(raw.shape[:2] + (4,), lut.dtype)
-        for c in range(3):
-            np.take(lut[0], raw[..., c], out=out[..., c])
-        if raw.shape[-1] == 4:
-            np.take(lut[1], raw[..., 3], out=out[..., 3])
-        else:
-            out[..., 3] = lut[1][255]
+        out[..., :3] = lut[0][raw[..., :3]]
+        out[..., 3] = lut[1][raw[..., 3]] if raw.shape[-1] == 4 else lut[1][255]
         return out
     if srgb:
         a = np.concatenate([srgb_to_linear(a[..., :3]), a[..., 3:]], -1)
