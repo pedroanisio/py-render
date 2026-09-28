@@ -83,6 +83,7 @@ class RenderContext:
     _mb_nodes: dict | None = None            # node outputs reusable across this frame's shutter samples
     _mb_static: dict = field(default_factory=dict)
     _fx_memo: dict = field(default_factory=dict)   # (node, effects) -> last input and output, see _reuse_effect
+    _root: object = None      # the context this one was copied from (None: it is a root), see base()
     _fx_const: dict = field(default_factory=dict)  # effect element -> parameters provably constant
     _fx_gen: int = 0
     _mb_mode: dict = field(default_factory=dict)   # node -> (undriven chain, its motionBlur mode)
@@ -429,6 +430,12 @@ class RenderContext:
         M = loc.rc.node_matrix(el, loc.rc.enter_node(el, loc.ctx), loc.matrix, loc.box, loc.layout)
         self.frame_cache[key] = M
         return M
+
+    def base(self) -> "RenderContext":
+        """The long-lived root context. Per-render copies (references.locate, buffer_for_asset) carry
+        per-frame state such as motion-blur sample buffers; anything cached across frames must hold
+        the root instead, or it pins that state for the life of the cache."""
+        return self._root if self._root is not None else self
 
     def node_location(self, el, ctx: Ctx):
         from .references import locate

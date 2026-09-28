@@ -189,17 +189,22 @@ def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
     lo, hi = [], []
     for it in model.pose(clip, ct, morph, variant):
         m = obj_mat if obj_mat is not None else _spec_material(rc, it.material)
-        uvs = map_uvs(it, m)
-        pos, nrm = _displace(it.positions, it.normals, uvs.get("displacementMap"), it.indices, m)
-        tan = it.tangents
-        if it.mode == 4 and "normalMap" in m.maps and "normalMap" in uvs and (tan is None or "normalMap" in m.p.get("mapUV", {})):
-            tan = G.compute_tangents(pos, nrm, uvs["normalMap"], np.asarray(it.indices).reshape(-1, 3))
-        static = it.static and pos is it.positions
-        if static:
-            item = _gpu(rc, ("mesh",) + tuple(it.key) + (path, m.key), lambda: R.upload(ctx_gl, pos, nrm, it.uvs, tan,
-                                                                                   it.colors, it.indices, uvs, it.mode))
+        # Map UVs and tangents are only needed to (re)upload geometry: a static item cached on the GPU
+        # skips them (they used to be recomputed every frame just to be discarded).
+        uvs = map_uvs(it, m) if "displacementMap" in m.maps else None
+        if uvs is not None:
+            pos, nrm = _displace(it.positions, it.normals, uvs.get("displacementMap"), it.indices, m)
         else:
-            item = R.upload(ctx_gl, pos, nrm, it.uvs, tan, it.colors, it.indices, uvs, it.mode)
+            pos, nrm = it.positions, it.normals
+
+        def build(it=it, m=m, pos=pos, nrm=nrm, uvs=uvs):
+            u = uvs if uvs is not None else map_uvs(it, m)
+            tan = it.tangents
+            if it.mode == 4 and "normalMap" in m.maps and "normalMap" in u and (tan is None or "normalMap" in m.p.get("mapUV", {})):
+                tan = G.compute_tangents(pos, nrm, u["normalMap"], np.asarray(it.indices).reshape(-1, 3))
+            return R.upload(ctx_gl, pos, nrm, it.uvs, tan, it.colors, it.indices, u, it.mode)
+        static = it.static and pos is it.positions
+        item = _gpu(rc, ("mesh",) + tuple(it.key) + (path, m.key), build) if static else build()
         out.append((item, m, static))
         if len(pos):
             lo.append(np.min(pos, 0))
@@ -245,7 +250,23 @@ def _instances(rc, el, ctx, local_bounds) -> np.ndarray:
     return mats
 
 
+_SPLAT_MEMO: dict = {}
+
+
 def _splat_gpu(sp, M: np.ndarray) -> R.SplatGPU:
+    """Splat centres/covariances in engine space; the last result per splat set is reused while its
+    world matrix is unchanged (static splat objects: every frame and shutter sample)."""
+    key = id(sp)
+    hit = _SPLAT_MEMO.get(key)
+    if hit is not None and hit[0] is sp and np.array_equal(hit[1], M):
+        return hit[2]
+    out = _splat_gpu_compute(sp, M)
+    _SPLAT_MEMO.clear()               # one splat set at a time keeps memory bounded
+    _SPLAT_MEMO[key] = (sp, np.array(M, copy=True), out)
+    return out
+
+
+def _splat_gpu_compute(sp, M: np.ndarray) -> R.SplatGPU:
     from ..camera import quat_to_mat
     A = M[:3, :3]
     centers = sp.positions @ A.T + M[:3, 3]
@@ -467,16 +488,20 @@ def finish_layer(rc, fr: R.Frame3D, col: np.ndarray, dep: np.ndarray | None, at=
     """Downsample, crop, depth of field, lens distortion and working-space conversion of a layer read
     back at render-target pixel offset `at`."""
     from .postfx import bokeh_blur
-    col = _downsample(col, fr.ssaa).astype(np.float32)
+    # col / dep arrive already reduced by the SSAA factor (renderer._read does it on the GPU); `at`
+    # is still in render-target pixels.
+    col = np.asarray(col, np.float32)
     ax, ay = at[0] // fr.ssaa, at[1] // fr.ssaa
     a = col[..., 3]
-    ys, xs = np.nonzero(a > 1e-5)
-    if len(ys) == 0:
+    cov = a > 1e-5
+    rows = np.flatnonzero(cov.any(1))
+    if len(rows) == 0:
         return None
+    cols_ = np.flatnonzero(cov.any(0))
+    ys, xs = rows[[0, -1]], cols_[[0, -1]]
     cam = fr.cam
     coc = None
     if dep is not None and cam.dof and not cam.ortho:
-        dep = _downsample(dep, fr.ssaa)
         depth = dep[..., 0] / np.maximum(dep[..., 3], 1e-6)
         coc = np.where(a > 1e-5, cam.coc_px(np.maximum(depth, cam.near)) * fr.frame_scale, 0.0)
     pad = 2 + (int(math.ceil(min(float(coc.max()), 256.0))) if coc is not None else 0)

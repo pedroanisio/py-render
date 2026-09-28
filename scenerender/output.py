@@ -67,6 +67,7 @@ import sys
 import tempfile
 import time
 import zlib
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from fractions import Fraction
 
@@ -433,6 +434,17 @@ def _wframes(ts: list[float]) -> list:
     return [_wframe(t) for t in ts]
 
 
+def _fit_frame_workers(procs: int) -> int:
+    """procs, reduced so that many renderers fit in 60% of the memory still available (host or
+    cgroup); each is sized by this process's peak so far (it has just rendered a frame)."""
+    from .render import _mem_available, _rss
+    per = max(_rss("self", peak=True), 512 << 20)
+    fit = int(_mem_available() * 0.6 // per)
+    if fit < procs:
+        log.info("frame workers: %d fit in memory (%.1f GB peak per renderer)", max(fit, 1), per / 2 ** 30)
+    return max(1, min(procs, fit))
+
+
 def _runs(n: int, procs: int, longest: int = 48, shortest: int = 4) -> list[tuple[int, int]]:
     """Guided runs of consecutive frames: long ones first (a worker reuses the previous frame's
     effect results and noise lattices within a run), shrinking so every worker finishes together."""
@@ -507,34 +519,33 @@ class FrameSource:
         pool = None
         results = None
         if workers > 1 and missing:
-            # render the first missing frame here (surfaces warnings once) while the workers start
-            # on the rest
             first = missing[0]
             rest = missing[1:]
+            # Render the first missing frame here before any worker starts: it surfaces warnings once,
+            # and its peak memory sizes the pool (every worker holds a full renderer of this document).
+            cached[first] = render_frame(self.r, self.times[first], self.kind, self.size, self.pad)
+            self._save(first, cached[first])
+            procs = _fit_frame_workers(min(workers, len(rest)))
+        if workers > 1 and missing and procs > 1:
             import multiprocessing as mp
+            from concurrent.futures import ProcessPoolExecutor
             envelopes = {}
             try:
                 from .audio import envelope_table
                 envelopes = envelope_table(self.r)
             except Exception as e:  # noqa: BLE001
                 log.debug("no envelope table: %s", e)
-            ctx = mp.get_context("spawn")
-            procs = min(workers, len(rest))
             if hasattr(self.r, "close_sample_pool"):
                 self.r.close_sample_pool()     # frame workers now use the CPUs
             from . import threads
-            pool = ctx.Pool(procs, initializer=_winit,
-                            initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind, self.size, self.pad,
-                                      max(1, threads() // procs)))
+            # An executor, not multiprocessing.Pool: a worker that dies (e.g. killed out of memory)
+            # raises BrokenProcessPool here instead of leaving the render waiting forever.
+            pool = ProcessPoolExecutor(procs, mp_context=mp.get_context("spawn"), initializer=_winit,
+                                       initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind,
+                                                 self.size, self.pad, max(1, threads() // procs)))
             runs = [[self.times[i] for i in rest[a:b]] for a, b in _runs(len(rest), procs)]
-            results = (frame for run in pool.imap(_wframes, runs) for frame in run)
+            results = (frame for run in pool.map(_wframes, runs) for frame in run)
             rest_set = set(rest)
-            try:
-                cached[first] = render_frame(self.r, self.times[first], self.kind, self.size, self.pad)
-            except BaseException:
-                pool.terminate()
-                raise
-            self._save(first, cached[first])
         else:
             rest_set = set()
         try:
@@ -542,7 +553,11 @@ class FrameSource:
                 if i in cached:
                     img = cached.pop(i)
                 elif i in rest_set:
-                    shape, dt, raw = next(results)
+                    try:
+                        shape, dt, raw = next(results)
+                    except BrokenProcessPool as e:
+                        raise RuntimeError(f"{self.job.name}: a frame worker process died (out of memory?); "
+                                           "rerun with fewer --jobs") from e
                     img = np.frombuffer(raw, np.dtype(dt)).reshape(shape)
                     self._save(i, img)
                 else:
@@ -553,8 +568,9 @@ class FrameSource:
                 yield img
         finally:
             if pool is not None:
-                pool.terminate()
-                pool.join()
+                for proc in list(getattr(pool, "_processes", {}).values()):
+                    proc.terminate()
+                pool.shutdown(wait=True, cancel_futures=True)
 
 
 class Progress:

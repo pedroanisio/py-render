@@ -661,3 +661,31 @@ void main() {
     o_depth = vec4(v_vdepth * a, 0.0, 0.0, a);
 }
 """
+
+
+DOWNSAMPLE_FS = """
+#version 410
+// Exact n x n box average of the resolved colour (and depth) targets: the supersampling (SSAA)
+// reduction, done here so only final-size pixels are read back. u_origin is the block origin in
+// bottom-up target pixels.
+uniform sampler2D u_col;
+uniform sampler2D u_dep;
+uniform int u_n;
+uniform int u_depth;
+uniform ivec2 u_origin;
+layout(location = 0) out vec4 o_col;
+layout(location = 1) out vec4 o_dep;
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy) * u_n + u_origin;
+    vec4 c = vec4(0.0);
+    vec4 d = vec4(0.0);
+    for (int j = 0; j < u_n; ++j)
+        for (int i = 0; i < u_n; ++i) {
+            c += texelFetch(u_col, p + ivec2(i, j), 0);
+            if (u_depth == 1) d += texelFetch(u_dep, p + ivec2(i, j), 0);
+        }
+    float k = 1.0 / float(u_n * u_n);
+    o_col = c * k;
+    o_dep = d * k;
+}
+"""

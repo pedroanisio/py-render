@@ -69,6 +69,9 @@ class Res:
         quad = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], np.float32).tobytes())
         self.bg_vao = ctx.vertex_array(self.bg, [(quad, "2f", "in_pos")])
         self.pf_vao = ctx.vertex_array(self.prefilter, [(quad, "2f", "in_pos")])
+        self.down = ctx.program(vertex_shader=gl.FULLSCREEN_VS, fragment_shader=shaders.DOWNSAMPLE_FS)
+        self.down_vao = ctx.vertex_array(self.down, [(quad, "2f", "in_pos")])
+        self.down_targets: dict = {}
         corners = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], np.float32).tobytes())
         self.splat_corners = corners
 
@@ -912,11 +915,48 @@ def restore_state(r: Res) -> None:
     ctx.blend_func = moderngl.DEFAULT_BLENDING
 
 
-def _read(r: Res, t: Target, rect=None, depth: bool = True):
-    """Resolve and read (colour, depth or None) of rect = (x0, y0, x1, y1) in top-down pixels."""
+def _down_target(r: Res, w: int, h: int):
+    """Colour + depth framebuffer of the SSAA downsample pass, kept per size (a few sizes per frame)."""
+    hit = r.down_targets.get((w, h))
+    if hit is None:
+        if len(r.down_targets) > 16:
+            for fb, a, b in r.down_targets.values():
+                fb.release(); a.release(); b.release()
+            r.down_targets.clear()
+        a = r.ctx.texture((w, h), 4, dtype="f4")
+        b = r.ctx.texture((w, h), 4, dtype="f4")
+        hit = r.down_targets[(w, h)] = (r.ctx.framebuffer([a, b]), a, b)
+    return hit
+
+
+def _read(r: Res, t: Target, rect=None, depth: bool = True, n: int = 1):
+    """Resolve and read (colour, depth or None) of rect = (x0, y0, x1, y1) in top-down pixels, reduced
+    by an exact n x n box average (SSAA) on the GPU when n > 1; rect must then be n-aligned."""
     ctx = r.ctx
     ctx.copy_framebuffer(t.resolve, t.fbo)
     x0, y0, x1, y1 = rect if rect is not None else (0, 0, t.w, t.h)
+    if n > 1:
+        import moderngl
+        w, h = (x1 - x0) // n, (y1 - y0) // n
+        fb, _, _ = _down_target(r, w, h)
+        fb.use()
+        ctx.viewport = (0, 0, w, h)
+        ctx.disable(moderngl.DEPTH_TEST | moderngl.BLEND | moderngl.CULL_FACE)
+        t.rc_tex.use(0)
+        t.rd_tex.use(1)
+        _set(r.down, "u_col", 0)
+        _set(r.down, "u_dep", 1)
+        _set(r.down, "u_n", int(n))
+        _set(r.down, "u_depth", int(bool(depth)))
+        _set(r.down, "u_origin", (int(x0), int(t.h - y1)))
+        r.down_vao.render(moderngl.TRIANGLE_STRIP)
+        col = np.frombuffer(fb.read(components=4, dtype="f4", attachment=0), np.float32)
+        col = np.ascontiguousarray(col.reshape(h, w, 4)[::-1])
+        dep = None
+        if depth:
+            d = np.frombuffer(fb.read(components=4, dtype="f4", attachment=1), np.float32)
+            dep = np.ascontiguousarray(d.reshape(h, w, 4)[::-1])
+        return col, dep
     vp = (x0, t.h - y1, x1 - x0, y1 - y0)
     h, w = y1 - y0, x1 - x0
     col = np.frombuffer(t.resolve.read(viewport=vp, components=4, dtype="f4", attachment=0), np.float32)
@@ -1000,7 +1040,7 @@ def render_layer(r: Res, fr: Frame3D, obj: ObjDraw, tex_cache: dict, depth: bool
     t.fbo.color_mask = ((True, True, True, True), (True, True, True, True))
     r.ctx.enable(moderngl.BLEND)
     draw_object(r, fr, obj, V, P, tex_cache, fr.opaque)
-    col, dep = _read(r, t, rect, depth)
+    col, dep = _read(r, t, rect, depth, n=fr.ssaa)
     restore_state(r)
     return col, dep, rect[:2]
 
@@ -1012,6 +1052,6 @@ def render_background(r: Res, fr: Frame3D) -> np.ndarray | None:
     _begin(r, t)
     V, P = matrices(fr)
     draw_background(r, fr, V, P)
-    col = _read(r, t, None, False)[0]
+    col = _read(r, t, None, False, n=fr.ssaa)[0]
     restore_state(r)
     return col

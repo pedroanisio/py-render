@@ -1,6 +1,46 @@
 __version__ = "0.1.0"
 
 
+def _tune_threads() -> None:
+    """Passive OpenMP waiting, and BLAS single-threaded (SCENERENDER_BLAS_THREADS overrides; 0 keeps the
+    library default).
+
+    The engine's parallelism is its own (Numba kernels, tiles, sample workers). NumPy's OpenBLAS
+    otherwise wakes a thread per core for mid-sized products (e.g. depth-sorting splats) and its idle
+    threads spin-wait between calls: measured on 3D frames, ~70% of all CPU time for no speed-up.
+    Environment defaults cover a NumPy loaded after this; an already loaded OpenBLAS is set directly."""
+    import os
+    # Numba's OpenMP threading layer otherwise spin-waits ~200 ms after every parallel kernel on each
+    # of its threads: a 1080p source-over used 46 ms of CPU for 7 ms of wall time (passive: 5 ms CPU,
+    # 1.6 ms wall). Read once when the OpenMP runtime loads, so it is set before any kernel runs.
+    os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+    n = os.environ.get("SCENERENDER_BLAS_THREADS", "1")
+    if n == "0":
+        return
+    for var in ("OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "BLIS_NUM_THREADS"):
+        os.environ.setdefault(var, n)
+    import sys
+    if "numpy" not in sys.modules:
+        return
+    try:
+        import ctypes
+        with open("/proc/self/maps") as fh:
+            libs = {line.split()[-1] for line in fh if "openblas" in line.lower() and ".so" in line.split()[-1]}
+        for path in libs:
+            lib = ctypes.CDLL(path)
+            for sym in ("scipy_openblas_set_num_threads64_", "openblas_set_num_threads64_",
+                        "scipy_openblas_set_num_threads", "openblas_set_num_threads"):
+                fn = getattr(lib, sym, None)
+                if fn is not None:
+                    fn(int(n))
+                    break
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
+_tune_threads()
+
+
 def _tune_allocator() -> None:
     """Keep freed frame-sized buffers in the process heap (glibc only).
 

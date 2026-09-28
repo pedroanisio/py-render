@@ -133,6 +133,7 @@ def buffer_for_asset(rc, asset, ctx):
     if w <= 0 or h <= 0:
         return None
     local = copy(rc)
+    local._root = rc.base()
     local.width, local.height = max(1, math.ceil(w)), max(1, math.ceil(h))
     local.frame_rect = (0, 0, local.width, local.height)
     local.scale, local.root_matrix = 1., np.eye(3)

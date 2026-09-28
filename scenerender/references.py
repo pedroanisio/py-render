@@ -26,6 +26,7 @@ def locate(rc, node, ctx: Ctx) -> Location:
     """
     from .nodes.core import _repeat_vars, child_ctx, fit_matrix
     local = copy(rc)
+    local._root = rc.base()
     local.scene_context, local.scene_matrix = None, None
     comp = rc.doc.section("composition")
     boundary = comp

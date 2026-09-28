@@ -1133,7 +1133,8 @@ def _geometry(rc, spec: Spec, k: float, lay, width) -> Block:
     if _is_vertical(spec):
         W = _f(spec.b("width"), 100.0)
         O = np.array([[0, -1, W], [1, 0, 0], [0, 0, 1]], np.float64) @ O
-    blk = Block(rc, spec, k, lay, text, runs, lines, clusters, cl_x, cl_line, cl_run, O,
+    # Blocks are cached across frames: hold the root context, never a per-render copy of it.
+    blk = Block(rc.base() if hasattr(rc, "base") else rc, spec, k, lay, text, runs, lines, clusters, cl_x, cl_line, cl_run, O,
                 _f(spec.b("size"), 32.0) * k,
                 (ink.x / PS, ink.y / PS, (ink.x + ink.width) / PS, (ink.y + ink.height) / PS),
                 (logical.x / PS, logical.y / PS, (logical.x + logical.width) / PS, (logical.y + logical.height) / PS))
