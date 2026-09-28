@@ -14,6 +14,7 @@ light leaks use smooth seeded multi-lobe edge exposure. All additive light is li
 from __future__ import annotations
 
 import math
+import os
 
 import numpy as np
 
@@ -42,6 +43,11 @@ def _bloom(rc, e, buf, ctx, halation=False):
     p = Params(rc, e, ctx)
     r = max(0, p.d("radius", 4))
     b = buf.pad(math.ceil(4*r))
+    if not halation and rc.linear and os.environ.get("SCENERENDER_GPU", "1") != "0":
+        from .gl_bloom import bloom as gl_bloom
+        out = gl_bloom(b.px, r, max(0, p.n("threshold", .7)), max(0, p.n("intensity", 1)), _linear_color(p))
+        if out is not None:
+            return result(b, out)
     src = linear_pixels(rc, b.px)
     rgb, a = straight(src)
     threshold = max(0, p.n("threshold", .7))

@@ -228,10 +228,9 @@ class RenderContext:
                 skip.update(run[1:])
                 key = ("run", parent, tuple(run), self.scale, tuple(np.round(box, 6)))
                 sig = tuple(self._raster_signature(c, self._rc_static(c, k, False)[1]) for c in run)
-                buf = self._cached_draw(key, sig, k, M, lambda rc, A, run=run: rc._render_run(run, ctx, A, box))
-                if buf is not _NOT_CACHED:
-                    if buf is not None:
-                        dst = blending.composite(dst, buf, "normal", 1.0)
+                got = self._composite_cached(dst, key, sig, k, M, lambda rc, A, run=run: rc._render_run(run, ctx, A, box))
+                if got is not _NOT_CACHED:
+                    dst = got
                     continue
                 skip.difference_update(run[1:])
             if child in hidden_mattes or child in self.exclude:
@@ -279,7 +278,7 @@ class RenderContext:
         """Render a non-isolated group straight into dst so its children blend with the real backdrop.
         Returns the updated dst, or None when the group must be isolated."""
         from .nodes.core import _repeat_vars, child_ctx, is_isolated
-        if is_isolated(self, el, self.enter_node(el, ctx)):
+        if is_isolated(self, el, self.enter_node(el, ctx)) and not self._isolation_redundant(el, ctx):
             return None
         if not self.active(el, ctx):
             return dst
@@ -288,6 +287,42 @@ class RenderContext:
         size = self.node_size(el, nctx, box, layout.get(el))
         cctx = _repeat_vars(el, child_ctx(self, el, nctx))
         return self.render_children(el, dst, cctx, M, size, fold_opacity)
+
+    def _isolation_redundant(self, el, ctx) -> bool:
+        """An isolated group renders exactly as if drawn in place when it has nothing that isolation
+        affects: normal blend, full opacity, no effects, masks, matte, clip or 3D, and nothing inside
+        (through non-isolated descendants) that blends with the backdrop other than by source-over, no
+        adjustment layers and no transitions. Source-over is associative, so the extra buffer and its
+        composite are skipped."""
+        key = ("iso-redundant", el, ctx.scope, ctx.vars)
+        hit = self.frame_cache.get(key)
+        if hit is not None:
+            return hit
+        from .nodes.core import child_ctx, is_isolated
+        ev = self.ev
+        nctx = self.enter_node(el, ctx)
+
+        def plain(g, gctx) -> bool:
+            if (ev.str(g, "effects", gctx) or ev.str(g, "blend", gctx, "normal") != "normal"
+                    or ev.str(g, "matte", gctx) is not None or any(ln(c) == "mask" for c in g)
+                    or ev.bool(g, "clip", gctx) or ev.bool(g, "threeD", gctx) or ev.num(g, "opacity", gctx, 1.0) < 1.0
+                    or self.transitions.get(g)):
+                return False
+            cctx = child_ctx(self, g, gctx)
+            for c in self.doc.nodes(g):
+                tag = ln(c)
+                if tag in ("adjustment", "transition"):
+                    return False
+                if ev.str(c, "blend", self.enter_node(c, cctx), "normal") != "normal":
+                    return False
+                if tag in ("group", "sequence"):
+                    c_ctx = self.enter_node(c, cctx)
+                    if not is_isolated(self, c, c_ctx) and not plain(c, c_ctx):
+                        return False
+            return True
+
+        hit = self.frame_cache[key] = ln(el) == "group" and not self.is_threed(el) and plain(el, nctx)
+        return hit
 
     # ------------------------------------------------------------ node
     def active(self, el, ctx: Ctx, force: bool = False) -> bool:
@@ -746,8 +781,10 @@ class RenderContext:
         if not ok:
             return _NOT_CACHED
         key = ("node", el, self.scale, tuple(np.round(size, 6)))
+        # Only where transparent source pixels leave the backdrop unchanged may a raster be cropped.
+        crop = el.get("blend", "normal") == "normal" and not self.ev._anims(el, "blend")
         return self._cached_draw(key, self._raster_signature(el, refs), k, M,
-                                 lambda rc, A: rc._render_content(el, handler, ctx, A, size, PM, box))
+                                 lambda rc, A: rc._render_content(el, handler, ctx, A, size, PM, box), crop)
 
     def _render_content(self, el, handler, ctx, A, size, PM, box):
         buf = handler(self, el, ctx, A, size)
@@ -771,7 +808,7 @@ class RenderContext:
                 dst = blending.composite(dst, out.buf, out.blend, out.opacity)
         return None if dst.is_null else dst
 
-    def _cached_draw(self, key, sig, k: int, M, draw):
+    def _cached_draw(self, key, sig, k: int, M, draw, crop: bool = True, share: bool = False):
         """draw(rc, A) renders content whose placement in the frame is M. The first render in a window is
         exact (A = M) and is reused while M is unchanged; a changed M resamples a raster drawn at 15%
         above the current scale over a 25% margin around the view (redrawn when the view leaves it or
@@ -788,11 +825,14 @@ class RenderContext:
             buf = self._draw_with(draw, M, None)
             if buf is _NOT_CACHED:
                 return _NOT_CACHED
+            if crop and buf is not None and not buf.is_null:
+                buf = _crop_alpha(buf)      # transparent pixels composite to nothing: copies stay small
             cache[key] = {"exact": True, "M": np.array(M, copy=True), "buf": buf, "sig": sig}
-            return None if buf is None else Buf(buf.px.copy(), buf.x0, buf.y0)
+            return None if buf is None else (buf if share else Buf(buf.px.copy(), buf.x0, buf.y0))
         if entry["exact"] and np.array_equal(entry["M"], M):
             b = entry["buf"]
-            return None if b is None else Buf(b.px.copy(), b.x0, b.y0)
+            # share: the caller only reads it (composites it at once); otherwise callers may write into it
+            return None if b is None else (b if share else Buf(b.px.copy(), b.x0, b.y0))
         s_now = math.sqrt(abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))
         view = self._local_view(M, 64)
         if view is None:
@@ -809,7 +849,7 @@ class RenderContext:
         buf = self._draw_with(draw, A, (rw, rh))
         if buf is _NOT_CACHED:
             return _NOT_CACHED
-        if buf is not None:
+        if crop and buf is not None:
             buf = _crop_alpha(buf)
         entry = cache[key] = {"exact": False, "A": A, "s": s_r, "region": region, "buf": buf, "sig": sig}
         return self._warp_raster(entry, M)
@@ -841,15 +881,9 @@ class RenderContext:
                         [x0 - margin, y1 + margin, 1], [x1 + margin, y1 + margin, 1]], np.float64) @ Mi.T
         return (float(pts[:, 0].min()), float(pts[:, 1].min()), float(pts[:, 0].max()), float(pts[:, 1].max()))
 
-    def _warp_raster(self, entry, M) -> Buf | None:
-        from .raster import warp_projective
-        src = entry["buf"]
-        if src is None:
-            return None
-        H = M @ np.linalg.inv(entry["A"])
-        from . import kernels
-        if not kernels.enabled():
-            return warp_projective(src, H, self.frame_rect)
+    def _warp_geometry(self, src: Buf, A, M):
+        """(frame rect the warped raster covers, inverse map frame -> raster tile pixels) or None."""
+        H = M @ np.linalg.inv(A)
         corners = np.array([[src.x0, src.y0, 1], [src.x0 + src.w, src.y0, 1], [src.x0, src.y0 + src.h, 1],
                             [src.x0 + src.w, src.y0 + src.h, 1]], np.float64) @ H.T
         fr = (self.frame_rect[0] - 64, self.frame_rect[1] - 64, self.frame_rect[2] + 64, self.frame_rect[3] + 64)
@@ -857,16 +891,62 @@ class RenderContext:
                           int(math.ceil(corners[:, 0].max())) + 1, int(math.ceil(corners[:, 1].max())) + 1), fr)
         if rect is None:
             return None
-        hi = np.linalg.inv(H)
         # sample coordinates relative to the source tile's origin
-        hi = np.array([[1, 0, -src.x0], [0, 1, -src.y0], [0, 0, 1]], np.float64) @ hi
-        return Buf(kernels.warp_affine(src.px, hi[:2], rect), rect[0], rect[1])
+        hi = np.array([[1, 0, -src.x0], [0, 1, -src.y0], [0, 0, 1]], np.float64) @ np.linalg.inv(H)
+        return rect, hi[:2]
+
+    def _warp_raster(self, entry, M) -> Buf | None:
+        from .raster import warp_projective
+        src = entry["buf"]
+        if src is None:
+            return None
+        from . import kernels
+        if not kernels.enabled():
+            return warp_projective(src, M @ np.linalg.inv(entry["A"]), self.frame_rect)
+        g = self._warp_geometry(src, entry["A"], M)
+        if g is None:
+            return None
+        rect, hi = g
+        return Buf(kernels.warp_affine(src.px, hi, rect), rect[0], rect[1])
+
+    def _composite_cached(self, dst: Buf, key, sig, k: int, M, draw):
+        """dst with a cached run composited over it (source-over), or _NOT_CACHED. Like _cached_draw,
+        but the raster is never copied: an exact entry is composited as is, a resampled one is warped
+        straight into dst in one pass."""
+        from . import kernels
+        entry = self.base()._rcache.get(key)
+        moving = (entry is not None and entry["sig"] == sig and not entry["exact"] and kernels.enabled()
+                  and entry["buf"] is not None and self.base()._rcache.get("_k") == k)
+        if moving:
+            s_now = math.sqrt(abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))
+            view = self._local_view(M, 64)
+            if view is not None and entry["s"] * 0.45 <= s_now <= entry["s"] and _contains(entry["region"], view):
+                g = self._warp_geometry(entry["buf"], entry["A"], M)
+                if g is None:
+                    return dst
+                rect, hi = g
+                dst = dst.expand_to(rect)
+                d = dst.px[rect[1] - dst.y0:rect[3] - dst.y0, rect[0] - dst.x0:rect[2] - dst.x0]
+                kernels.warp_over(d, entry["buf"].px, hi, (rect[0], rect[1]))
+                return dst
+        buf = self._cached_draw(key, sig, k, M, draw, share=True)
+        if buf is _NOT_CACHED:
+            return _NOT_CACHED
+        return dst if buf is None else blending.composite(dst, buf, "normal", 1.0)
 
     def _raster_signature(self, el, refs) -> tuple:
         """What a raster-cache entry was drawn from: the node's XML, the elements it references and the
         files they name (size, mtime), so edits between renders are never served stale."""
         key = ("rc-sig", el)
-        hit = self.frame_cache.get(key)
+        # One signature per frame: the shutter samples of a frame cannot see an edit in between.
+        memo = self.frame_cache
+        if self.mb_center is not None:
+            base = self.base()
+            frame_memo = base.__dict__.get("_sig_frame")
+            if frame_memo is None or frame_memo[0] != self.mb_center:
+                frame_memo = base.__dict__["_sig_frame"] = (self.mb_center, {})
+            memo = frame_memo[1]
+        hit = memo.get(key)
         if hit is None:
             import os
             from lxml import etree
@@ -881,7 +961,7 @@ class RenderContext:
                             files.append((path, st.st_size, st.st_mtime_ns))
                         except (OSError, TypeError, ValueError):
                             files.append((v, None, None))
-            hit = self.frame_cache[key] = (etree.tostring(el), tuple(etree.tostring(r) for r in refs), tuple(files))
+            hit = memo[key] = (etree.tostring(el), tuple(etree.tostring(r) for r in refs), tuple(files))
         return hit
 
     def _content_static(self, el, first: float, last: float, refs: list | None = None,

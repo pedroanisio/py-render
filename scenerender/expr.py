@@ -687,6 +687,8 @@ class _Parser:
                     def const_array(ctx: _Ctx) -> object:
                         ctx.tick(steps)
                         return list(values)
+                    const_array.const_items = values      # type: ignore[attr-defined]  (see subscript)
+                    const_array.const_steps = steps       # type: ignore[attr-defined]
                     return self.node(const_array, *items)
 
                 def array(ctx: _Ctx) -> object:
@@ -755,6 +757,16 @@ class _Parser:
             index = self.expr()
             self.expect("]")
             b = index.fn
+
+            items_ = getattr(a, "const_items", None)
+            if items_ is not None:
+                # `[constants][i]`: read the element without building the list (same steps counted).
+                steps_ = a.const_steps + 1          # type: ignore[attr-defined]
+
+                def const_subscript(ctx: _Ctx) -> object:
+                    ctx.tick(steps_)
+                    return _index(items_, b(ctx))
+                return self.node(const_subscript, left, index)
 
             def subscript(ctx: _Ctx) -> object:
                 ctx.tick()

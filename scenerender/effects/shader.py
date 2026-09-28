@@ -247,11 +247,14 @@ _CONV_FS = """
 uniform sampler2D src;
 uniform int mode;          // 0: to_shader (premultiplied -> shader), 1: from_shader (shader -> premultiplied)
 uniform int code;          // see gpu_codes
+uniform int flip;          // 1: read rows bottom-up (NumPy row 0 on top <-> GL row 0 at the bottom)
 out vec4 color;
 float l2s(float x) { x = max(x, 0.0); return x <= 0.0031308 ? x * 12.92 : 1.055 * pow(x, 1.0 / 2.4) - 0.055; }
 float s2l(float x) { x = max(x, 0.0); return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4); }
 void main() {
-    vec4 p = texelFetch(src, ivec2(gl_FragCoord.xy), 0);
+    ivec2 q = ivec2(gl_FragCoord.xy);
+    if (flip == 1) q.y = textureSize(src, 0).y - 1 - q.y;
+    vec4 p = texelFetch(src, q, 0);
     if (mode == 0) {
         vec3 c = p.a > 1e-6 ? p.rgb / p.a : vec3(0.0);
         if (code == 1) c = vec3(l2s(c.r), l2s(c.g), l2s(c.b));
@@ -274,12 +277,30 @@ void main() {
 """
 
 
-def _convert_pass(tex, w: int, h: int, mode: int, code: int):
-    """Run _CONV_FS over tex into a new RGBA32F framebuffer (returned; caller releases)."""
+_TARGETS: dict = {}     # (w, h) -> {"raw": texture, "conv" / "main" / "post": framebuffer}: reused per size
+
+
+def _targets(w: int, h: int) -> dict:
+    hit = _TARGETS.pop((w, h), None)
+    if hit is None:
+        ctx = gl.context()
+        hit = {"raw": ctx.texture((w, h), 4, dtype="f4"),
+               "conv": gl.framebuffer(w, h), "main": gl.framebuffer(w, h), "post": gl.framebuffer(w, h)}
+        while len(_TARGETS) >= 6:
+            old = _TARGETS.pop(next(iter(_TARGETS)))
+            old["raw"].release()
+            for k in ("conv", "main", "post"):
+                _release_fbo(old[k])
+    _TARGETS[(w, h)] = hit          # most recently used last
+    return hit
+
+
+def _convert_pass(tex, w: int, h: int, mode: int, code: int, fbo=None, flip: bool = False):
+    """Run _CONV_FS over tex into fbo (or a new RGBA32F framebuffer, returned for the caller to release)."""
     import moderngl
     ctx = gl.context()
     prog, vao = program(_CONV_FS, CAT, "colour conversion")
-    fbo = gl.framebuffer(w, h)
+    fbo = fbo if fbo is not None else gl.framebuffer(w, h)
     fbo.use()
     ctx.viewport = (0, 0, w, h)
     ctx.disable(moderngl.BLEND)
@@ -287,6 +308,7 @@ def _convert_pass(tex, w: int, h: int, mode: int, code: int):
     prog["src"].value = 0
     prog["mode"].value = mode
     prog["code"].value = int(code)
+    prog["flip"].value = int(flip)
     vao.render(moderngl.TRIANGLE_STRIP)
     return fbo
 
@@ -314,12 +336,12 @@ def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: 
             if isinstance(px, PremulInput):
                 hit = converted.get(id(px))
                 if hit is None:
-                    raw = gl.texture_from(np.ascontiguousarray(px.px[::-1]))
-                    owned.append(raw)
+                    # Uploaded as is (row 0 on top) into a reused texture; the conversion pass flips it.
                     ph, pw = px.shape[:2]
-                    cf = _convert_pass(raw, pw, ph, 0, px.code)
-                    fbos.append(cf)
-                    hit = converted[id(px)] = cf.color_attachments[0]
+                    tg = _targets(pw, ph)
+                    tg["raw"].write(np.ascontiguousarray(px.px, np.float32))
+                    _convert_pass(tg["raw"], pw, ph, 0, px.code, fbo=tg["conv"], flip=True)
+                    hit = converted[id(px)] = tg["conv"].color_attachments[0]
                     hit.filter = (moderngl.LINEAR, moderngl.LINEAR)
                     hit.repeat_x = hit.repeat_y = False
                 tex = hit
@@ -329,8 +351,10 @@ def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: 
             tex.use(unit)
             u.value = unit
             unit += 1
-    fbo = gl.framebuffer(w, h)
-    fbos.append(fbo)
+    tg = _targets(w, h) if premul_out is not None else None
+    fbo = tg["main"] if tg is not None else gl.framebuffer(w, h)
+    if tg is None:
+        fbos.append(fbo)
     try:
         fbo.use()
         ctx.viewport = (0, 0, w, h)
@@ -338,9 +362,11 @@ def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: 
         fbo.clear(0.0, 0.0, 0.0, 0.0)
         vao.render(moderngl.TRIANGLE_STRIP)
         if premul_out is not None:
-            post = _convert_pass(fbo.color_attachments[0], w, h, 1, premul_out)
-            fbos.append(post)
-            return gl.read_rgba(post, w, h)
+            # from_shader on the GPU, written top row first: read straight into the result array.
+            _convert_pass(fbo.color_attachments[0], w, h, 1, premul_out, fbo=tg["post"], flip=True)
+            out = np.empty((h, w, 4), np.float32)
+            tg["post"].read_into(out, components=4, dtype="f4")
+            return out
         return np.nan_to_num(gl.read_rgba(fbo, w, h))
     finally:
         for t in owned:

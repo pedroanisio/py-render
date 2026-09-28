@@ -627,14 +627,31 @@ class Evaluator:
     # ------------------------------------------------------------ expressions
     def seed_for(self, el, extra: str | None = None, ctx: Ctx | None = None) -> int:
         value = el.get("seed", "") if ctx is None else self.str(el, "seed", ctx, "")
-        s = f"{self.doc.seed}:{el.get('id', '')}:{value}:{extra or ''}"
-        return zlib.crc32(s.encode())
+        key = (self.doc.seed, el.get("id", ""), value, extra or "")
+        memo = self.__dict__.setdefault("_seed_memo", {})
+        hit = memo.get(key)
+        if hit is None:
+            if len(memo) > 100000:
+                memo.clear()
+            hit = memo[key] = zlib.crc32(f"{key[0]}:{key[1]}:{key[2]}:{key[3]}".encode())
+        return hit
 
     def run_expression(self, src: str, el, prop: str, ctx: Ctx, value: Any, seed: str | None = None) -> Any:
         from . import expr
         fn = expr.compile_expr(src)
         s = self.seed_for(el, seed or prop)
-        env = expr.builtin_functions(s, ctx.t, value=value)
+        # The built-ins may be reused across evaluations (expr.builtin_functions): one set per
+        # (seed, time, value), e.g. for every instance of an instanced object at one sample time.
+        bkey = (s, ctx.t, value if isinstance(value, (int, float, str, type(None))) else None)
+        memo = self.__dict__.setdefault("_builtin_memo", {})
+        base_env = memo.get(bkey) if bkey[2] is not None or value is None else None
+        if base_env is None:
+            base_env = expr.builtin_functions(s, ctx.t, value=value)
+            if bkey[2] is not None or value is None:
+                if len(memo) > 4096:
+                    memo.clear()
+                memo[bkey] = base_env
+        env = dict(base_env)
         doc = self.doc
 
         def prop_fn(ref: str):

@@ -333,6 +333,107 @@ if nb is not None:
                 sy += a10
 
     @_par
+    def _warp_over(dst, src, hi, ox, oy):
+        """Source-over of src warped as in _warp_affine onto dst (in place), in one pass."""
+        h, w = src.shape[0], src.shape[1]
+        oh, ow = dst.shape[0], dst.shape[1]
+        a00, a01, a02 = hi[0, 0], hi[0, 1], hi[0, 2]
+        a10, a11, a12 = hi[1, 0], hi[1, 1], hi[1, 2]
+        for y in nb.prange(oh):
+            gy = np.float64(oy + y) + 0.5
+            gx0 = np.float64(ox) + 0.5
+            sx = a00 * gx0 + a01 * gy + a02 - 0.5
+            sy = a10 * gx0 + a11 * gy + a12 - 0.5
+            for x in range(ow):
+                ix = int(np.floor(sx))
+                iy = int(np.floor(sy))
+                if ix >= 0 and iy >= 0 and ix + 1 < w and iy + 1 < h:
+                    fx = F(sx - ix)
+                    fy = F(sy - iy)
+                    w00 = (F(1) - fx) * (F(1) - fy)
+                    w10 = fx * (F(1) - fy)
+                    w01 = (F(1) - fx) * fy
+                    w11 = fx * fy
+                    s3 = (src[iy, ix, 3] * w00 + src[iy, ix + 1, 3] * w10
+                          + src[iy + 1, ix, 3] * w01 + src[iy + 1, ix + 1, 3] * w11)
+                    k = F(1) - s3
+                    for c in range(3):
+                        dst[y, x, c] = dst[y, x, c] * k + (src[iy, ix, c] * w00 + src[iy, ix + 1, c] * w10
+                                                           + src[iy + 1, ix, c] * w01 + src[iy + 1, ix + 1, c] * w11)
+                    dst[y, x, 3] = dst[y, x, 3] * k + s3
+                elif not (ix < -1 or iy < -1 or ix >= w or iy >= h):
+                    fx = F(sx - ix)
+                    fy = F(sy - iy)
+                    s0 = s1 = s2 = s3 = F(0)
+                    for dy in range(2):
+                        jy = iy + dy
+                        if jy < 0 or jy >= h:
+                            continue
+                        wy = fy if dy == 1 else F(1) - fy
+                        for dx in range(2):
+                            jx = ix + dx
+                            if jx < 0 or jx >= w:
+                                continue
+                            wt = wy * (fx if dx == 1 else F(1) - fx)
+                            s0 += src[jy, jx, 0] * wt
+                            s1 += src[jy, jx, 1] * wt
+                            s2 += src[jy, jx, 2] * wt
+                            s3 += src[jy, jx, 3] * wt
+                    k = F(1) - s3
+                    dst[y, x, 0] = dst[y, x, 0] * k + s0
+                    dst[y, x, 1] = dst[y, x, 1] * k + s1
+                    dst[y, x, 2] = dst[y, x, 2] * k + s2
+                    dst[y, x, 3] = dst[y, x, 3] * k + s3
+                sx += a00
+                sy += a10
+
+    @_par
+    def _warp_over_axis(dst, src, ix, fx, iy, fy):
+        """_warp_over for an axis-aligned map (scale + translation): per-column (ix, fx) and per-row
+        (iy, fy) source coordinates computed once, with the same bilinear weights."""
+        h, w = src.shape[0], src.shape[1]
+        oh, ow = dst.shape[0], dst.shape[1]
+        for y in nb.prange(oh):
+            y0 = iy[y]
+            if y0 < -1 or y0 >= h:
+                continue
+            wy1 = fy[y]
+            wy0 = F(1) - wy1
+            for x in range(ow):
+                x0 = ix[x]
+                if x0 < -1 or x0 >= w:
+                    continue
+                wx1 = fx[x]
+                wx0 = F(1) - wx1
+                s0 = s1 = s2 = s3 = F(0)
+                if x0 >= 0 and y0 >= 0 and x0 + 1 < w and y0 + 1 < h:
+                    w00, w10, w01, w11 = wx0 * wy0, wx1 * wy0, wx0 * wy1, wx1 * wy1
+                    s0 = src[y0, x0, 0] * w00 + src[y0, x0 + 1, 0] * w10 + src[y0 + 1, x0, 0] * w01 + src[y0 + 1, x0 + 1, 0] * w11
+                    s1 = src[y0, x0, 1] * w00 + src[y0, x0 + 1, 1] * w10 + src[y0 + 1, x0, 1] * w01 + src[y0 + 1, x0 + 1, 1] * w11
+                    s2 = src[y0, x0, 2] * w00 + src[y0, x0 + 1, 2] * w10 + src[y0 + 1, x0, 2] * w01 + src[y0 + 1, x0 + 1, 2] * w11
+                    s3 = src[y0, x0, 3] * w00 + src[y0, x0 + 1, 3] * w10 + src[y0 + 1, x0, 3] * w01 + src[y0 + 1, x0 + 1, 3] * w11
+                else:
+                    for dy in range(2):
+                        jy = y0 + dy
+                        if jy < 0 or jy >= h:
+                            continue
+                        wy = wy1 if dy == 1 else wy0
+                        for dx in range(2):
+                            jx = x0 + dx
+                            if jx < 0 or jx >= w:
+                                continue
+                            wt = wy * (wx1 if dx == 1 else wx0)
+                            s0 += src[jy, jx, 0] * wt
+                            s1 += src[jy, jx, 1] * wt
+                            s2 += src[jy, jx, 2] * wt
+                            s3 += src[jy, jx, 3] * wt
+                k = F(1) - s3
+                dst[y, x, 0] = dst[y, x, 0] * k + s0
+                dst[y, x, 1] = dst[y, x, 1] * k + s1
+                dst[y, x, 2] = dst[y, x, 2] * k + s2
+                dst[y, x, 3] = dst[y, x, 3] * k + s3
+
+    @_par
     def _over(d, s):
         """Source-over in place: d = d * (1 - s.alpha) + s (any memory layout)."""
         h, w = d.shape[0], d.shape[1]
@@ -554,6 +655,21 @@ def warp_affine(src: np.ndarray, hi: np.ndarray, rect) -> np.ndarray:
     out = np.empty((y1 - y0, x1 - x0, 4), np.float32)
     _warp_affine(_px(src), np.ascontiguousarray(hi, np.float64), int(x0), int(y0), out)
     return out
+
+
+def warp_over(dst: np.ndarray, src: np.ndarray, hi: np.ndarray, origin) -> None:
+    """dst (a view of the frame at origin) = src warped through hi (frame -> src pixels) over dst."""
+    _threads()
+    hi = np.ascontiguousarray(hi, np.float64)
+    if hi[0, 1] == 0 and hi[1, 0] == 0:
+        # Axis-aligned: the source column depends on x only and the row on y only (same arithmetic).
+        sx = hi[0, 0] * (np.arange(dst.shape[1], dtype=np.float64) + origin[0] + 0.5) + hi[0, 2] - 0.5
+        sy = hi[1, 1] * (np.arange(dst.shape[0], dtype=np.float64) + origin[1] + 0.5) + hi[1, 2] - 0.5
+        ix, iy = np.floor(sx), np.floor(sy)
+        _warp_over_axis(dst, _px(src), ix.astype(np.int64), (sx - ix).astype(np.float32),
+                        iy.astype(np.int64), (sy - iy).astype(np.float32))
+        return
+    _warp_over(dst, _px(src), hi, int(origin[0]), int(origin[1]))
 
 
 def over(d: np.ndarray, s: np.ndarray) -> None:
