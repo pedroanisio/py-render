@@ -44,7 +44,32 @@ With an NVIDIA GPU, rendering and encoding use it automatically:
   bundled ffmpeg and the `ffmpeg` on `PATH`, in that order, for one that can open the
   encoder; without one, or for two-pass and `maxFileSize` outputs, x264 encodes as before.
 
+- Single-pass shader effects in the `srgb` and `linear-srgb` spaces convert to and from the
+  shader's space on the GPU (the same arithmetic as the CPU conversion), and the `bloom` effect
+  runs as GL passes that reproduce the NumPy passes; pixels are uploaded once and read back once.
+
 `SCENERENDER_GPU=0` (or `render --no-gpu`) keeps all work on the CPU.
+
+Rendering reuses work across frames with a raster cache. A node (or a run of consecutive sibling
+nodes with normal blending) whose content is provably unchanged over a one-second window is drawn
+once per window. While its frame placement is unchanged it is reused exactly; while its placement
+animates (a camera pan, a Ken Burns move) it is resampled bilinearly from a raster drawn 15% above
+its current scale over a margin around the view, and redrawn when the view leaves that raster or
+zooms past it. Masks and pointwise effects (colour grades, and GLSL that samples its input only at
+the pixel itself) are part of the raster; anything time-varying inside a node (animated content,
+expressions, media, other effects) keeps it out of the cache. Entries carry the node's XML, the
+elements it references and the files they name, so documents or files edited between renders are
+never served stale. Resampling moving content softens edges by a fraction of a pixel compared with
+drawing it directly; `SCENERENDER_RASTER_CACHE=0` renders every frame exactly (the conformance
+tests run that way).
+
+Motion-blur samples of one frame run in worker processes when CPUs are spare. Each worker holds a
+full renderer, so their number is limited to what fits in half of the memory still available
+(host or cgroup), and the pool is shrunk when a frame outgrows it. Frame workers of `render` are
+sized the same way after the first frame, and a worker that dies stops the render with an error
+instead of hanging it. NumPy's BLAS runs single-threaded (`SCENERENDER_BLAS_THREADS` overrides)
+and Numba's OpenMP threads wait passively (`OMP_WAIT_POLICY=PASSIVE` unless set): both otherwise
+spin-wait between calls and multiply CPU time without making frames faster.
 
 The 2026-09-27 regression environment uses Python 3.12.3, Pycairo 1.25.1, Cairo
 1.18.0 and Mesa llvmpipe. Local HTTP delivery tests require permission to bind

@@ -388,6 +388,41 @@ if nb is not None:
                 sy += a10
 
     @_par
+    def _warp_affine_axis(src, ix, fx, iy, fy, out):
+        """_warp_affine for an axis-aligned map (per-column / per-row source coordinates)."""
+        h, w = src.shape[0], src.shape[1]
+        oh, ow = out.shape[0], out.shape[1]
+        for y in nb.prange(oh):
+            y0 = iy[y]
+            wy1 = fy[y]
+            wy0 = F(1) - wy1
+            for x in range(ow):
+                x0 = ix[x]
+                wx1 = fx[x]
+                wx0 = F(1) - wx1
+                if x0 >= 0 and y0 >= 0 and x0 + 1 < w and y0 + 1 < h:
+                    w00, w10, w01, w11 = wx0 * wy0, wx1 * wy0, wx0 * wy1, wx1 * wy1
+                    for c in range(4):
+                        out[y, x, c] = (src[y0, x0, c] * w00 + src[y0, x0 + 1, c] * w10
+                                        + src[y0 + 1, x0, c] * w01 + src[y0 + 1, x0 + 1, c] * w11)
+                elif x0 < -1 or y0 < -1 or x0 >= w or y0 >= h:
+                    for c in range(4):
+                        out[y, x, c] = F(0)
+                else:
+                    for c in range(4):
+                        acc = F(0)
+                        for dy in range(2):
+                            jy = y0 + dy
+                            if jy < 0 or jy >= h:
+                                continue
+                            wy = wy1 if dy == 1 else wy0
+                            for dx in range(2):
+                                jx = x0 + dx
+                                if 0 <= jx < w:
+                                    acc += src[jy, jx, c] * wy * (wx1 if dx == 1 else wx0)
+                        out[y, x, c] = acc
+
+    @_par
     def _warp_over_axis(dst, src, ix, fx, iy, fy):
         """_warp_over for an axis-aligned map (scale + translation): per-column (ix, fx) and per-row
         (iy, fy) source coordinates computed once, with the same bilinear weights."""
@@ -432,6 +467,28 @@ if nb is not None:
                 dst[y, x, 1] = dst[y, x, 1] * k + s1
                 dst[y, x, 2] = dst[y, x, 2] * k + s2
                 dst[y, x, 3] = dst[y, x, 3] * k + s3
+
+    @_par
+    def _over_tiles(d, s, ty, tx, t):
+        """_over restricted to the listed t x t tiles of s (the others are fully transparent)."""
+        h, w = s.shape[0], s.shape[1]
+        for i in nb.prange(len(ty)):
+            y0, x0 = ty[i] * t, tx[i] * t
+            for y in range(y0, min(y0 + t, h)):
+                for x in range(x0, min(x0 + t, w)):
+                    k = F(1) - s[y, x, 3]
+                    for c in range(4):
+                        d[y, x, c] = d[y, x, c] * k + s[y, x, c]
+
+    @_par
+    def _under(d, s):
+        """Destination-over in place: d = d + s * (1 - d.alpha) (blend mode "behind")."""
+        h, w = d.shape[0], d.shape[1]
+        for y in nb.prange(h):
+            for x in range(w):
+                k = F(1) - d[y, x, 3]
+                for c in range(4):
+                    d[y, x, c] = d[y, x, c] + s[y, x, c] * k
 
     @_par
     def _over(d, s):
@@ -653,8 +710,21 @@ def warp_affine(src: np.ndarray, hi: np.ndarray, rect) -> np.ndarray:
     _threads()
     x0, y0, x1, y1 = rect
     out = np.empty((y1 - y0, x1 - x0, 4), np.float32)
-    _warp_affine(_px(src), np.ascontiguousarray(hi, np.float64), int(x0), int(y0), out)
+    hi = np.ascontiguousarray(hi, np.float64)
+    if hi[0, 1] == 0 and hi[1, 0] == 0:
+        ix, fx, iy, fy = _axis_coords(hi, x1 - x0, y1 - y0, (x0, y0))
+        _warp_affine_axis(_px(src), ix, fx, iy, fy, out)
+        return out
+    _warp_affine(_px(src), hi, int(x0), int(y0), out)
     return out
+
+
+def _axis_coords(hi, ow: int, oh: int, origin):
+    """Per-column and per-row (integer, fraction) source coordinates of an axis-aligned map."""
+    sx = hi[0, 0] * (np.arange(ow, dtype=np.float64) + origin[0] + 0.5) + hi[0, 2] - 0.5
+    sy = hi[1, 1] * (np.arange(oh, dtype=np.float64) + origin[1] + 0.5) + hi[1, 2] - 0.5
+    ix, iy = np.floor(sx), np.floor(sy)
+    return ix.astype(np.int64), (sx - ix).astype(np.float32), iy.astype(np.int64), (sy - iy).astype(np.float32)
 
 
 def warp_over(dst: np.ndarray, src: np.ndarray, hi: np.ndarray, origin) -> None:
@@ -663,13 +733,38 @@ def warp_over(dst: np.ndarray, src: np.ndarray, hi: np.ndarray, origin) -> None:
     hi = np.ascontiguousarray(hi, np.float64)
     if hi[0, 1] == 0 and hi[1, 0] == 0:
         # Axis-aligned: the source column depends on x only and the row on y only (same arithmetic).
-        sx = hi[0, 0] * (np.arange(dst.shape[1], dtype=np.float64) + origin[0] + 0.5) + hi[0, 2] - 0.5
-        sy = hi[1, 1] * (np.arange(dst.shape[0], dtype=np.float64) + origin[1] + 0.5) + hi[1, 2] - 0.5
-        ix, iy = np.floor(sx), np.floor(sy)
-        _warp_over_axis(dst, _px(src), ix.astype(np.int64), (sx - ix).astype(np.float32),
-                        iy.astype(np.int64), (sy - iy).astype(np.float32))
+        _warp_over_axis(dst, _px(src), *_axis_coords(hi, dst.shape[1], dst.shape[0], origin))
         return
     _warp_over(dst, _px(src), hi, int(origin[0]), int(origin[1]))
+
+
+TILE = 32
+
+
+def occupied_tiles(px: np.ndarray):
+    """(tile rows, tile cols) of the TILE x TILE tiles of px holding any non-zero value, or None when
+    most tiles are occupied (a plain source-over is then as cheap)."""
+    h, w = px.shape[:2]
+    th, tw = -(-h // TILE), -(-w // TILE)
+    nz = np.zeros((th * TILE, tw * TILE), bool)
+    nz[:h, :w] = (px != 0).any(-1)
+    occ = nz.reshape(th, TILE, tw, TILE).any((1, 3))
+    if occ.mean() > 0.7:
+        return None
+    ty, tx = np.nonzero(occ)
+    return ty.astype(np.int64), tx.astype(np.int64)
+
+
+def over_tiles(d: np.ndarray, s: np.ndarray, tiles) -> None:
+    """In-place source-over of s onto d over the occupied tiles only (see occupied_tiles)."""
+    _threads()
+    _over_tiles(d, s, tiles[0], tiles[1], TILE)
+
+
+def under(d: np.ndarray, s: np.ndarray) -> None:
+    """In-place destination-over of float32 (h, w, 4) views that do not overlap."""
+    _threads()
+    _under(d, s)
 
 
 def over(d: np.ndarray, s: np.ndarray) -> None:

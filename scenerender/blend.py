@@ -349,6 +349,12 @@ def composite(dst: Buf, src: Buf, mode: str = "normal", opacity: float = 1.0, gr
         else:
             d *= 1 - s[..., 3:4]
             d += s
+    elif op is _behind and not np.may_share_memory(d, s) and d.dtype == s.dtype == np.float32:
+        from . import kernels
+        if kernels.enabled():
+            kernels.under(d, s)          # the same arithmetic in one pass, no full-tile temporaries
+        else:
+            d[:] = op(d, s)
     elif getattr(op, "with_origin", False):
         d[:] = op(d, s, origin=(r[0], r[1]))
     else:

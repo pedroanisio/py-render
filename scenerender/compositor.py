@@ -191,10 +191,22 @@ class RenderContext:
     def child_order(self, parent, ctx: Ctx | None = None) -> list:
         ctx = ctx or Ctx(0, 0)
         kids = [c for c in self.doc.nodes(parent) if ln(c) != "transition"]
+        # The order only changes with animated z: otherwise it is remembered per parent, scope and vars
+        # (keyed on the children and their authored z, so edits are seen).
+        sig = (tuple(kids), tuple(c.get("z") for c in kids))
+        key = ("child-order", parent, ctx.scope, ctx.vars)
+        hit = self.cache.get(key)
+        if hit is not None and hit[0] == sig:
+            return list(hit[1])
+
         # On object3D and camera, z is a 3D coordinate, not a stacking index.
         def z(c):
             return 0 if ln(c) in ("object3D", "camera") else self.ev.num(c, "z", self.enter_node(c, ctx), 0)
-        return sorted(kids, key=z)  # stable: equal z retains document order
+        order = sorted(kids, key=z)  # stable: equal z retains document order
+        if all(ln(c) in ("object3D", "camera") or (not self.ev._anims(c, "z") and not str(c.get("z", "")).startswith(("var(", "{")))
+               for c in kids):
+            self.cache[key] = (sig, order)
+        return order
 
     def render_children(self, parent, dst: Buf, ctx: Ctx, M: np.ndarray, box: tuple[float, float],
                         fold_opacity: float, layout: dict | None = None) -> Buf:
@@ -932,7 +944,20 @@ class RenderContext:
         buf = self._cached_draw(key, sig, k, M, draw, share=True)
         if buf is _NOT_CACHED:
             return _NOT_CACHED
-        return dst if buf is None else blending.composite(dst, buf, "normal", 1.0)
+        if buf is None:
+            return dst
+        entry = self.base()._rcache.get(key)
+        if (kernels.enabled() and not dst.is_null and entry is not None and entry["exact"]
+                and entry["buf"] is buf and buf.px.dtype == np.float32):
+            # A cached run is often sparse (lines, labels): composite only its occupied tiles.
+            if "tiles" not in entry:
+                entry["tiles"] = kernels.occupied_tiles(buf.px)
+            if entry["tiles"] is not None:
+                dst = dst.expand_to(buf.rect)
+                d = dst.px[buf.y0 - dst.y0:buf.y0 - dst.y0 + buf.h, buf.x0 - dst.x0:buf.x0 - dst.x0 + buf.w]
+                kernels.over_tiles(d, buf.px, entry["tiles"])
+                return dst
+        return blending.composite(dst, buf, "normal", 1.0)
 
     def _raster_signature(self, el, refs) -> tuple:
         """What a raster-cache entry was drawn from: the node's XML, the elements it references and the

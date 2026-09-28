@@ -186,7 +186,7 @@ def render_shape(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     c.set_matrix(M)
     c.cr.set_antialias(cairo.ANTIALIAS_GOOD)
     draw_paths(rc, c.cr, el, ctx, paths, w, h)
-    return c.to_buf(rc.linear)
+    return c.to_buf(rc.linear, crop=True)
 
 
 # ================================================================ layer

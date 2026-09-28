@@ -97,10 +97,16 @@ class Renderer:
                     first, last = rc.render_frame(times[0], frame).px, rc.render_frame(times[-1], frame).px
                     if first.shape == last.shape and float(np.abs(first - last).max(initial=0.0)) < 0.5 / 255:
                         return (first + last) / 2
-                    return self._accumulate(times[1:-1], frame, first + last) / n
+                    acc = self._accumulate(times[1:-1], frame, first + last)
+                    acc /= n
+                    return acc
                 # acc = first + last, then the inner samples in order.
-                return self._accumulate([times[0], times[-1], *times[1:-1]], frame) / n
-            return self._accumulate(times, frame) / n
+                acc = self._accumulate([times[0], times[-1], *times[1:-1]], frame)
+                acc /= n
+                return acc
+            acc = self._accumulate(times, frame)
+            acc /= n
+            return acc
         finally:
             rc.mb_center = None
             rc.mb_interval, rc._mb_nodes, rc._mb_static = None, None, {}
@@ -114,7 +120,10 @@ class Renderer:
         if pool is None:
             for ts in times:
                 px = rc.render_frame(ts, frame).px
-                acc = px if acc is None else acc + px
+                if acc is None:
+                    acc = px
+                else:
+                    acc += px            # in place: the same sums without a new frame per sample
             return acc
         from . import thread_limit
         shape = (rc.height, rc.width, 4)
@@ -143,7 +152,10 @@ class Renderer:
                 for i in c:
                     out[i] = rc.render_frame(times[i], frame).px
             for i in range(len(times)):
-                acc = out[i].copy() if acc is None else acc + out[i]
+                if acc is None:
+                    acc = out[i].copy()
+                else:
+                    acc += out[i]
             del out
             return acc
         except BaseException:
@@ -233,6 +245,23 @@ class Renderer:
             self._pool.terminate()
             self._pool = self._pool_key = None
 
+    _SHUTTER_DYNAMIC = frozenset({
+        "expression", "link", "motionPath", "particleEmitter", "physics", "rigidBody", "softBody", "deform",
+        "shapeModifier", "shake", "textAnimator", "effect", "transition", "instance", "video", "imageSequence",
+        "lottie", "audiogram", "generator", "generated", "captions"})
+
+    def _has_dynamic(self) -> bool:
+        """Whether the document holds any element _static_shutter rejects (effects, expressions, ...),
+        remembered per element count so a document is not walked on every frame to find out."""
+        from .document import ln
+        count = int(self.doc.root.xpath("count(//*)"))
+        hit = self.__dict__.get("_dynamic_memo")
+        if hit is None or hit[0] != count:
+            dyn = any(isinstance(el.tag, str) and (ln(el) in self._SHUTTER_DYNAMIC or el.get("condition"))
+                      for el in self.doc.root.iter())
+            hit = self.__dict__["_dynamic_memo"] = (count, dyn)
+        return hit[1]
+
     def _static_shutter(self, first: float, last: float) -> bool:
         """Conservatively prove the scene has no time-varying input in this interval.
 
@@ -240,8 +269,8 @@ class Renderer:
         only: a return motion, short flash or held-key change must never disappear.
         """
         from .document import NODE_TAGS, ln
-        if self.doc.clock_shift:
-            return False
+        if self.doc.clock_shift or self._has_dynamic():
+            return False       # dynamic elements (effects, expressions, ...): never provably static
         dynamic = {"expression", "link", "motionPath", "particleEmitter", "physics", "rigidBody", "softBody",
                    "deform", "shapeModifier", "shake", "textAnimator", "effect", "transition", "instance",
                    "video", "imageSequence", "lottie", "audiogram", "generator", "generated", "captions"}

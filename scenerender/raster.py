@@ -163,11 +163,22 @@ class Canvas:
         self.cr.translate(-self.rect[0], -self.rect[1])
         self.cr.transform(cairo.Matrix(M[0, 0], M[1, 0], M[0, 1], M[1, 1], M[0, 2], M[1, 2]))
 
-    def to_buf(self, linear: bool) -> Buf:
+    def to_buf(self, linear: bool, crop: bool = False) -> Buf:
+        """The canvas as a working-space Buf; crop: only its drawn pixels (for callers that place the
+        result by its rect, e.g. node outputs: transparent pixels composite to nothing)."""
         self.surface.flush()
         h, w = self.surface.get_height(), self.surface.get_width()
         stride = self.surface.get_stride()
         raw = np.frombuffer(self.surface.get_data(), np.uint8).reshape(h, stride // 4, 4)[:, :w]
+        if crop:
+            drawn = raw[..., 3] != 0
+            rows = np.flatnonzero(drawn.any(1))
+            if rows.size:
+                cols = np.flatnonzero(drawn[rows[0]:rows[-1] + 1].any(0))
+                y0, y1, x0, x1 = int(rows[0]), int(rows[-1]) + 1, int(cols[0]), int(cols[-1]) + 1
+                out = np.empty((y1 - y0, x1 - x0, 4), np.float32)
+                _bgra_to_working(raw[y0:y1, x0:x1], linear, out)
+                return Buf(out, self.rect[0] + x0, self.rect[1] + y0)
         return Buf(bgra_to_working(raw, linear), self.rect[0], self.rect[1])
 
 
