@@ -314,7 +314,7 @@ class World3D:
             if o.inst_buf is not None:
                 o.inst_buf.release()
         for s in self.shadows.values():
-            s.tex.release()
+            release_shadow_texture(s.tex)
 
 
 @dataclass
@@ -608,7 +608,7 @@ def draw_depth(r: Res, obj: ObjDraw, VP: np.ndarray, mode: int, lp=(0, 0, 0), ld
         item_vao(ctx, item, prog, obj.inst_buf).render(item.mode, instances=len(obj.instances))
 
 
-_SPLAT_ORDER: dict = {}      # id(splat set) -> (splats, eye, fwd, uploaded instance buffer)
+_SPLAT_ORDER: dict = {}      # id(splat set) -> (splats, eye, fwd, depth span, instance buffer, order)
 
 
 def _sorted_splats(ctx, sp, cam):
@@ -617,20 +617,39 @@ def _sorted_splats(ctx, sp, cam):
     shutter samples of one frame): the depth order cannot change enough to be visible."""
     hit = _SPLAT_ORDER.get(id(sp))
     if hit is not None and hit[0] is sp:
-        _, eye, fwd, span, buf = hit
+        _, eye, fwd, span, buf, _ = hit
         if np.linalg.norm(cam.eye - eye) < 0.005 * span and float(np.dot(cam.fwd, fwd)) > math.cos(math.radians(0.5)):
             return buf, False
     cam_z = (sp.centers - cam.eye) @ cam.fwd
-    order = np.argsort(-cam_z, kind="stable")
-    data = np.concatenate([sp.centers[order], sp.colors[order], sp.cov[order]], 1).astype(np.float32)
-    buf = ctx.buffer(np.ascontiguousarray(data).tobytes())
-    span = float(cam_z.max() - cam_z.min()) if len(cam_z) else 0.0
+    packed = sp.__dict__.get("_packed")
+    if packed is None:      # the instance attributes, interleaved once per splat set
+        packed = sp.__dict__["_packed"] = np.ascontiguousarray(
+            np.concatenate([sp.centers, sp.colors, sp.cov], 1).astype(np.float32))
     prev = _SPLAT_ORDER.pop(id(sp), None)
-    if prev is not None:
-        prev[4].release()
+    if prev is not None and prev[0] is sp:
+        # The same order as sorting from scratch (a stable sort of the negated depths), started from the
+        # previous order: the camera moved little, so the input is nearly sorted and the merge sort
+        # behind kind="stable" runs in close to linear time. Equal depths keep their index order.
+        # Equal depths would keep the previous order instead: then sort from scratch (rare).
+        before = prev[5]
+        key = -cam_z[before]
+        step = np.argsort(key, kind="stable")
+        ks = key[step]
+        order = before[step] if not np.any(ks[1:] == ks[:-1]) else np.argsort(-cam_z, kind="stable")
+    else:
+        order = np.argsort(-cam_z, kind="stable")
+    data = packed[order]
+    span = float(cam_z.max() - cam_z.min()) if len(cam_z) else 0.0
+    buf = prev[4] if prev is not None and prev[4].size == data.nbytes else None
+    if buf is None:
+        if prev is not None:
+            prev[4].release()
+        buf = ctx.buffer(data)
+    else:
+        buf.write(data)
     while len(_SPLAT_ORDER) >= 4:                       # a few splat objects at a time
         _SPLAT_ORDER.pop(next(iter(_SPLAT_ORDER)))[4].release()
-    _SPLAT_ORDER[id(sp)] = (sp, np.array(cam.eye, copy=True), np.array(cam.fwd, copy=True), span, buf)
+    _SPLAT_ORDER[id(sp)] = (sp, np.array(cam.eye, copy=True), np.array(cam.fwd, copy=True), span, buf, order)
     return buf, True
 
 
@@ -727,6 +746,41 @@ def _cube_view(eye, f) -> np.ndarray:
     return V
 
 
+_SHADOW_FREE: dict = {}       # (w, h) -> [(texture, framebuffer)] ready for reuse
+_SHADOW_PARTS: dict = {}      # id(texture) -> (texture, depth renderbuffer, framebuffer), in use or free
+
+
+def _shadow_target(ctx, W: int, H: int):
+    """A W x H shadow-map texture with its depth-tested framebuffer, reused once released (the map size
+    is fixed per light, and each frame and shutter sample renders the maps again)."""
+    import moderngl
+    free = _SHADOW_FREE.get((W, H))
+    if free:
+        return free.pop()
+    tex = ctx.texture((W, H), 1, dtype="f4")
+    tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    tex.repeat_x = tex.repeat_y = False
+    depth = ctx.depth_renderbuffer((W, H))
+    fbo = ctx.framebuffer([tex], depth)
+    _SHADOW_PARTS[id(tex)] = (tex, depth, fbo)
+    return tex, fbo
+
+
+def release_shadow_texture(tex) -> None:
+    """Return a shadow map's texture (and its framebuffer) for reuse; a few per size are kept."""
+    parts = _SHADOW_PARTS.get(id(tex))
+    if parts is None or parts[0] is not tex:
+        tex.release()
+        return
+    free = _SHADOW_FREE.setdefault(tex.size, [])
+    if len(free) < 4:
+        free.append((tex, parts[2]))
+        return
+    del _SHADOW_PARTS[id(tex)]
+    for o in (parts[2], parts[1], tex):
+        o.release()
+
+
 def render_shadow(r: Res, fr_objs: list, L: LightState, bounds, scale: float, tex_cache) -> ShadowMap | None:
     """Shadow map of light L over the casters (bounds = (centre, radius) of all casters)."""
     import moderngl
@@ -749,11 +803,7 @@ def render_shadow(r: Res, fr_objs: list, L: LightState, bounds, scale: float, te
         W, H = size * 3, size * 2
     else:
         W = H = size
-    tex = ctx.texture((W, H), 1, dtype="f4")
-    tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
-    tex.repeat_x = tex.repeat_y = False
-    depth = ctx.depth_renderbuffer((W, H))
-    fbo = ctx.framebuffer([tex], depth)
+    tex, fbo = _shadow_target(ctx, W, H)
     fbo.use()
     fbo.clear(1e30, 0, 0, 0, depth=1.0)
     ctx.enable(moderngl.DEPTH_TEST)
@@ -798,9 +848,7 @@ def render_shadow(r: Res, fr_objs: list, L: LightState, bounds, scale: float, te
                 draw_depth(r, o, VP, 2, L.pos, L.fwd, tex_cache)
         sm = ShadowMap(tex, 2, np.eye(4), (L.bias * (far - near), _light_radius(L), near, far),
                        (1.0 / size, 2.0, size, 0), L.pos.copy(), L.fwd.copy())
-    fbo.release()
-    depth.release()
-    restore_state(r)
+    restore_state(r)          # the framebuffer stays with the texture (see release_shadow_texture)
     return sm
 
 
@@ -939,16 +987,20 @@ def restore_state(r: Res) -> None:
 
 
 def _down_target(r: Res, w: int, h: int):
-    """Colour + depth framebuffer of the SSAA downsample pass, kept per size (a few sizes per frame)."""
-    hit = r.down_targets.get((w, h))
+    """Colour + depth framebuffer of the SSAA downsample pass, at least w x h (the pass draws into its
+    (0, 0, w, h) corner). Sizes are rounded up to 128-pixel steps and the least recently used of more
+    than 16 is dropped: a layer's screen rect changes size from frame to frame, and each new size
+    otherwise allocates textures and a framebuffer."""
+    key = (-(-w // 128) * 128, -(-h // 128) * 128)
+    hit = r.down_targets.pop(key, None)
     if hit is None:
-        if len(r.down_targets) > 16:
-            for fb, a, b in r.down_targets.values():
-                fb.release(); a.release(); b.release()
-            r.down_targets.clear()
-        a = r.ctx.texture((w, h), 4, dtype="f4")
-        b = r.ctx.texture((w, h), 4, dtype="f4")
-        hit = r.down_targets[(w, h)] = (r.ctx.framebuffer([a, b]), a, b)
+        while len(r.down_targets) >= 16:
+            fb, a, b = r.down_targets.pop(next(iter(r.down_targets)))
+            fb.release(); a.release(); b.release()
+        a = r.ctx.texture(key, 4, dtype="f4")
+        b = r.ctx.texture(key, 4, dtype="f4")
+        hit = (r.ctx.framebuffer([a, b]), a, b)
+    r.down_targets[key] = hit          # most recently used last
     return hit
 
 
@@ -981,11 +1033,11 @@ def _read(r: Res, t: Target, rect=None, depth: bool = True, n: int = 1, gpu: boo
         r.down_vao.render(moderngl.TRIANGLE_STRIP)
         if gpu:
             return gpucomp.from_gl(col_tex, 0, 0, w, h), None
-        col = np.frombuffer(fb.read(components=4, dtype="f4", attachment=0), np.float32)
+        col = np.frombuffer(fb.read(viewport=(0, 0, w, h), components=4, dtype="f4", attachment=0), np.float32)
         col = np.ascontiguousarray(col.reshape(h, w, 4)[::-1])
         dep = None
         if depth:
-            d = np.frombuffer(fb.read(components=4, dtype="f4", attachment=1), np.float32)
+            d = np.frombuffer(fb.read(viewport=(0, 0, w, h), components=4, dtype="f4", attachment=1), np.float32)
             dep = np.ascontiguousarray(d.reshape(h, w, 4)[::-1])
         return col, dep
     vp = (x0, t.h - y1, x1 - x0, y1 - y0)

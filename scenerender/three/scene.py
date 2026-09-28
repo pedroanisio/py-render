@@ -241,7 +241,9 @@ def _instances(rc, el, ctx, local_bounds) -> np.ndarray:
     n = max(1, int(rc.ev.num(el, "instances", ctx, 1)))
     if n == 1:
         return world3d(rc, el, ctx)[None]
-    mats = np.stack([world3d(rc, el, ctx.with_vars(index=float(i), count=float(n))) for i in range(n)])
+    mats = _instance_worlds(rc, el, ctx, n)
+    if mats is None:
+        mats = np.stack([world3d(rc, el, ctx.with_vars(index=float(i), count=float(n))) for i in range(n)])
     if np.allclose(mats, mats[0][None], atol=1e-9):
         lo, hi = local_bounds if local_bounds is not None else (np.full(3, -50.0), np.full(3, 50.0))
         size = np.maximum(hi - lo, 1e-3) * 1.25
@@ -256,6 +258,72 @@ def _instances(rc, el, ctx, local_bounds) -> np.ndarray:
             out.append(mats[0] @ off)
         mats = np.stack(out)
     return mats
+
+
+_INSTANCE_PROPS = (("x", 0.0), ("y", 0.0), ("z", 0.0), ("rotation", 0.0), ("rotationY", 0.0), ("rotationX", 0.0),
+                   ("scaleX", 1.0), ("scaleY", 1.0), ("scaleZ", 1.0))
+
+
+def _instance_worlds(rc, el, ctx, n: int) -> np.ndarray | None:
+    """world3d of every copy of an instanced object3D at once: its expressions evaluated for all
+    indices in one pass (vexpr), the matrices built as camera._local3d and world3d build them. None
+    when that does not apply (an expression outside vexpr's subset, a property driven by keys as well
+    as an expression, constraints, a parent whose clock is unknown, ...): world3d per copy then."""
+    from .. import vexpr
+    from ..camera import frame_size
+    from ..evaluator import _jsval
+    ev = rc.ev
+    if ln(el) != "object3D" or ctx.vars or ctx.scope.overrides or any(ln(c) == "transformConstraint" for c in el):
+        return None
+    c0 = ctx.with_vars(index=0.0, count=float(n))
+    vals = []
+    for prop, default in _INSTANCE_PROPS:
+        anims = ev._anims(el, prop)
+        exprs = [a for a in anims if ln(a) == "expression"]
+        if not exprs:
+            vals.append(ev.num(el, prop, c0, default))      # the same for every copy (see _local3d)
+            continue
+        a = exprs[0]
+        if len(anims) != 1 or a.get("property") != prop or a.get("enabled", "true") not in ("true", "1"):
+            return None
+        fn = vexpr.compile(a.text or "")
+        base = _jsval(ev.base(el, prop, c0, default))
+        if fn is None or base is not None and type(base) is not float:
+            return None
+        v = fn({"time": c0.t, "frame": float(c0.frame), "index": np.arange(n, dtype=np.float64), "count": float(n),
+                "seed": float(ev.seed_for(el, a.get("seed") or prop)), "value": base}, n)
+        if v is None:
+            return None
+        vals.append(v)
+    x, y, z, rot, rot_y, rot_x, sx, sy, sz = (np.broadcast_to(np.asarray(v, np.float64), (n,)) for v in vals)
+    t = np.stack([x, -y, -z], 1)
+    pid = ev.str(el, "parent", c0)
+    par = rc.doc.ids.get(pid) if pid else None
+    if par is el:
+        par = None
+    if par is None:
+        W, H = frame_size(rc)
+        t = t + np.array([-W / 2, H / 2, 0.0])
+    M = np.zeros((n, 4, 4))
+    M[:, :3, :3] = (_rot(rot, "z", -1) @ _rot(rot_y, "y", -1) @ _rot(rot_x, "x", 1)) * np.stack([sx, sy, sz], 1)[:, None, :]
+    M[:, :3, 3] = t
+    M[:, 3, 3] = 1.0
+    if par is not None:
+        pc = node_clock(rc, par, ctx.comp_t)
+        if pc is None:
+            return None
+        M = world3d(rc, par, pc)[None] @ M
+    return M
+
+
+def _rot(deg: np.ndarray, axis: str, sign: int) -> np.ndarray:
+    """camera.rx / ry / rz of sign * deg for every angle, (n, 3, 3)."""
+    a = np.radians(sign * deg)
+    c, s = np.cos(a), np.sin(a)
+    o, z = np.ones_like(a), np.zeros_like(a)
+    rows = {"x": ((o, z, z), (z, c, -s), (z, s, c)), "y": ((c, z, s), (z, o, z), (-s, z, c)),
+            "z": ((c, -s, z), (s, c, z), (z, z, o))}[axis]
+    return np.stack([np.stack(r, -1) for r in rows], -2)
 
 
 _SPLAT_MEMO: dict = {}
