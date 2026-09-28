@@ -228,18 +228,40 @@ def decode_image(src: bytes | str, srgb: bool, half: bool = True) -> np.ndarray:
         g = np.asarray(im, dtype=np.float32) / 65535.0
         a = np.stack([g, g, g, np.ones_like(g)], -1)
     else:
-        a = np.asarray(im.convert("RGBA"), dtype=np.float32) / 255.0
-        if srgb:
-            a = np.concatenate([srgb_to_linear(a[..., :3]), a[..., 3:]], -1)
-        # 8-bit sources are kept as half floats: 11 significant bits resolve every (sRGB-decoded)
-        # 8-bit level to well under a quantisation step, at half the memory of float32 on the CPU
-        # and on the GPU (a 4K RGBA map: 134 MB instead of 268 MB).
-        if half:
-            return np.ascontiguousarray(a, dtype=np.float16)
-        return np.ascontiguousarray(a, dtype=np.float32)
+        # 8-bit sources: every channel value is one of 256 codes, so the conversion (scale, sRGB
+        # decode of RGB, dtype) is a table built with the same operations, applied by one gather.
+        # They are kept as half floats: 11 significant bits resolve every (sRGB-decoded) 8-bit level
+        # to well under a quantisation step, at half the memory of float32 on the CPU and on the GPU
+        # (a 4K RGBA map: 134 MB instead of 268 MB).
+        raw = np.asarray(im if im.mode in ("RGB", "RGBA") else im.convert("RGBA"))
+        lut = _code_table(srgb, np.float16 if half else np.float32)
+        out = np.empty(raw.shape[:2] + (4,), lut.dtype)
+        for c in range(3):
+            np.take(lut[0], raw[..., c], out=out[..., c])
+        if raw.shape[-1] == 4:
+            np.take(lut[1], raw[..., 3], out=out[..., 3])
+        else:
+            out[..., 3] = lut[1][255]
+        return out
     if srgb:
         a = np.concatenate([srgb_to_linear(a[..., :3]), a[..., 3:]], -1)
     return np.ascontiguousarray(a, dtype=np.float32)
+
+
+_CODE_TABLES: dict = {}
+
+
+def _code_table(srgb: bool, dtype) -> np.ndarray:
+    """(2, 256): what decode_image computes for each 8-bit code, colour (row 0) and alpha (row 1)."""
+    key = (srgb, np.dtype(dtype).str)
+    hit = _CODE_TABLES.get(key)
+    if hit is None:
+        a = np.arange(256, dtype=np.float32)[:, None].repeat(4, 1) / 255.0
+        if srgb:
+            a = np.concatenate([srgb_to_linear(a[..., :3]), a[..., 3:]], -1)
+        a = a.astype(dtype)
+        hit = _CODE_TABLES[key] = np.ascontiguousarray(np.stack([a[:, 0], a[:, 3]]))
+    return hit
 
 
 def _add_alpha(a: np.ndarray) -> np.ndarray:

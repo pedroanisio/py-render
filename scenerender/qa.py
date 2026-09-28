@@ -114,6 +114,16 @@ class FlashDetector:
 
     def _linear(self, img: np.ndarray) -> np.ndarray:
         from . import color
+        if img.dtype == np.uint8 and self.tf == "srgb":
+            # 256 codes: the decode below as a table, the same values from one gather per channel.
+            lut = FlashDetector.__dict__.get("_lut8")
+            if lut is None:
+                lut = np.clip(_srgb_lin(np.arange(256, dtype=np.float32) / 255.0), 0, 1).astype(np.float32)
+                FlashDetector._lut8 = lut
+            lin = lut[img[..., :3]]
+            if img.shape[-1] == 4:
+                lin = np.clip(lin * (img[..., 3:4].astype(np.float32) / 255.0), 0, 1).astype(np.float32)
+            return lin
         if img.dtype == np.uint8:
             v = img[..., :3].astype(np.float32) / 255.0
         elif img.dtype == np.uint16:

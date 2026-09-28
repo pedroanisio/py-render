@@ -131,6 +131,17 @@ void main() {
 uniform sampler2D src; uniform ivec2 org; uniform int h;
 out vec4 o;
 void main() { ivec2 p = ivec2(gl_FragCoord.xy); o = texelFetch(src, ivec2(org.x + p.x, org.y + h - 1 - p.y), 0); }""",
+    # cairo's premultiplied 8-bit BGRA -> premultiplied linear float through the CPU's own tables
+    # (raster._PREMUL_LIN in rows 0-255, the kernel's alpha a / 255 in row 256): the same values as
+    # kernels.bgra_to_linear
+    "bgra": """
+uniform usampler2D src; uniform sampler2D lut;
+out vec4 o;
+void main() {
+    ivec4 q = ivec4(texelFetch(src, ivec2(gl_FragCoord.xy), 0));      // b, g, r, a
+    o = vec4(texelFetch(lut, ivec2(q.b, q.a), 0).r, texelFetch(lut, ivec2(q.g, q.a), 0).r,
+             texelFetch(lut, ivec2(q.r, q.a), 0).r, texelFetch(lut, ivec2(q.a, 256), 0).r);
+}""",
     # (a + b) / d, or a / d without b
     "sum": """
 uniform sampler2D a; uniform sampler2D b; uniform int has_b; uniform float d;
@@ -275,6 +286,37 @@ def from_gl(tex, x: int, y: int, w: int, h: int) -> GpuTile:
     out = GpuTile(w, h, clear=False)
     _draw("flip", out.fbo, (0, 0, w, h), None, [("src", tex)], org=(x, y), h=h)
     return out
+
+
+_BGRA: dict = {}         # "lut": the table texture; (w, h) bucket -> reusable 8-bit upload textures
+
+
+def from_bgra8(raw: np.ndarray, x0: int, y0: int):
+    """A GPU Buf at (x0, y0) of cairo pixels raw ((h, w, 4) premultiplied BGRA, linear working space
+    without a primaries matrix): what raster._bgra_to_working computes, converted on the GPU from a
+    quarter of the bytes."""
+    from .raster import Buf, _PREMUL_LIN
+    ctx = gl.context()
+    lut = _BGRA.get("lut")
+    if lut is None:
+        table = np.empty((257, 256), np.float32)
+        table[:256] = _PREMUL_LIN
+        table[256] = np.arange(256, dtype=np.float32) / np.float32(255)
+        lut = _BGRA["lut"] = ctx.texture((256, 257), 1, np.ascontiguousarray(table), dtype="f4")
+    h, w = raw.shape[:2]
+    key = (_bucket(w), _bucket(h))
+    free = _BGRA.setdefault(key, [])
+    src = free.pop() if free else ctx.texture(key, 4, dtype="u1")
+    try:
+        src.write(np.ascontiguousarray(raw), viewport=(0, 0, w, h))
+        out = GpuTile(w, h, clear=False)
+        _draw("bgra", out.fbo, (0, 0, w, h), None, [("src", src), ("lut", lut)])
+    finally:
+        if len(free) < _POOL_KEEP:
+            free.append(src)
+        else:
+            src.release()
+    return Buf(None, x0, y0, gpu=out)
 
 
 def tile_of(buf) -> tuple[GpuTile, bool]:

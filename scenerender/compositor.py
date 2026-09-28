@@ -253,7 +253,7 @@ class RenderContext:
             if run is not None:
                 skip.update(run[1:])
                 key = ("run", parent, tuple(run), self.scale, tuple(np.round(box, 6)))
-                sig = tuple(self._raster_signature(c, self._rc_static(c, k, False)[1]) for c in run)
+                sig = self._run_signature(run, k)
                 got = self._composite_cached(dst, key, sig, k, M, lambda rc, A, run=run: rc._render_run(run, ctx, A, box))
                 if got is not _NOT_CACHED:
                     dst = got
@@ -1045,18 +1045,30 @@ class RenderContext:
                 return dst
         return blending.composite(dst, buf, "normal", 1.0)
 
+    def _signature_memo(self) -> dict:
+        """Signatures computed this frame: the shutter samples of a frame cannot see an edit in between."""
+        if self.mb_center is None:
+            return self.frame_cache
+        base = self.base()
+        frame_memo = base.__dict__.get("_sig_frame")
+        if frame_memo is None or frame_memo[0] != self.mb_center:
+            frame_memo = base.__dict__["_sig_frame"] = (self.mb_center, {})
+        return frame_memo[1]
+
+    def _run_signature(self, run, k: int) -> tuple:
+        """The signatures of a cached run's members, formed once per frame."""
+        memo = self._signature_memo()
+        key = ("rc-run-sig", tuple(run), k)
+        hit = memo.get(key)
+        if hit is None:
+            hit = memo[key] = tuple(self._raster_signature(c, self._rc_static(c, k, False)[1]) for c in run)
+        return hit
+
     def _raster_signature(self, el, refs) -> tuple:
         """What a raster-cache entry was drawn from: the node's XML, the elements it references and the
         files they name (size, mtime), so edits between renders are never served stale."""
         key = ("rc-sig", el)
-        # One signature per frame: the shutter samples of a frame cannot see an edit in between.
-        memo = self.frame_cache
-        if self.mb_center is not None:
-            base = self.base()
-            frame_memo = base.__dict__.get("_sig_frame")
-            if frame_memo is None or frame_memo[0] != self.mb_center:
-                frame_memo = base.__dict__["_sig_frame"] = (self.mb_center, {})
-            memo = frame_memo[1]
+        memo = self._signature_memo()
         hit = memo.get(key)
         if hit is None:
             import os

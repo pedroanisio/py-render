@@ -187,13 +187,19 @@ class Canvas:
         self.cr.translate(-self.rect[0], -self.rect[1])
         self.cr.transform(cairo.Matrix(M[0, 0], M[1, 0], M[0, 1], M[1, 1], M[0, 2], M[1, 2]))
 
-    def to_buf(self, linear: bool, crop: bool = False) -> Buf:
+    def to_buf(self, linear: bool, crop: bool = False, gpu: bool = False) -> Buf:
         """The canvas as a working-space Buf; crop: only its drawn pixels (for callers that place the
-        result by its rect, e.g. node outputs: transparent pixels composite to nothing)."""
+        result by its rect, e.g. node outputs: transparent pixels composite to nothing); gpu: converted
+        on the GPU into a GPU Buf where that is exact (see gpucomp.from_bgra8)."""
         self.surface.flush()
         h, w = self.surface.get_height(), self.surface.get_width()
         stride = self.surface.get_stride()
         raw = np.frombuffer(self.surface.get_data(), np.uint8).reshape(h, stride // 4, 4)[:, :w]
+        if gpu and linear and _WM is None:
+            # Uploaded whole: its transparent margins composite to nothing on the GPU, so finding the
+            # drawn pixels (a pass over the canvas) is not worth it.
+            from . import gpucomp
+            return gpucomp.from_bgra8(raw, self.rect[0], self.rect[1])
         if crop:
             drawn = raw[..., 3] != 0
             rows = np.flatnonzero(drawn.any(1))
