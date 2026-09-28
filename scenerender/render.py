@@ -31,6 +31,7 @@ class Renderer:
     open_kwargs: dict | None = None      # how to reopen this document (shutter-sample worker processes)
     _hooks: frozenset = frozenset()      # hook names a freshly opened renderer has
     _pool: object = None
+    _mem_workers_cap: int = 1 << 30
     _pool_key: object = None
     _shm: object = None
     _shm_finalizer: object = None
@@ -169,7 +170,8 @@ class Renderer:
         """Worker processes for shutter samples, or None when rendering here is as fast or not equivalent."""
         from . import threads
         n = len(times)
-        workers = min(threads(), n) - 1
+        workers = min(threads(), n, self._mem_workers_cap) - 1
+        workers = self._memory_bounded_workers(workers)
         rc = self.rc
         # Workers reopen the document: anything changed on this context since open() keeps rendering here.
         if (workers < 1 or self.open_kwargs is None or frozenset(rc.hooks) != self._hooks or rc.exclude
@@ -196,6 +198,31 @@ class Renderer:
             self._pool_key = key
             weakref.finalize(self, self._pool.terminate)
         return self._pool
+
+    def _memory_bounded_workers(self, workers: int) -> int:
+        """Cap shutter-sample workers by memory. Every worker reopens the document and loads its own
+        models, textures and GL resources, so a heavy (3D) scene multiplies its footprint by the
+        worker count. Workers are allowed only while (workers + 1) copies of the largest process fit
+        in half the memory still available (host or container cgroup, whichever is tighter), counting
+        what the current workers already hold. The cap only ever decreases for this renderer, so a
+        pool is not respawned back and forth."""
+        if workers < 1:
+            return workers
+        procs = list(getattr(self._pool, "_pool", None) or []) if self._pool is not None else []
+        held = [_rss(p.pid) for p in procs]
+        # Size by high-water marks: a frame peaks well above what a process holds between frames.
+        per = max([_rss("self", peak=True)] + [_rss(p.pid, peak=True) for p in procs] + [256 << 20])
+        budget = _mem_available() * 0.5 + sum(held)
+        fit = int(budget // per) - 1          # the main process renders samples too
+        if fit < workers:
+            capped = max(fit, 0)
+            if capped + 1 < self._mem_workers_cap:
+                log.info("shutter samples: %d worker(s) fit in memory (%.1f GB peak per process)", capped, per / 2 ** 30)
+            self._mem_workers_cap = capped + 1
+            workers = capped
+            if self._pool is not None and len(procs) > capped:
+                self._terminate_pool()          # release the idle workers' memory now
+        return workers
 
     def close_sample_pool(self) -> None:
         self._terminate_pool()
@@ -311,6 +338,44 @@ def _sample_init(open_kwargs: dict, state: dict) -> None:
     r = Renderer.open(kw.pop("path"), **kw)
     r.rc.cache.update(state)
     _SW["r"] = r
+
+
+def _rss(pid, peak: bool = False) -> int:
+    """Resident set size in bytes of a process, or its high-water mark with peak (0 when unknown)."""
+    key = "VmHWM:" if peak else "VmRSS:"
+    try:
+        with open(f"/proc/{pid}/status") as fh:
+            for line in fh:
+                if line.startswith(key):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return 0
+
+
+def _mem_available() -> float:
+    """Bytes of memory still available to this process: host MemAvailable, tightened by a cgroup
+    (v2 or v1) limit when one applies. Unknown platforms report plenty (no cap)."""
+    avail = float("inf")
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    avail = int(line.split()[1]) * 1024
+                    break
+    except OSError:
+        return avail
+    for lim, use in (("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.current"),
+                     ("/sys/fs/cgroup/memory/memory.limit_in_bytes", "/sys/fs/cgroup/memory/memory.usage_in_bytes")):
+        try:
+            with open(lim) as a, open(use) as b:
+                raw = a.read().strip()
+                if raw != "max" and int(raw) < 1 << 60:
+                    avail = min(avail, int(raw) - int(b.read().strip()))
+                break
+        except (OSError, ValueError):
+            continue
+    return max(avail, 0)
 
 
 def _unlink_shm(shm) -> None:

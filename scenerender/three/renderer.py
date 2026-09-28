@@ -88,11 +88,12 @@ def res() -> Res:
 
 def _tex(ctx, arr: np.ndarray, mip: bool = True, nearest: bool = False, repeat: bool = True):
     import moderngl
-    a = np.ascontiguousarray(arr, np.float32)
+    half = np.asarray(arr).dtype == np.float16
+    a = np.ascontiguousarray(arr, np.float16 if half else np.float32)
     if a.ndim == 2:
         a = a[..., None]
     h, w, c = a.shape
-    t = ctx.texture((w, h), c, a.tobytes(), dtype="f4")
+    t = ctx.texture((w, h), c, a, dtype="f2" if half else "f4")
     if nearest:
         t.filter = (moderngl.NEAREST, moderngl.NEAREST)
     elif mip:

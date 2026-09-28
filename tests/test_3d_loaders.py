@@ -261,8 +261,8 @@ def test_variants_materials_textures_glb(tmp_path):
     assert p["emissiveStrength"] == 4.0 and p["unlit"] and p["doubleSided"]
     assert p["anisotropyRotation"] == pytest.approx(90.0) and p["mapUV"]["baseColorMap"]["scale"] == (2, 2)
     bc = it.material.textures["baseColorMap"]
-    assert bc.shape == (1, 2, 4) and bc.dtype == np.float32
-    np.testing.assert_allclose(bc[0, 0, 1], srgb_to_linear(np.array(128 / 255)), atol=1e-6)
+    assert bc.shape == (1, 2, 4) and bc.dtype == np.float16                     # 8-bit source: half floats
+    np.testing.assert_allclose(bc[0, 0, 1], srgb_to_linear(np.array(128 / 255)), atol=2e-4)
     np.testing.assert_allclose(it.colors[0], [1, 0, 0, 1])
     assert m.pose(None, 0.0, variant="cool")[0].material.params["baseColor"] == (0, 0, 1, 1)
     assert m.pose(None, 0.0, variant="warm")[0].material.name == "red"
@@ -449,7 +449,7 @@ def test_usd_stage(tmp_path):
     np.testing.assert_allclose(p["baseColor"], (0.8, 0.1, 0.1, 1.0), atol=1e-6)
     assert p["metallic"] == 0.25 and p["roughness"] == 1.0 and p["opacity"] == 0.5 and p["alphaMode"] == "blend"
     mr = it.material.textures["metallicRoughnessMap"]
-    np.testing.assert_allclose(mr[0, 0], [1, 0.2, 1, 1], atol=1e-6)
+    np.testing.assert_allclose(mr[0, 0], [1, 0.2, 1, 1], atol=1e-4)            # 8-bit texel held as float16
     clip = m.clip("default")
     assert clip.duration == pytest.approx(1.0)
     moved = m.pose(clip, 0.5)[0]
@@ -464,7 +464,7 @@ def test_usdz_packaged_texture(tmp_path):
     assert UsdUtils.CreateNewUsdzPackage(Sdf.AssetPath(str(tmp_path / "s.usda")), str(tmp_path / "s.usdz"))
     os.remove(tmp_path / "rough.png")                               # must come from the zip
     it = load_model(str(tmp_path / "s.usdz")).pose(None, 0.0)[0]
-    np.testing.assert_allclose(it.material.textures["metallicRoughnessMap"][0, 0], [1, 0.2, 1, 1], atol=1e-6)
+    np.testing.assert_allclose(it.material.textures["metallicRoughnessMap"][0, 0], [1, 0.2, 1, 1], atol=1e-4)
 
 
 USD_SKEL = """#usda 1.0

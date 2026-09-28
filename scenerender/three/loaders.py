@@ -10,7 +10,8 @@ Pinned decisions
       rotating -90 deg about X; FBX is converted by ufbx to right-handed Y-up). Splats keep their
       COLMAP axes. The renderer maps both into scene space (CONVENTIONS 2.6, see model.py).
     * Colours in `MaterialSpec.params` are linear float tuples (RGBA; emissive/attenuation/sheen/
-      specular colours carry alpha 1). Textures are float32 (h, w, 4) in [0, 1]; baseColorMap and
+      specular colours carry alpha 1). Textures are (h, w, 4) in [0, 1], float16 when decoded
+      from 8-bit images and float32 otherwise (16-bit, HDR, EXR, npy); baseColorMap and
       emissiveMap are sRGB-decoded to linear, data maps (normal, metallicRoughness, occlusion) are not.
     * Node.matrix uses the math layout of animation.py (column vectors).
   glTF / GLB (pygltflib)
@@ -202,8 +203,9 @@ def _fan_faces(counts: np.ndarray) -> np.ndarray:
 
 
 # ------------------------------------------------------------------------------------ images
-def decode_image(src: bytes | str, srgb: bool) -> np.ndarray:
-    """Decode to float32 (h, w, 4) in [0, 1] (HDR formats may exceed 1); srgb=True linearises RGB."""
+def decode_image(src: bytes | str, srgb: bool, half: bool = True) -> np.ndarray:
+    """Decode to (h, w, 4) in [0, 1] (HDR formats may exceed 1); srgb=True linearises RGB.
+    8-bit sources come back as float16 when `half` (textures), everything else as float32."""
     if isinstance(src, str):
         ext = os.path.splitext(src)[1].lower()
         if ext == ".npy":
@@ -227,6 +229,14 @@ def decode_image(src: bytes | str, srgb: bool) -> np.ndarray:
         a = np.stack([g, g, g, np.ones_like(g)], -1)
     else:
         a = np.asarray(im.convert("RGBA"), dtype=np.float32) / 255.0
+        if srgb:
+            a = np.concatenate([srgb_to_linear(a[..., :3]), a[..., 3:]], -1)
+        # 8-bit sources are kept as half floats: 11 significant bits resolve every (sRGB-decoded)
+        # 8-bit level to well under a quantisation step, at half the memory of float32 on the CPU
+        # and on the GPU (a 4K RGBA map: 134 MB instead of 268 MB).
+        if half:
+            return np.ascontiguousarray(a, dtype=np.float16)
+        return np.ascontiguousarray(a, dtype=np.float32)
     if srgb:
         a = np.concatenate([srgb_to_linear(a[..., :3]), a[..., 3:]], -1)
     return np.ascontiguousarray(a, dtype=np.float32)
@@ -254,7 +264,7 @@ def load_hdr_image(path: str) -> np.ndarray:
             img = np.load(ap).astype(np.float32)
             img = np.stack([img] * 3, -1) if img.ndim == 2 else img[..., :3]
         else:
-            img = decode_image(ap, srgb=True)[..., :3]
+            img = decode_image(ap, srgb=True, half=False)[..., :3]
         _HDR_CACHE[key] = np.ascontiguousarray(img, dtype=np.float32)
     return _HDR_CACHE[key]
 
