@@ -221,12 +221,22 @@ def write_uniform(u, vals) -> None:
 
 
 class PremulInput:
-    """A sampler given as premultiplied working-space pixels: draw() converts it on the GPU to what
-    to_shader(rc, px, space) returns; `code` is one of the IN_* conversions (see gpu_codes)."""
+    """A sampler given as premultiplied working-space pixels (an array, or a Buf whose pixels may be on
+    the GPU): draw() converts it on the GPU to what to_shader(rc, px, space) returns; `code` is one of
+    the IN_* conversions (see gpu_codes)."""
 
-    def __init__(self, px: np.ndarray, code: int):
-        self.px, self.code = px, code
-        self.shape = px.shape
+    def __init__(self, px, code: int):
+        self._src, self.code = px, code
+        self.shape = px.shape if isinstance(px, np.ndarray) else (px.h, px.w, 4)
+
+    @property
+    def tile(self):
+        """The GPU tile holding the pixels (see gpucomp), or None."""
+        return None if isinstance(self._src, np.ndarray) else self._src.gpu
+
+    @property
+    def px(self) -> np.ndarray:
+        return self._src if isinstance(self._src, np.ndarray) else np.ascontiguousarray(self._src.px, np.float32)
 
 
 # to_shader / from_shader on the GPU for the spaces they handle without a matrix:
@@ -248,12 +258,13 @@ uniform sampler2D src;
 uniform int mode;          // 0: to_shader (premultiplied -> shader), 1: from_shader (shader -> premultiplied)
 uniform int code;          // see gpu_codes
 uniform int flip;          // 1: read rows bottom-up (NumPy row 0 on top <-> GL row 0 at the bottom)
+uniform int rows;          // the image's height (its texture may be taller, see gpucomp)
 out vec4 color;
 float l2s(float x) { x = max(x, 0.0); return x <= 0.0031308 ? x * 12.92 : 1.055 * pow(x, 1.0 / 2.4) - 0.055; }
 float s2l(float x) { x = max(x, 0.0); return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4); }
 void main() {
     ivec2 q = ivec2(gl_FragCoord.xy);
-    if (flip == 1) q.y = textureSize(src, 0).y - 1 - q.y;
+    if (flip == 1) q.y = rows - 1 - q.y;
     vec4 p = texelFetch(src, q, 0);
     if (mode == 0) {
         vec3 c = p.a > 1e-6 ? p.rgb / p.a : vec3(0.0);
@@ -309,6 +320,7 @@ def _convert_pass(tex, w: int, h: int, mode: int, code: int, fbo=None, flip: boo
     prog["mode"].value = mode
     prog["code"].value = int(code)
     prog["flip"].value = int(flip)
+    prog["rows"].value = int(h)
     vao.render(moderngl.TRIANGLE_STRIP)
     return fbo
 
@@ -319,10 +331,11 @@ def _release_fbo(fbo) -> None:
     fbo.release()
 
 
-def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: int | None = None) -> np.ndarray:
+def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: int | None = None,
+         gpu_out: bool = False) -> np.ndarray:
     """Run the program over a w x h target. Samplers are (h, w, 4) arrays, row 0 on top, or PremulInput
     (converted on the GPU). premul_out (an out code of gpu_codes) returns from_shader of the result,
-    computed on the GPU, instead of the raw output."""
+    computed on the GPU, instead of the raw output; with gpu_out, as a gpucomp.GpuTile left on the GPU."""
     import moderngl
     ctx = gl.context()
     prog, vao = prog_vao
@@ -336,11 +349,14 @@ def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: 
             if isinstance(px, PremulInput):
                 hit = converted.get(id(px))
                 if hit is None:
-                    # Uploaded as is (row 0 on top) into a reused texture; the conversion pass flips it.
+                    # Uploaded as is (row 0 on top) into a reused texture, or read from the GPU tile
+                    # already holding it; the conversion pass flips it.
                     ph, pw = px.shape[:2]
                     tg = _targets(pw, ph)
-                    tg["raw"].write(np.ascontiguousarray(px.px, np.float32))
-                    _convert_pass(tg["raw"], pw, ph, 0, px.code, fbo=tg["conv"], flip=True)
+                    tile = px.tile
+                    if tile is None:
+                        tg["raw"].write(np.ascontiguousarray(px.px, np.float32))
+                    _convert_pass(tg["raw"] if tile is None else tile.tex, pw, ph, 0, px.code, fbo=tg["conv"], flip=True)
                     hit = converted[id(px)] = tg["conv"].color_attachments[0]
                     hit.filter = (moderngl.LINEAR, moderngl.LINEAR)
                     hit.repeat_x = hit.repeat_y = False
@@ -361,6 +377,12 @@ def draw(prog_vao, w: int, h: int, samplers: dict[str, np.ndarray], premul_out: 
         ctx.disable(moderngl.BLEND)
         fbo.clear(0.0, 0.0, 0.0, 0.0)
         vao.render(moderngl.TRIANGLE_STRIP)
+        if premul_out is not None and gpu_out:
+            # from_shader on the GPU, written top row first: a gpucomp tile as it is.
+            from .. import gpucomp
+            out_tile = gpucomp.GpuTile(w, h, clear=False)
+            _convert_pass(fbo.color_attachments[0], w, h, 1, premul_out, fbo=out_tile.fbo, flip=True)
+            return out_tile
         if premul_out is not None:
             # from_shader on the GPU, written top row first: read straight into the result array.
             _convert_pass(fbo.color_attachments[0], w, h, 1, premul_out, fbo=tg["post"], flip=True)
@@ -870,7 +892,7 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
     # come back premultiplied, with the same arithmetic as to_shader / from_shader.
     codes = gpu_codes(space, bool(rc.linear)) if not header else None
     gpu_conv = codes is not None
-    inp = PremulInput(np.ascontiguousarray(work.px, np.float32), codes[0]) if gpu_conv else to_shader(rc, work.px, space)
+    inp = PremulInput(work, codes[0]) if gpu_conv else to_shader(rc, work.px, space)
     src = None
     if rc.ev.str(e, "source", ctx):
         sb = source_buf(rc, e, ctx, node)
@@ -960,7 +982,12 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
         resolve_uniforms(rc, e, ctx, prog[0], builtins=bi, defaults=defaults, space=space,
                          attr_value=attr_value, reserved=("padding",))
         last = i == len(passes) - 1
-        out = draw(prog, pw, ph, samplers, premul_out=codes[1] if gpu_conv and last and (pw, ph) == (w, h) else None)
+        direct = gpu_conv and last and (pw, ph) == (w, h)
+        # On a GPU frame a single-pass result stays on the GPU (nothing reads it back as a sampler).
+        on_gpu = direct and rc._gpu_frame and len(passes) == 1 and not persistent
+        out = draw(prog, pw, ph, samplers, premul_out=codes[1] if direct else None, gpu_out=on_gpu)
+        if on_gpu:
+            return Buf(None, work.x0, work.y0, gpu=out)
         if ps.get("TARGET"):
             samplers[ps["TARGET"]] = out
     if persistent:

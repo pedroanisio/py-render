@@ -315,10 +315,18 @@ def composite(dst: Buf, src: Buf, mode: str = "normal", opacity: float = 1.0, gr
     """Blend src onto dst; returns dst (grown to cover src when grow is True)."""
     if opacity <= 0:
         return dst
-    if dst.gpu is not None:
+    if src.gpu is not None or dst.gpu is not None:
         from . import gpucomp
-        if gpucomp.composite(dst, src, mode, opacity):
-            return dst
+        if gpucomp.supports(mode):
+            if dst.is_null and not grow:
+                return dst
+            if dst.is_null:
+                # Onto nothing: the source itself (scaled), still on the GPU.
+                if mode == "normal":
+                    return gpucomp.upload(src) if opacity >= 1 else gpucomp.scaled(src, opacity)
+                dst = Buf.empty(src.x0, src.y0, src.w, src.h)
+            # A GPU source joins the backdrop on the GPU (uploading a CPU backdrop once).
+            return gpucomp.composite(gpucomp.upload(dst), src, mode, opacity, grow)
     op = BLENDS.get(mode)
     if op is None:
         warn_once("blend", mode)

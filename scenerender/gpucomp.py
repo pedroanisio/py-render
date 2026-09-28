@@ -48,10 +48,11 @@ def _bucket(n: int) -> int:
 class GpuTile:
     """A w x h RGBA float32 tile: the (0, 0, w, h) corner of a pooled texture with its framebuffer."""
 
-    __slots__ = ("tex", "fbo", "w", "h", "key", "shared")
+    __slots__ = ("tex", "fbo", "w", "h", "key", "shared", "fixed")
 
     def __init__(self, w: int, h: int, clear: bool = True):
         self.shared = False     # held by a cache: Bufs lending it never release it
+        self.fixed = False      # the frame: composites onto it are clipped, never grow it
         self.w, self.h = int(w), int(h)
         self.key = (_bucket(self.w), _bucket(self.h))
         free = _POOL.get(self.key)
@@ -241,7 +242,9 @@ def frame(rect) -> "object":
     """A transparent GPU Buf covering rect."""
     from .raster import Buf
     x0, y0, x1, y1 = rect
-    return Buf(None, x0, y0, gpu=GpuTile(x1 - x0, y1 - y0))
+    t = GpuTile(x1 - x0, y1 - y0)
+    t.fixed = True
+    return Buf(None, x0, y0, gpu=t)
 
 
 def shared_upload(px: np.ndarray) -> GpuTile:
@@ -290,19 +293,29 @@ def _behind():
 _MODES = {"normal": _over, "behind": _behind}
 
 
-def composite(dst, src, mode: str, opacity: float) -> bool:
-    """src blended onto the GPU Buf dst in place; False when mode needs the CPU (dst is then untouched).
-    dst does not grow: source pixels outside it are dropped (see the module docstring). normal is
-    source-over, behind the backdrop over the source (d + s (1 - da)), as blend._normal and _behind."""
+def supports(mode: str) -> bool:
+    return mode in _MODES
+
+
+def composite(dst, src, mode: str, opacity: float, grow: bool = True):
+    """dst with src blended onto it (dst a GPU Buf, changed in place unless it grows); None when mode
+    needs the CPU (dst is then untouched). normal is source-over, behind the backdrop over the source
+    (d + s (1 - da)), as blend._normal and _behind. The frame (see frame) never grows: source pixels
+    outside it are dropped (see the module docstring); other GPU Bufs grow like CPU ones."""
     blend = _MODES.get(mode)
     if blend is None:
-        return False
+        return None
     if src.is_null or opacity <= 0:
-        return True
-    from .raster import intersect
+        return dst
+    from .raster import intersect, union
+    if dst.gpu.shared:
+        # A cache's tile is only ever read: draw into a copy.
+        dst = _grown(dst, union(dst.rect, src.rect) if grow else dst.rect)
+    elif grow and not dst.gpu.fixed and union(dst.rect, src.rect) != dst.rect:
+        dst = _grown(dst, union(dst.rect, src.rect))
     r = intersect(dst.rect, src.rect)
     if r is None:
-        return True
+        return dst
     t, temp = tile_of(src)
     try:
         _draw("copy", dst.gpu.fbo, (r[0] - dst.x0, r[1] - dst.y0, r[2] - r[0], r[3] - r[1]), blend(),
@@ -310,7 +323,39 @@ def composite(dst, src, mode: str, opacity: float) -> bool:
     finally:
         if temp:
             t.release()
-    return True
+    return dst
+
+
+def _grown(buf, rect):
+    """A GPU Buf covering rect holding buf's pixels (transparent elsewhere)."""
+    from .raster import Buf
+    x0, y0, x1, y1 = rect
+    out = Buf(None, x0, y0, gpu=GpuTile(x1 - x0, y1 - y0))
+    _draw("copy", out.gpu.fbo, (buf.x0 - x0, buf.y0 - y0, buf.w, buf.h), None, [("src", buf.gpu.tex)],
+          off=(buf.x0 - x0, buf.y0 - y0), k=1.0)
+    buf.gpu.release()
+    return out
+
+
+def scaled(buf, k: float):
+    """buf's pixels times k as a new GPU Buf."""
+    from .raster import Buf
+    out = GpuTile(buf.w, buf.h, clear=False)
+    t, temp = tile_of(buf)
+    try:
+        _draw("copy", out.fbo, (0, 0, buf.w, buf.h), None, [("src", t.tex)], off=(0, 0), k=float(k))
+    finally:
+        if temp:
+            t.release()
+    return Buf(None, buf.x0, buf.y0, gpu=out)
+
+
+def upload(buf):
+    """buf as a GPU Buf (itself when it already is one)."""
+    from .raster import Buf
+    if buf.gpu is not None:
+        return buf
+    return Buf(None, buf.x0, buf.y0, gpu=GpuTile.upload(buf.px))
 
 
 def warp_over(dst, tile: GpuTile, hi: np.ndarray, rect) -> None:
@@ -329,7 +374,7 @@ def accumulate(acc, buf):
     from .raster import Buf
     if acc is None:
         if buf.gpu is not None:
-            return buf
+            return _grown(buf, buf.rect) if buf.gpu.shared else buf
         return Buf(None, buf.x0, buf.y0, gpu=GpuTile.upload(buf.px))
     t, temp = tile_of(buf)
     try:

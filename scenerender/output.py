@@ -147,8 +147,14 @@ def nvenc_ffmpeg(codec: str = "h264_nvenc") -> str | None:
     if codec in _NVENC:
         return _NVENC[codec]
     candidates = [os.environ.get("SCENERENDER_FFMPEG"), ffmpeg_exe(), shutil.which("ffmpeg")]
+    candidates = list(dict.fromkeys(c for c in candidates if c))
+    key = _probe_key(codec, candidates)
+    known = _probe_cache().get(key) if key else None
+    if known is not None:
+        _NVENC[codec] = known or None
+        return _NVENC[codec]
     found = None
-    for exe in dict.fromkeys(c for c in candidates if c):
+    for exe in candidates:
         try:
             r = subprocess.run([exe, "-v", "error", "-nostdin", "-f", "lavfi", "-i", "color=black:s=256x256:r=24:d=0.25",
                                 "-c:v", codec, "-f", "null", "-"], capture_output=True, timeout=30)
@@ -158,7 +164,45 @@ def nvenc_ffmpeg(codec: str = "h264_nvenc") -> str | None:
             found = exe
             break
     _NVENC[codec] = found
+    if key:
+        _probe_cache(key, found or "")
     return found
+
+
+def _probe_key(codec: str, exes: list[str]) -> str | None:
+    """What an NVENC probe result depends on: the ffmpeg builds (path, size, mtime), the codec and the
+    NVIDIA driver loaded (none: no key, always probe)."""
+    try:
+        with open("/proc/driver/nvidia/version") as f:
+            driver = f.readline().strip()
+        builds = [f"{e}:{os.stat(e).st_size}:{os.stat(e).st_mtime_ns}" for e in exes]
+    except OSError:
+        return None
+    return "|".join([codec, driver, *builds])
+
+
+def _probe_cache(key: str | None = None, value: str | None = None) -> dict:
+    """NVENC probe results kept across runs in the user cache directory (a test encode costs about a
+    second of CPU); with key and value, records one."""
+    import json
+    path = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"),
+                        "scenerender", "nvenc-probe.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    if key is not None:
+        data[key] = value
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = f"{path}.{os.getpid()}"
+            with open(tmp, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+    return data
 
 
 # NVENC rejects small frames (the minimum depends on the GPU); below this x264 encodes them.
