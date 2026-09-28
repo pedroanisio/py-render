@@ -66,7 +66,7 @@ def test_failed_worker_renders_all_pending_samples_serially(tmp_path, monkeypatc
     # waited forever on chunks the terminated pool never runs.
     got = r._accumulate(times, 0)
     assert pool.terminated and r._pool is None
-    np.testing.assert_array_equal(got, expected)
+    np.testing.assert_array_equal(got.px, expected.px)     # sums are Bufs (on the GPU where it composites)
     name = r._shm.name
     r.close_sample_pool()
     assert not os.path.exists(f"/dev/shm/{name}")

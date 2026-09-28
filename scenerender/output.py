@@ -405,6 +405,9 @@ def begin_frame(r, t: float, kind: str, size: tuple[int, int] | None, pad_even: 
     frame = int(round(t * float(r.doc.fps)))
     buf = r.frame_buf(t, frame)
     lin = r.rc.linear
+    if kind in YUV_KINDS:
+        from . import gpucomp        # see _gpu_yuv: the encoder's own input, converted on the GPU
+        return gpucomp.to_yuv420p_async(buf, lin, _graded_background(r), full=kind == "yuv420p-pc")
     if kind == "rgb8" and buf.gpu is not None:
         from . import gpucomp
         collect = gpucomp.to_rgb8_async(buf, lin, _graded_background(r))    # 3 bytes a pixel leave the GPU
@@ -443,6 +446,27 @@ def begin_frame(r, t: float, kind: str, size: tuple[int, int] | None, pad_even: 
                     img = (rgb + bg * (1 - a)).astype(np.float32)
     img = _fit(img, size, pad_even)
     return lambda: img
+
+
+YUV_KINDS = ("yuv420p-tv", "yuv420p-pc")
+
+
+def _gpu_yuv(r, job: Job, src, kind: str, size, pad_even: bool, rewrites: bool) -> str | None:
+    """The yuv420p frame kind to render for this encode, or None. Where the encoder takes 8-bit
+    yuv420p BT.709 (H.264 / H.265) of frames at the rendered size, the GPU converts each frame and only
+    those bytes cross the pipe, instead of RGB that ffmpeg converts on the CPU (swscale with
+    accurate_rnd: the same values within one code). Not when anything else reads the RGB frames (a
+    frames directory, the flash check), or for two-pass and size-fitting encodes (rewrites)."""
+    from . import gpucomp
+    if (kind != "rgb8" or rewrites or src.dir or src.tap is not None or not gpucomp.enabled()
+            or job.codec not in ("h264", "h265") or (job.a("pixelFormat") or "yuv420p") != "yuv420p"):
+        return None
+    if _MATRIX.get(job.color[0] or "srgb", "bt709") != "bt709":
+        return None
+    w, h = r.rc.width, r.rc.height
+    if w % 4 or h % 2 or (size and tuple(size) != (w, h)):
+        return None
+    return "yuv420p-pc" if job.a("colorRange", "limited") == "full" else "yuv420p-tv"
 
 
 def _fit(img: np.ndarray, size: tuple[int, int] | None, pad_even: bool) -> np.ndarray:
@@ -1203,7 +1227,12 @@ def _encode_video(r, job, src, times, kind, size, pad_even, audio_path, bits, pr
         return [job.path]
     abps = audio_bitrate(job, duration) if audio_path else 0
     vargs, vf, bitrate_mode, _ = video_codec_args(job, duration, abps)
-    raw_in = ["-f", "rawvideo", "-pix_fmt", _pix_in(kind), "-s", f"{w}x{h}", "-r", _fps_str(job.fps), "-i", "-"]
+    rewrites = (parse_bool(job.a("twoPass")) and bitrate_mode and job.codec in _RATE_CODECS) or bool(int(job.a("maxFileSize") or 0))
+    yuv = _gpu_yuv(r, job, src, kind, size, pad_even, rewrites)
+    if yuv:
+        src.kind, vf = yuv, None          # frames arrive as the encoder's yuv420p: no conversion filter
+    raw_in = ["-f", "rawvideo", "-pix_fmt", "yuv420p" if yuv else _pix_in(kind), "-s", f"{w}x{h}",
+              "-r", _fps_str(job.fps), "-i", "-"]
     ain = ((["-ch_layout", job.ch_layout] if job.ch_layout else []) + ["-i", audio_path]) if audio_path else []
     maps = ["-map", "0:v:0"] + (["-map", "1:a:0"] if audio_path else [])
     fargs = ["-vf", vf] if vf else []

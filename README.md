@@ -103,7 +103,7 @@ Useful `render` options:
 | Option | Effect |
 |---|---|
 | `--from` / `--to` | Render part of the timeline. |
-| `--jobs N` | Number of frame worker processes (0 means one per CPU). |
+| `--jobs N` | Number of frame worker processes (default 1, the least CPU time; 0 means one per CPU). |
 | `--frames-dir DIR` | Keep rendered frames in DIR; a rerun resumes from them. |
 | `--no-motion-blur` | Faster previews. |
 | `--no-gpu` | Keep all work on the CPU. |
@@ -123,8 +123,11 @@ linear = r.frame_linear(1.5)    # premultiplied float32 RGBA in the working spac
 
 ## Performance
 
-- **Workers**: rendering is parallel across frame worker processes, and each worker's count is
-  sized to the memory available (host or container limit).
+- **GPU compositing**: frames composite in GL textures, with 3D layers, cached content, shader effects
+  and the motion-blur sum kept on the GPU, and leave it once, converted to the encoder's input.
+  `SCENERENDER_GPU_COMPOSITE=0` composites on the CPU.
+- **Workers**: `render` uses one process, the least CPU time; `--jobs N` adds frame worker processes
+  for wall time, sized to the memory available (host or container limit).
 - **Raster cache**: content that is provably unchanged over a one-second window is drawn once and
   reused. It is reused exactly while it stays in place, and resampled while a camera or Ken Burns
   move animates it.
@@ -136,6 +139,8 @@ The other switches are in [docs/RUNTIME.md](docs/RUNTIME.md):
 | Switch | Effect |
 |---|---|
 | `SCENERENDER_GPU=0` | Keep all work on the CPU. |
+| `SCENERENDER_GPU_COMPOSITE=0` | Composite frames on the CPU (other GPU paths stay on). |
+| `SCENERENDER_SAMPLE_WORKERS=1` | Render motion-blur samples in worker processes (wall time for CPU time). |
 | `SCENERENDER_KERNELS=0` | Use the NumPy reference implementations instead of the kernels. |
 | `SCENERENDER_THREADS` | Threads per frame. |
 | `SCENERENDER_BLAS_THREADS` | Threads for NumPy's BLAS. |

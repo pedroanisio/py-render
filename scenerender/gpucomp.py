@@ -102,6 +102,27 @@ class GpuTile:
 # ---------------------------------------------------------------- programs
 _VS = "#version 410\nin vec2 in_pos;\nvoid main() { gl_Position = vec4(in_pos, 0.0, 1.0); }\n"
 
+# premultiplied working space -> straight 8-bit RGB codes over bg, as kernels._to_rgb8 (rgb(p))
+_RGB8_COMMON = """
+uniform sampler2D src; uniform int linear; uniform int has_bg; uniform vec3 bg; uniform float q8[257];
+out uint o;
+uint code(float x) {
+    if (!(x > 0.0)) return 0u;
+    if (x >= 1.0) return 255u;
+    int lo = 0, hi = 255;
+    while (lo < hi) { int mid = (lo + hi + 1) >> 1; if (q8[mid] <= x) lo = mid; else hi = mid - 1; }
+    return uint(lo);
+}
+uint enc(float x) { return uint(clamp(x, 0.0, 1.0) * 255.0 + 0.5); }
+uvec3 rgb(ivec2 at) {
+    vec4 p = texelFetch(src, at, 0);
+    float a = p.a; vec3 c = p.rgb;
+    if (has_bg != 0) { c = c + bg * (1.0 - a); a = 1.0; }
+    if (a > 1e-6) c = c / max(a, 1e-6); else c = vec3(0.0);
+    return linear != 0 ? uvec3(code(c.r), code(c.g), code(c.b)) : uvec3(enc(c.r), enc(c.g), enc(c.b));
+}
+"""
+
 _FS = {
     # src texel under this pixel, scaled (source-over and additive accumulation use blending)
     "copy": """
@@ -171,25 +192,8 @@ void main() {
     # premultiplied working space -> straight 8-bit RGB over bg, as kernels._to_rgb8. pack3 = 0: one
     # texel per pixel, r | g << 8 | b << 16; pack3 = 1: texel i of a row holds bytes 4i..4i+3 of the
     # row's RGB byte stream (width 3w / 4), so the texture reads back as the (h, w, 3) image itself.
-    "rgb8": """
-uniform sampler2D src; uniform int linear; uniform int has_bg; uniform vec3 bg; uniform float q8[257];
+    "rgb8": _RGB8_COMMON + """
 uniform int pack3;
-out uint o;
-uint code(float x) {
-    if (!(x > 0.0)) return 0u;
-    if (x >= 1.0) return 255u;
-    int lo = 0, hi = 255;
-    while (lo < hi) { int mid = (lo + hi + 1) >> 1; if (q8[mid] <= x) lo = mid; else hi = mid - 1; }
-    return uint(lo);
-}
-uint enc(float x) { return uint(clamp(x, 0.0, 1.0) * 255.0 + 0.5); }
-uvec3 rgb(ivec2 at) {
-    vec4 p = texelFetch(src, at, 0);
-    float a = p.a; vec3 c = p.rgb;
-    if (has_bg != 0) { c = c + bg * (1.0 - a); a = 1.0; }
-    if (a > 1e-6) c = c / max(a, 1e-6); else c = vec3(0.0);
-    return linear != 0 ? uvec3(code(c.r), code(c.g), code(c.b)) : uvec3(enc(c.r), enc(c.g), enc(c.b));
-}
 void main() {
     ivec2 f = ivec2(gl_FragCoord.xy);
     if (pack3 == 0) { uvec3 q = rgb(f); o = q.r | (q.g << 8) | (q.b << 16); return; }
@@ -198,6 +202,35 @@ void main() {
     uint bytes[6] = uint[6](a.r, a.g, a.b, b.r, b.g, b.b);
     int s = n0 - p0 * 3;
     o = bytes[s] | (bytes[s + 1] << 8) | (bytes[s + 2] << 16) | (bytes[s + 3] << 24);
+}""",
+    # The 8-bit RGB codes of "rgb8" as planar yuv420p (BT.709 Y'CbCr, limited range unless full;
+    # chroma the mean of each 2 x 2 block): texel k holds bytes 4k..4k+3 of the Y, U, V planes, so the
+    # texture (w / 4 texels by 3h / 2 rows) reads back as the encoder's input frame.
+    "yuv": _RGB8_COMMON + """
+uniform int W; uniform int H; uniform int full;
+float luma(vec3 c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b; }
+uint q8u(float v) { return uint(clamp(floor(v + 0.5), 0.0, 255.0)); }
+uint byte_at(int n) {
+    int wh = W * H;
+    if (n < wh) {
+        float y = luma(vec3(rgb(ivec2(n % W, n / W))));
+        return q8u(full != 0 ? y : 16.0 + y * (219.0 / 255.0));
+    }
+    int m = n - wh, quarter = wh / 4;
+    bool v_plane = m >= quarter;
+    if (v_plane) m -= quarter;
+    ivec2 c = ivec2(m % (W / 2), m / (W / 2)) * 2;
+    float acc = 0.0;
+    for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 2; dx++) {
+        vec3 p = vec3(rgb(c + ivec2(dx, dy)));
+        acc += v_plane ? (p.r - luma(p)) / 1.5748 : (p.b - luma(p)) / 1.8556;
+    }
+    return q8u(128.0 + 0.25 * acc * (full != 0 ? 1.0 : 224.0 / 255.0));
+}
+void main() {
+    ivec2 f = ivec2(gl_FragCoord.xy);
+    int n = 4 * (f.y * (W / 4) + f.x);
+    o = byte_at(n) | (byte_at(n + 1) << 8) | (byte_at(n + 2) << 16) | (byte_at(n + 3) << 24);
 }""",
 }
 
@@ -469,6 +502,50 @@ _RGB8: dict = {}
 _Q8: tuple | None = None
 
 
+def to_yuv420p_async(buf, linear: bool, background=None, full: bool = False):
+    """The frame as yuv420p bytes (see the "yuv" shader), started like to_rgb8_async: returns a function
+    that waits for them. buf's width must be a multiple of 4 and its height even."""
+    ctx = gl.context()
+    w, h = buf.w, buf.h
+    key = ("yuv", w, h)
+    hit = _RGB8.get(key)
+    if hit is None:
+        _RGB8.clear()
+        tex = ctx.texture((w // 4, h * 3 // 2), 1, dtype="u4")
+        hit = _RGB8[key] = [tex, ctx.framebuffer(color_attachments=[tex]),
+                            [ctx.buffer(reserve=w * h * 3 // 2) for _ in range(2)], 0]
+    tex, fbo, pbos, turn = hit
+    pbo = pbos[turn]
+    hit[3] = 1 - turn
+    t, temp = tile_of(buf)
+    try:
+        prog, _ = _prog("yuv")
+        prog["q8"].value = _q8()
+        bg = (0.0, 0.0, 0.0) if background is None else tuple(float(v) for v in background[:3])
+        _draw("yuv", fbo, (0, 0, w // 4, h * 3 // 2), None, [("src", t.tex)], linear=int(bool(linear)),
+              has_bg=int(background is not None), bg=bg, W=w, H=h, full=int(bool(full)))
+        fbo.read_into(pbo, viewport=(0, 0, w // 4, h * 3 // 2), components=1, dtype="u4")
+    finally:
+        if temp:
+            t.release()
+
+    def collect() -> np.ndarray:
+        out = np.empty(w * h * 3 // 2, np.uint8)
+        pbo.read_into(out)
+        return out
+    return collect
+
+
+def _q8() -> tuple:
+    global _Q8
+    if _Q8 is None:
+        from . import kernels
+        q8 = np.asarray(kernels._Q8_START, np.float64).copy()
+        q8[0], q8[256] = -1e30, 1e30
+        _Q8 = tuple(float(v) for v in q8)
+    return _Q8
+
+
 def to_rgb8(buf, linear: bool, background=None) -> np.ndarray:
     """(h, w, 3) uint8 straight RGB of a premultiplied working-space Buf, as kernels.to_rgb8."""
     return to_rgb8_async(buf, linear, background)()
@@ -479,8 +556,6 @@ def to_rgb8_async(buf, linear: bool, background=None):
     converts and copies the frame into a pixel buffer while the CPU goes on (with the next frame, see
     output.FrameSource), so collecting it later does not wait for the GPU. Two buffers alternate:
     collect each result before starting the second next one."""
-    global _Q8
-    from . import kernels
     ctx = gl.context()
     packed = buf.w % 4 == 0
     tw = buf.w * 3 // 4 if packed else buf.w
@@ -494,14 +569,10 @@ def to_rgb8_async(buf, linear: bool, background=None):
     tex, fbo, pbos, turn = hit
     pbo = pbos[turn]
     hit[3] = 1 - turn
-    if _Q8 is None:
-        q8 = np.asarray(kernels._Q8_START, np.float64).copy()
-        q8[0], q8[256] = -1e30, 1e30
-        _Q8 = tuple(float(v) for v in q8)
     t, temp = tile_of(buf)
     try:
         prog, _ = _prog("rgb8")
-        prog["q8"].value = _Q8
+        prog["q8"].value = _q8()
         bg = (0.0, 0.0, 0.0) if background is None else tuple(float(v) for v in background[:3])
         _draw("rgb8", fbo, (0, 0, tw, buf.h), None, [("src", t.tex)], linear=int(bool(linear)),
               has_bg=int(background is not None), bg=bg, pack3=int(packed))

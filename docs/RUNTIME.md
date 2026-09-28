@@ -48,6 +48,20 @@ With an NVIDIA GPU, rendering and encoding use it automatically:
   shader's space on the GPU (the same arithmetic as the CPU conversion), and the `bloom` effect
   runs as GL passes that reproduce the NumPy passes; pixels are uploaded once and read back once.
 
+- Frames composite on the GPU (`scenerender/gpucomp.py`, GL): the frame is a float texture, and
+  source-over (and `behind`) composites, isolated groups, raster-cache entries (uploaded once, then
+  drawn or warped with exact bilinear fetches), 3D layers, single-pass shader effects, shape canvases
+  (converted from 8-bit through the CPU's own tables) and the motion-blur sum stay there. The finished
+  frame is converted on the GPU to the encoder's input, packed 8-bit RGB or, for 8-bit BT.709 H.264 /
+  H.265 at the rendered size, yuv420p (the same values as ffmpeg's accurate swscale conversion within
+  one code), and read back asynchronously one frame behind. Everything else reads a buffer's pixels as
+  before and downloads it on first access, so CPU-only paths are unchanged; frames match the CPU
+  compositor within one 8-bit code. The GPU frame covers exactly the frame rectangle, so documents with
+  adjustment layers (which can read what is composited outside it) keep the CPU frame.
+  `SCENERENDER_GPU_COMPOSITE=0` keeps compositing on the CPU.
+- With GL 4.3, Gaussian splats are depth-sorted on the GPU (a bitonic sort of (depth, index) keys, the
+  order of the CPU's stable sort) and drawn through the sorted order from attributes uploaded once.
+
 `SCENERENDER_GPU=0` (or `render --no-gpu`) keeps all work on the CPU.
 
 Rendering reuses work across frames with a raster cache. A node (or a run of consecutive sibling
@@ -63,13 +77,23 @@ never served stale. Resampling moving content softens edges by a fraction of a p
 drawing it directly; `SCENERENDER_RASTER_CACHE=0` renders every frame exactly (the conformance
 tests run that way).
 
-Motion-blur samples of one frame run in worker processes when CPUs are spare. Each worker holds a
-full renderer, so their number is limited to what fits in half of the memory still available
-(host or cgroup), and the pool is shrunk when a frame outgrows it. Frame workers of `render` are
+A raster-cache entry stays valid from window to window for as long as its content stays static.
+Instanced `object3D` copies evaluate their property expressions for all indices in one NumPy pass
+(`scenerender/vexpr.py`, a checked subset of the expression language; anything else is interpreted
+per copy).
+
+`render` uses one process by default, the least CPU time: every extra worker reopens the document and
+redraws what the first has cached. `--jobs N` (or `0`, one per CPU) trades CPU time for wall time.
+Motion-blur samples of one frame can also run in worker processes (`SCENERENDER_SAMPLE_WORKERS=1`).
+Each worker holds a full renderer, so their number is limited to what fits in half of the memory
+still available (host or cgroup), and the pool is shrunk when a frame outgrows it. Frame workers are
 sized the same way after the first frame, and a worker that dies stops the render with an error
-instead of hanging it. NumPy's BLAS runs single-threaded (`SCENERENDER_BLAS_THREADS` overrides)
-and Numba's OpenMP threads wait passively (`OMP_WAIT_POLICY=PASSIVE` unless set): both otherwise
-spin-wait between calls and multiply CPU time without making frames faster.
+instead of hanging it. NumPy's BLAS runs single-threaded (`SCENERENDER_BLAS_THREADS` overrides),
+Numba's OpenMP threads wait passively (`OMP_WAIT_POLICY=PASSIVE` unless set) and the NVIDIA GL driver
+sleeps instead of spinning while it waits for the GPU (`__GL_YIELD=USLEEP` unless set): all three
+otherwise spin-wait and multiply CPU time without making frames faster. The NVENC probe result is
+kept in the user cache directory (`$XDG_CACHE_HOME/scenerender`), keyed by the ffmpeg builds and the
+NVIDIA driver.
 
 The 2026-09-27 regression environment uses Python 3.12.3, Pycairo 1.25.1, Cairo
 1.18.0 and Mesa llvmpipe. Local HTTP delivery tests require permission to bind
