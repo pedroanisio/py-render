@@ -55,10 +55,10 @@ After Effects never re-wraps paragraph text for animators.
 
 Per-unit 3D (zDepth, rotationX, rotationY): as in After Effects, a text layer whose
 animators use any of them is a 3D layer. Every unit is a plane in the camera space of
-scenerender.camera (document px, origin at the frame centre, +Y up, +Z toward the viewer):
+scenerender.camera engine space (document px, origin at the frame centre, +Y up, +Z toward the viewer):
 its 2D offsets (x, y, rotation, scale, skew) apply first, then the plane is pushed to
 zDepth and rotated about the unit's pivot, X then Y, and projected through the active
-camera (camera.camera_at; with no active camera the default 50 mm camera, which leaves the
+camera (camera.camera_at; with no active camera the implicit 60 deg (horizontal fov) camera, which leaves the
 zDepth 0 plane unchanged). Units without 3D offsets form the layer plane at zDepth 0,
 projected the same way. When the layer is itself projected by the compositor (threeD, or
 inside a threeD group) the units use the default camera, i.e. perspective within the
@@ -773,7 +773,7 @@ def _projector(rc, t: float, in_plane: bool = False):
         return (lambda q, z: f2w(rc, q, z)), project, (-np.inf if cam.ortho else cam.near)
     except (ImportError, AttributeError):
         W, H = float(rc.doc.width), float(rc.doc.height)
-        f = math.hypot(W, H)
+        f = (W / 2) / math.tan(math.radians(30.0))        # implicit camera: horizontal fov 60 deg
 
         def f2w_default(q, z):
             q = np.asarray(q, np.float64)

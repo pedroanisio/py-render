@@ -172,7 +172,7 @@ def test_zdepth_scales_about_the_frame_centre(tmp_path):
 
 
 def test_active_camera_projects_units_and_layer_plane(tmp_path):
-    cam = '<camera id="cam" x="-300" y="0" z="1500" yaw="12" fov="50"/>'
+    cam = '<camera id="cam" x="100" y="225" z="-1500" yaw="12" fov="50"/>'
     rc = make_rc(tmp_path, TXT, cam + '<layer id="l" asset="t" x="40" y="100"><textAnimator unit="character" '
                                       'start="0" end="50" rotationY="40"/></layer>')
     rc_def = make_rc(tmp_path, TXT, '<layer id="l" asset="t" x="40" y="100"><textAnimator unit="character" '
@@ -199,12 +199,12 @@ def test_units_behind_camera_are_culled(tmp_path):
     assert np.isfinite(px).all() and px[..., 3].sum() == 0
 
 
-def test_default_projector_fallback_uses_frame_diagonal(tmp_path, monkeypatch):
+def test_default_projector_fallback_uses_the_implicit_camera(tmp_path, monkeypatch):
     import scenerender.camera as CAM
     rc = make_rc(tmp_path, TXT, '<layer id="l" asset="t"/>')
     monkeypatch.delattr(CAM, "camera_at")
     f2w, project, near = TA._projector(rc, 0.0)
-    f = np.hypot(800, 450)
+    f = 400 / np.tan(np.radians(30))                            # horizontal fov 60 deg
     P = f2w(np.array([[500.0, 225.0]]), 0.0)
     s, d = project(P)
     assert np.allclose(s[0], [500.0, 225.0]) and d[0] == pytest.approx(f)

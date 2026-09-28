@@ -18,7 +18,7 @@ def test_symbol_3d_uses_symbol_canvas_and_instance_transform(tmp_path, transform
              '<materials><material id="m" unlit="true" baseColor="#ffffff"/></materials>' \
              '<symbols><symbol id="sym" width="60" height="40" duration="1">{child}</symbol></symbols>' \
              '<composition><instance id="i" symbol="sym" {transform}/></composition></scene>'
-    children = ['<object3D id="o" primitive="plane" width="20" height="10" material="m"/>',
+    children = ['<object3D id="o" primitive="plane" x="30" y="20" width="20" height="10" material="m"/>',
                 '<shape id="s" shape="rect" x="20" y="15" width="20" height="10" fill="#ffffff"/>']
     frames = []
     for i, child in enumerate(children):
@@ -37,6 +37,14 @@ def open_scene(tmp_path, body, before="", after="", name="scene.xml"):
     path.write_text(f'<scene version="1.1"><project width="100" height="100" fps="10" '
                     f'duration="3" linearLight="false"/>{before}<composition>{body}</composition>{after}</scene>')
     return Renderer.open(str(path), strict=True)
+
+
+def test_percent_anchor_refers_to_the_parent_box(tmp_path):
+    # CONVENTIONS 1.2: 25% / 50% of the 80 x 40 parent group -> anchor (20, 20), not a fraction of the node
+    r = open_scene(tmp_path, '<group id="g" width="80" height="40"><shape id="s" shape="rect" x="50" y="30" '
+                             'width="10" height="10" anchorX="25%" anchorY="50%" fill="#ffffff"/></group>')
+    ys, xs = np.nonzero(r.frame_rgba(0)[..., 3] > 127)
+    assert (xs.min(), xs.max() + 1, ys.min(), ys.max() + 1) == (30, 40, 10, 20)
 
 
 def key(prop, value):
@@ -61,7 +69,7 @@ def test_3d_evaluated_selections_match_static_content(tmp_path, prop, base, valu
     materials = '<materials><material id="red" baseColor="#ff0000" unlit="true"/>' \
                 '<material id="blue" baseColor="#0000ff" unlit="true"/></materials>'
     def body(animated):
-        attrs = dict(primitive="plane", radius="20", material="red")
+        attrs = dict(primitive="plane", radius="20", material="red", x="50", y="50")
         attrs[prop] = base if animated else value
         return '<object3D id="o" ' + ' '.join(f'{k}="{v}"' for k, v in attrs.items()) + '>' \
                + (key(prop, value) if animated else '') + '</object3D>'
@@ -73,11 +81,11 @@ def test_3d_evaluated_selections_match_static_content(tmp_path, prop, base, valu
 @pytest.mark.skipif(not gl.available(), reason="requires OpenGL")
 @pytest.mark.parametrize("in_symbol", [False, True])
 def test_camera_height_without_base_and_symbol_camera(tmp_path, in_symbol):
-    camera = '<camera id="cam" z="200" projection="orthographic">' + key("orthoHeight", "50") + '</camera>'
-    body = '<object3D id="o" primitive="plane" width="20" height="20"/>'
+    camera = '<camera id="cam" x="50" y="50" z="-200" projection="orthographic">' + key("orthoHeight", "50") + '</camera>'
+    body = '<object3D id="o" primitive="plane" x="50" y="50" width="20" height="20"/>'
     a = (open_scene(tmp_path, '<instance id="i" symbol="sym"/>', symbol(camera + body)) if in_symbol else
          open_scene(tmp_path, camera + body))
-    b = open_scene(tmp_path, '<camera id="cam" z="200" projection="orthographic" orthoHeight="50"/>' + body,
+    b = open_scene(tmp_path, '<camera id="cam" x="50" y="50" z="-200" projection="orthographic" orthoHeight="50"/>' + body,
                    name="static.xml")
     np.testing.assert_array_equal(a.frame_rgba(.5), b.frame_rgba(.5))
     assert np.count_nonzero(a.frame_rgba(.5)[..., 3]) == 1600
@@ -85,13 +93,13 @@ def test_camera_height_without_base_and_symbol_camera(tmp_path, in_symbol):
 
 @pytest.mark.skipif(not gl.available(), reason="requires OpenGL")
 def test_3d_instance_geometry_and_world_caches_keep_scope(tmp_path):
-    content = '<object3D id="o" primitive="plane" height="10"/>'
+    content = '<object3D id="o" primitive="plane" y="50" height="10"/>'
     instances = ''.join(f'<instance id="i{i}" symbol="sym"><override target="o" property="x" value="{x}"/>'
                         f'<override target="o" property="width" value="{width}"/></instance>'
-                        for i, x, width in [(0, -20, 10), (1, 20, 20)])
+                        for i, x, width in [(0, 30, 10), (1, 70, 20)])
     a = open_scene(tmp_path, instances, symbol(content))
-    b = open_scene(tmp_path, '<object3D id="left" primitive="plane" x="-20" width="10" height="10"/>'
-                   '<object3D id="right" primitive="plane" x="20" width="20" height="10"/>', name="direct.xml")
+    b = open_scene(tmp_path, '<object3D id="left" primitive="plane" x="30" y="50" width="10" height="10"/>'
+                   '<object3D id="right" primitive="plane" x="70" y="50" width="20" height="10"/>', name="direct.xml")
     for t in (.5, .2, .5):
         np.testing.assert_array_equal(a.frame_rgba(t), b.frame_rgba(t))
 

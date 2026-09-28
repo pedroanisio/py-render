@@ -272,7 +272,7 @@ def test_threed_without_camera_is_identity(tmp_path):
 
 def test_zdepth_shrinks_and_rotation_foreshortens(tmp_path):
     from scenerender.camera import camera_hook, project_quad
-    p = scene(tmp_path, '<camera id="c" x="0" y="0" z="1000" fov="60"/>'
+    p = scene(tmp_path, '<camera id="c" x="100" y="100" z="-1000" fov="60"/>'
                         '<shape id="s" shape="rect" x="75" y="75" width="50" height="50" threeD="true" zDepth="1000"/>'
                         '<shape id="t" shape="rect" x="75" y="75" width="50" height="50" anchorX="25" threeD="true" rotationY="60"/>')
     r = Renderer.open(p)
@@ -290,8 +290,8 @@ def test_zdepth_shrinks_and_rotation_foreshortens(tmp_path):
 
 def test_camera_switching_last_active_wins(tmp_path):
     from scenerender.camera import active_camera
-    p = scene(tmp_path, '<camera id="a" z="500"/><camera id="b" z="800" start="1" end="2"/>'
-                        '<camera id="c" z="900" start="1.5" active="false"/>')
+    p = scene(tmp_path, '<camera x="100" y="100" id="a" z="-500"/><camera x="100" y="100" id="b" z="-800" start="1" end="2"/>'
+                        '<camera x="100" y="100" id="c" z="-900" start="1.5" active="false"/>')
     r = Renderer.open(p)
     assert active_camera(r.rc, 0.5).get("id") == "a"
     assert active_camera(r.rc, 1.5).get("id") == "b"
@@ -305,12 +305,12 @@ def test_object3d_fallback_draws(tmp_path):
   <project width="200" height="200" fps="10" duration="2" background="#000000FF" linearLight="false"/>
   {head}
   <composition>
-    <object3D id="b" primitive="box" material="m" width="60" height="60" rotationY="30" rotationX="20"/>
-    <object3D id="s" primitive="sphere" material="m" radius="20" x="70" y="70"/>
+    <object3D x="100" y="100" id="b" primitive="box" material="m" width="60" height="60" rotationY="-30" rotationX="20"/>
+    <object3D id="s" primitive="sphere" material="m" radius="20" x="170" y="30"/>
   </composition>
 </scene>"""
     path = tmp_path / "o.xml"
     path.write_text(xml)
     img = Renderer.open(str(path)).frame_rgb(0.0)
     assert img[100, 100, 0] > 80 and img[100, 100, 1] < 40      # box at the centre
-    assert img[30, 170, 0] > 80                                 # sphere up-right (+y is up)
+    assert img[30, 170, 0] > 80                                 # sphere up-right (scene +y is down)

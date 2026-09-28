@@ -8,7 +8,7 @@
     <material id="m-red" baseColor="#E8452CFF" roughness="0.4"/>
   </materials>
   <composition>
-    <camera id="cam" x="120" y="60" z="700" fov="55" depthOfField="true" fStop="1.4" focusDistance="700" apertureBlades="6"
+    <camera id="cam" x="440" y="120" z="-700" fov="55" depthOfField="true" fStop="1.4" focusDistance="700" apertureBlades="6"
             lensDistortion="-0.08">
       <shake amplitude="3" frequency="1.5" seed="9" start="2" end="4"/>
     </camera>
@@ -19,6 +19,6 @@
       <shape id="card-bg" shape="rounded-rect" width="200" height="120" radius="12" fill="#FFC23DFF"/>
       <shape id="card-dot" shape="ellipse" x="70" y="30" width="60" height="60" fill="#101010FF" threeD="true" zDepth="-40"/>
     </group>
-    <object3D id="ball" primitive="sphere" material="m-red" radius="50" x="-150" y="-40" z="100"/>
+    <object3D id="ball" primitive="sphere" material="m-red" radius="50" x="170" y="220" z="-100"/>
   </composition>
 </scene>

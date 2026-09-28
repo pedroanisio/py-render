@@ -205,9 +205,10 @@ def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
             lo.append(np.min(pos, 0))
             hi.append(np.max(pos, 0))
     sp = model.splats
-    if sp is not None and len(sp.positions):
-        lo.append(sp.positions.min(0))
-        hi.append(sp.positions.max(0))
+    if sp is not None and len(sp.positions):          # COLMAP axes (y down, z forward): E-flipped, see build_object
+        slo, shi = sp.positions.min(0), sp.positions.max(0)
+        lo.append(np.array([slo[0], -shi[1], -shi[2]]))
+        hi.append(np.array([shi[0], -slo[1], -slo[2]]))
     bounds = (np.min(lo, 0), np.max(hi, 0)) if lo else None
     return out, sp, bounds
 
@@ -260,6 +261,19 @@ def _splat_gpu(sp, M: np.ndarray) -> R.SplatGPU:
     return R.SplatGPU(centers.astype(np.float32), sp.colors.astype(np.float32), cov.astype(np.float32))
 
 
+def pixels_per_metre(rc) -> float:
+    """physics/@pixelsPerMeter (default 100): scene units per model metre."""
+    ph = rc.doc.section("physics")
+    try:
+        k = float(ph.get("pixelsPerMeter", 100)) if ph is not None else 100.0
+    except (TypeError, ValueError):
+        k = 100.0
+    return k if k > 0 else 100.0
+
+
+_E4 = np.diag([1.0, -1.0, -1.0, 1.0])
+
+
 def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
     ev = rc.ev
     prim = ev.str(el, "primitive", ctx)
@@ -294,6 +308,12 @@ def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
     if not items and splats is None:
         return None
     inst = _instances(rc, el, ctx, bounds)
+    if prim == "mesh":
+        # Imported models are Y-up metres: scene point = ppm . E . g (CONVENTIONS 2.6), and the engine
+        # frame is E . scene, so in engine space the model is only scaled by ppm (E . E = I). Applied
+        # here, not in world3d, so @parent children do not inherit it.
+        k = pixels_per_metre(rc)
+        inst = inst @ np.diag([k, k, k, 1.0])
     lo, hi = bounds if bounds is not None else (np.zeros(3), np.zeros(3))
     corners = np.array([[x, y, z, 1.0] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
     wc = np.concatenate([corners @ M.T for M in inst])[:, :3]
@@ -310,7 +330,7 @@ def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
     o.inst_buf = ctx_gl.buffer(np.ascontiguousarray(np.transpose(inst, (0, 2, 1)).reshape(len(inst), 16),
                                                     np.float32).tobytes())
     if splats is not None:
-        o.splats = _splat_gpu(splats, inst[0])
+        o.splats = _splat_gpu(splats, inst[0] @ _E4)       # splat files already use scene axes: engine = E . scene
     return o
 
 

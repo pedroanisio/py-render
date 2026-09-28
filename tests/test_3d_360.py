@@ -118,9 +118,9 @@ def test_two_d_frame_on_the_front_face(tmp_path):
 
 
 def test_objects_render_all_around(tmp_path):
-    body = ('<camera id="c"/><object3D id="f" primitive="sphere" radius="80" z="-600" material="u"/>'
-            '<object3D id="b" primitive="sphere" radius="80" z="600" material="u"/>'
-            '<object3D id="up" primitive="sphere" radius="80" y="600" material="u"/>')
+    body = ('<camera x="160" y="90" id="c"/><object3D x="160" y="90" id="f" primitive="sphere" radius="80" z="600" material="u"/>'
+            '<object3D x="160" y="90" id="b" primitive="sphere" radius="80" z="-600" material="u"/>'
+            '<object3D x="160" id="up" primitive="sphere" radius="80" y="-510" material="u"/>')
     lights = ''
     xml_mat = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
     r = doc(tmp_path, body, lights=lights)
@@ -129,13 +129,13 @@ def test_objects_render_all_around(tmp_path):
     r = Renderer.open(str(p))
     px = V.render_360(r.rc, 0.0).px
     h, w = px.shape[:2]
-    assert px[h // 2, w // 2, 3] > 0.9          # front (-Z)
-    assert px[h // 2, 1, 3] > 0.9               # back (+Z) at the left/right edge
+    assert px[h // 2, w // 2, 3] > 0.9          # front (scene +z, engine -Z)
+    assert px[h // 2, 1, 3] > 0.9               # back (scene -z) at the left/right edge
     assert px[1, w // 3, 3] > 0.9               # zenith
 
 
 def test_stereo_disparity(tmp_path):
-    body = '<camera id="c"/><object3D id="n" primitive="box" width="20" height="20" depth="20" z="-80" material="u"/>'
+    body = '<camera x="160" y="90" id="c"/><object3D x="160" y="90" id="n" primitive="box" width="20" height="20" depth="20" z="80" material="u"/>'
     p = tmp_path / "s.xml"
     doc(tmp_path, body, s360='layout="equirectangular" stereo="left-right" width="512" height="128" interpupillary="0.2"',
         lights="", name="s.xml")
@@ -158,12 +158,12 @@ def test_render360_hook_installed_only_in_equirect_mode(tmp_path):
 
 
 def test_viewport_mode_films_through_the_viewport_camera(tmp_path):
-    body = ('<camera id="main" z="800"/><camera id="vp" active="false" x="300" z="800"/>'
-            '<object3D id="o" primitive="sphere" radius="40" material="u"/>')
+    body = ('<camera x="160" y="90" id="main" z="-800"/><camera y="90" id="vp" active="false" x="460" z="-800"/>'
+            '<object3D x="160" y="90" id="o" primitive="sphere" radius="40" material="u"/>')
     p = tmp_path / "v.xml"
     doc(tmp_path, body, s360='viewportCamera="vp"', mode="viewport", lights="", name="v.xml")
     p.write_text(p.read_text().replace("<scene360", '<materials><material id="u" baseColor="#FFFFFFFF" unlit="true"/></materials>\n  <scene360'))
     r = Renderer.open(str(p))
     a = r.rc.render_frame(0.0).px[..., 3]
     xs = np.nonzero(a.any(0))[0]
-    assert xs.mean() < 160 - 30                                        # seen from x = 300: sphere left of centre
+    assert xs.mean() < 160 - 30                                        # seen from 300 px right of the sphere: left of centre

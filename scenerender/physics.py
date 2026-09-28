@@ -959,13 +959,16 @@ class PhysicsSim:
             ctx = _repeat_vars(node, child_ctx(rc, node, nctx))
         return M
 
-    def _size(self, el, t):
+    def _parent_box(self, el, t):
         rc = self.rc
         parent = el.getparent()
         box = (self.width, self.height)
         if parent is not None and ln(parent) in ("group", "sequence"):
             box = rc.node_size(parent, rc.node_ctx(parent, self._ctx(t)), box)
-        return rc.node_size(el, rc.node_ctx(el, self._ctx(t)), box)
+        return box
+
+    def _size(self, el, t):
+        return self.rc.node_size(el, self.rc.node_ctx(el, self._ctx(t)), self._parent_box(el, t))
 
     def keyed_pose(self, el, t):
         """(box centre m, angle rad CCW, half extents m (hx, hy)) from keyframes."""
@@ -2018,7 +2021,8 @@ def body_transform(rc, el, t: float, ctx=None):
         ctx = sim._ctx(t)
     w, h = sim._size(el, t)
     nctx = rc.node_ctx(el, ctx)
-    ax, ay = rc.ev.length(el, "anchorX", nctx, w), rc.ev.length(el, "anchorY", nctx, h)
+    bw, bh = sim._parent_box(el, t)                  # % anchors refer to the parent box
+    ax, ay = rc.ev.length(el, "anchorX", nctx, bw), rc.ev.length(el, "anchorY", nctx, bh)
     sx, sy = rc.ev.num(el, "scaleX", nctx, 1.0), rc.ev.num(el, "scaleY", nctx, 1.0)
     rot = theta - pang
     off = _rot(math.radians(rot)) @ np.array([(w / 2 - ax) * sx, (h / 2 - ay) * sy])

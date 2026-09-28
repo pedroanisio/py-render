@@ -68,7 +68,7 @@ def test_gltf_texture_wrap_modes_render(tmp_path, wrap_s, wrap_t):
                                                   attributes=gt.Attributes(POSITION=pos, TEXCOORD_0=uv))])]
     b.g.nodes, b.g.scenes = [gt.Node(mesh=0)], [gt.Scene(nodes=[0])]
     path = b.save(tmp_path / "sampler.gltf")
-    actual = frame(doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="m"/>', h=120,
+    actual = frame(doc(tmp_path, '<object3D x="80" y="60" scaleX="0.01" scaleY="0.01" scaleZ="0.01" id="o" primitive="mesh" mesh="m"/>', h=120,
                        assets=f'<mesh id="m" src="{path}" format="gltf"/>'))
     # Interior points away from texel boundaries: expected texel indices follow
     # the authored repeat/clamp/reflection modes independently on each axis.
@@ -125,7 +125,7 @@ def test_gltf_point_and_line_modes_render(tmp_path, mode):
     b.g.meshes = [gt.Mesh(primitives=[gt.Primitive(mode=mode, attributes=gt.Attributes(POSITION=pos, COLOR_0=col))])]
     b.g.nodes, b.g.scenes = [gt.Node(mesh=0)], [gt.Scene(nodes=[0])]
     path = b.save(tmp_path / "lines.gltf")
-    r = doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="mesh"/>',
+    r = doc(tmp_path, '<object3D x="80" y="45" scaleX="0.01" scaleY="0.01" scaleZ="0.01" id="o" primitive="mesh" mesh="mesh"/>',
             assets=f'<mesh id="mesh" src="{path}" format="gltf"/>')
     px = frame(r)
     red = (px[..., 0] > .1) & (px[..., 1] < .01)
@@ -170,7 +170,7 @@ def test_gltf_maps_use_their_own_uv_set_and_transform(tmp_path, slot):
     b.g.scenes = [gt.Scene(nodes=[0])]
     path = b.save(tmp_path / "multi.gltf")
     assets = f'<mesh id="mesh" src="{path}" format="gltf"/>'
-    body = '<object3D id="o" primitive="mesh" mesh="mesh"/>'
+    body = '<object3D x="80" y="45" scaleX="0.01" scaleY="0.01" scaleZ="0.01" id="o" primitive="mesh" mesh="mesh"/>'
     lights = '<light id="a" type="ambient" intensity="1"/>' + KEY
     actual = frame(doc(tmp_path, body, assets=assets, lights=lights))
     # Independent reference: bake the selected/transformed coordinate into set 0.
@@ -208,7 +208,7 @@ def test_gltf_occlusion_strength_scales_indirect_light(tmp_path, strength):
     b.g.meshes = [gt.Mesh(primitives=[gt.Primitive(indices=idx, material=0,
         attributes=gt.Attributes(POSITION=pos, TEXCOORD_0=uv))])]
     b.g.nodes, b.g.scenes = [gt.Node(mesh=0)], [gt.Scene(nodes=[0])]
-    body = '<object3D id="o" primitive="mesh" mesh="m"/>'
+    body = '<object3D x="80" y="45" scaleX="0.01" scaleY="0.01" scaleZ="0.01" id="o" primitive="mesh" mesh="m"/>'
     lights = '<light id="a" type="ambient" intensity="1"/>'
     def render(name):
         path = b.save(tmp_path / f"{name}.gltf")
@@ -225,8 +225,8 @@ def test_gltf_occlusion_strength_scales_indirect_light(tmp_path, strength):
 
 # ---------------------------------------------------------------- geometry / projection
 def test_object_projects_to_the_expected_pixel(tmp_path):
-    r = doc(tmp_path, '<camera id="c" z="1000" fov="60"/>'
-                      '<object3D id="o" primitive="sphere" radius="6" x="100" y="50" material="u" segments="48"/>',
+    r = doc(tmp_path, '<camera x="160" y="90" id="c" z="-1000" fov="60"/>'
+                      '<object3D id="o" primitive="sphere" radius="6" x="260" y="40" material="u" segments="48"/>',
             materials='<material id="u" baseColor="#FFFFFFFF" unlit="true"/>', w=320, h=180)
     a = frame(r)[..., 3]
     f = 160 / math.tan(math.radians(30))
@@ -239,15 +239,16 @@ def test_object_projects_to_the_expected_pixel(tmp_path):
                                         ("text", 'text="Hi" height="60" depth="20" bevel="3"'),
                                         ("extrude", 'path="M-30 -30 L30 -30 L0 30 Z" depth="15"')])
 def test_every_primitive_draws(tmp_path, prim, extra):
-    r = doc(tmp_path, f'<object3D id="o" primitive="{prim}" radius="30" rotationY="20" rotationX="15" {extra}/>')
+    r = doc(tmp_path, f'<object3D x="80" y="45" id="o" primitive="{prim}" radius="30" rotationY="-20" rotationX="15" {extra}/>')
     px = frame(r)
     assert px[..., 3].sum() > 50
     assert px[..., :3].max() > 0.05
 
 
 def test_occlusion_between_object_layers(tmp_path):
-    r = doc(tmp_path, '<object3D id="front" primitive="box" width="40" height="40" depth="10" z="100" material="g"/>'
-                      '<object3D id="back" primitive="box" width="120" height="60" depth="10" z="-100" material="r"/>',
+    # implicit camera f = 80 / tan 30 = 138.6 px: front ~62 px wide, back ~116 px wide
+    r = doc(tmp_path, '<object3D x="80" y="45" id="front" primitive="box" width="40" height="40" depth="10" z="-50" material="g"/>'
+                      '<object3D x="80" y="45" id="back" primitive="box" width="200" height="60" depth="10" z="100" material="r"/>',
             materials='<material id="r" baseColor="#FF0000FF" unlit="true"/><material id="g" baseColor="#00FF00FF" unlit="true"/>')
     px = frame(r)
     assert px[45, 80, 1] > 0.9 and px[45, 80, 0] < 0.05          # front box wins although drawn first
@@ -255,9 +256,9 @@ def test_occlusion_between_object_layers(tmp_path):
 
 
 def test_visibility_window_condition_and_opacity(tmp_path):
-    r = doc(tmp_path, '<object3D id="a" primitive="sphere" radius="20" start="1" end="2"/>'
-                      '<object3D id="b" primitive="sphere" radius="20" x="-50" visible="false"/>'
-                      '<object3D id="c" primitive="sphere" radius="20" x="50" opacity="0.5" material="u"/>',
+    r = doc(tmp_path, '<object3D x="80" y="45" id="a" primitive="sphere" radius="20" start="1" end="2"/>'
+                      '<object3D y="45" id="b" primitive="sphere" radius="20" x="30" visible="false"/>'
+                      '<object3D y="45" id="c" primitive="sphere" radius="20" x="130" opacity="0.5" material="u"/>',
             materials='<material id="u" baseColor="#FFFFFFFF" unlit="true"/>')
     assert frame(r, 0.5)[45, 80, 3] == 0 and frame(r, 1.5)[45, 80, 3] > 0.9
     assert frame(r, 1.5)[45, 30, 3] == 0
@@ -266,7 +267,7 @@ def test_visibility_window_condition_and_opacity(tmp_path):
 
 # ---------------------------------------------------------------- materials
 def _sphere_scene(tmp_path, mat: str, name: str, lights: str = KEY) -> np.ndarray:
-    r = doc(tmp_path, '<object3D id="o" primitive="sphere" radius="35" material="m" segments="64"/>',
+    r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="35" material="m" segments="64"/>',
             materials=f'<material id="m" {mat}/>', lights=lights, name=name)
     return frame(r)
 
@@ -307,22 +308,22 @@ def test_emissive_unlit_and_clearcoat_sheen_iridescence_anisotropy_change_shadin
 def test_alpha_modes_and_double_sided(tmp_path):
     common = 'baseColor="#FFFFFF80" unlit="true"'
     for mode, expect in (("opaque", 1.0), ("blend", 0x80 / 255), ("mask", 1.0)):
-        r = doc(tmp_path, '<object3D id="o" primitive="plane" width="60" height="40" material="m"/>',
+        r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="60" height="40" material="m"/>',
                 materials=f'<material id="m" {common} alphaMode="{mode}" alphaCutoff="0.4"/>', name=f"{mode}.xml")
         assert frame(r)[45, 80, 3] == pytest.approx(expect, abs=0.01), mode
-    r = doc(tmp_path, '<object3D id="o" primitive="plane" width="60" height="40" material="m" alphaCutoff="0.9"/>'
+    r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="60" height="40" material="m" alphaCutoff="0.9"/>'
             .replace(' alphaCutoff="0.9"', ''), materials=f'<material id="m" {common} alphaMode="mask" alphaCutoff="0.9"/>',
             name="cut.xml")
     assert frame(r)[45, 80, 3] == 0
     for ds, expect in (("false", 0.0), ("true", 1.0)):
-        r = doc(tmp_path, '<object3D id="o" primitive="plane" width="60" height="40" rotationY="180" material="m"/>',
+        r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="60" height="40" rotationY="-180" material="m"/>',
                 materials=f'<material id="m" baseColor="#FFFFFFFF" unlit="true" doubleSided="{ds}"/>', name=f"ds{ds}.xml")
         assert frame(r)[45, 80, 3] == pytest.approx(expect), ds
 
 
 def test_transmission_refracts_the_scene_behind(tmp_path):
-    body = ('<object3D id="wall" primitive="box" width="400" height="300" depth="10" z="-200" material="red"/>'
-            '<object3D id="glass" primitive="sphere" radius="30" material="glass" segments="64"/>')
+    body = ('<object3D x="80" y="45" id="wall" primitive="box" width="400" height="300" depth="10" z="200" material="red"/>'
+            '<object3D x="80" y="45" id="glass" primitive="sphere" radius="30" material="glass" segments="64"/>')
     mats = ('<material id="red" baseColor="#FF0000FF" unlit="true"/>'
             '<material id="glass" baseColor="#FFFFFFFF" transmission="1" roughness="0" ior="1.5" thickness="0.6" {x}/>')
     clear = frame(doc(tmp_path, body, materials=mats.format(x=""), name="a.xml"))
@@ -334,7 +335,7 @@ def test_transmission_refracts_the_scene_behind(tmp_path):
                      materials=mats.format(x='dispersion="1"'), name="c.xml"))
     assert disp[..., 3].sum() > 0
     # without anything behind it the glass lets the 2D backdrop through
-    alone = frame(doc(tmp_path, '<object3D id="glass" primitive="sphere" radius="30" material="glass"/>',
+    alone = frame(doc(tmp_path, '<object3D x="80" y="45" id="glass" primitive="sphere" radius="30" material="glass"/>',
                       materials=mats.format(x=""), name="d.xml"))
     assert alone[45, 80, 3] < 0.5
 
@@ -346,35 +347,35 @@ def test_texture_maps_and_uv_scale(tmp_path):
     Image.fromarray(img).save(tmp_path / "half.png")
     mats = ('<material id="m" baseColor="#FFFFFFFF" unlit="true" baseColorMap="half.png"/>'
             '<material id="t" baseColor="#FFFFFFFF" unlit="true" baseColorMap="half.png" uvScaleX="2"/>')
-    r = doc(tmp_path, '<object3D id="o" primitive="plane" width="160" height="90" material="m"/>', materials=mats)
+    r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="160" height="90" material="m"/>', materials=mats)
     px = frame(r)
     assert px[45, 20, 0] > 0.9 and px[45, 140, 0] < 0.05
-    r2 = doc(tmp_path, '<object3D id="o" primitive="plane" width="160" height="90" material="t"/>', materials=mats, name="t.xml")
+    r2 = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="160" height="90" material="t"/>', materials=mats, name="t.xml")
     row = frame(r2)[45, :, 0]
     assert (np.diff((row > 0.5).astype(int)) != 0).sum() >= 3     # two repeats: 3 transitions
     nm = np.zeros((8, 8, 3), np.uint8)
     nm[..., 0], nm[..., 1], nm[..., 2] = 200, 128, 180
     Image.fromarray(nm).save(tmp_path / "n.png")
-    flat = frame(doc(tmp_path, '<object3D id="o" primitive="plane" width="160" height="90" material="a"/>',
+    flat = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="160" height="90" material="a"/>',
                      materials='<material id="a" baseColor="#808080FF"/>', lights=KEY, name="f.xml"))
-    bump = frame(doc(tmp_path, '<object3D id="o" primitive="plane" width="160" height="90" material="a"/>',
+    bump = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="160" height="90" material="a"/>',
                      materials='<material id="a" baseColor="#808080FF" normalMap="n.png" normalScale="1"/>', lights=KEY,
                      name="b.xml"))
     assert np.abs(bump - flat)[..., :3].max() > 0.02
     disp = np.full((8, 8, 3), 255, np.uint8)
     Image.fromarray(disp).save(tmp_path / "d.png")
-    up = frame(doc(tmp_path, '<camera id="c" z="400"/><object3D id="o" primitive="plane" width="60" height="60" material="a" segments="4"/>',
+    up = frame(doc(tmp_path, '<camera x="80" y="45" id="c" z="-400"/><object3D x="80" y="45" id="o" primitive="plane" width="60" height="60" material="a" segments="4"/>',
                    materials='<material id="a" baseColor="#FFFFFFFF" unlit="true" displacementMap="d.png" displacementScale="100"/>',
                    name="dp.xml"))
-    base = frame(doc(tmp_path, '<camera id="c" z="400"/><object3D id="o" primitive="plane" width="60" height="60" material="a" segments="4"/>',
+    base = frame(doc(tmp_path, '<camera x="80" y="45" id="c" z="-400"/><object3D x="80" y="45" id="o" primitive="plane" width="60" height="60" material="a" segments="4"/>',
                      materials='<material id="a" baseColor="#FFFFFFFF" unlit="true"/>', name="dp0.xml"))
     assert up[..., 3].sum() > base[..., 3].sum() * 1.3             # displaced toward the camera -> larger
 
 
 # ---------------------------------------------------------------- lights and shadows
-FLOOR = ('<camera id="c" x="0" y="300" z="500" target="t"/><object3D id="t" primitive="sphere" radius="1" visible="false"/>'
-         '<object3D id="floor" primitive="plane" width="1200" height="1200" rotationX="-90" material="w" castShadow="false"/>'
-         '<object3D id="blk" primitive="box" width="80" height="80" depth="80" y="120" material="w" {cs}/>')
+FLOOR = ('<camera id="c" x="100" y="-240" z="-500" target="t"/><object3D x="100" y="60" id="t" primitive="sphere" radius="1" visible="false"/>'
+         '<object3D x="100" y="60" id="floor" primitive="plane" width="1200" height="1200" rotationX="-90" material="w" castShadow="false"/>'
+         '<object3D x="100" id="blk" primitive="box" width="80" height="80" depth="80" y="-60" material="w" {cs}/>')
 WHITE = '<material id="w" baseColor="#C0C0C0FF" roughness="0.9"/>'
 
 
@@ -385,11 +386,11 @@ def _floor(tmp_path, light: str, name: str, cs: str = "") -> np.ndarray:
 
 @pytest.mark.parametrize("light", [
     '<light id="l" type="directional" pitch="-90" intensity="3" castShadow="true" shadowMapSize="512"/>',
-    '<light id="l" type="spot" y="600" pitch="-90" spotAngle="90" intensity="400" castShadow="true" shadowMapSize="512"/>',
-    '<light id="l" type="point" y="600" intensity="400" castShadow="true" shadowMapSize="256"/>',
-    '<light id="l" type="rect-area" y="600" pitch="-90" width="100" height="100" intensity="400" castShadow="true" shadowMapSize="256"/>',
-    '<light id="l" type="disk-area" y="600" pitch="-90" radius="50" intensity="400" castShadow="true" shadowMapSize="256"/>',
-    '<light id="l" type="sphere-area" y="600" radius="40" intensity="400" castShadow="true" shadowMapSize="256"/>',
+    '<light x="100" id="l" type="spot" y="-540" pitch="-90" spotAngle="90" intensity="400" castShadow="true" shadowMapSize="512"/>',
+    '<light x="100" id="l" type="point" y="-540" intensity="400" castShadow="true" shadowMapSize="256"/>',
+    '<light x="100" id="l" type="rect-area" y="-540" pitch="-90" width="100" height="100" intensity="400" castShadow="true" shadowMapSize="256"/>',
+    '<light x="100" id="l" type="disk-area" y="-540" pitch="-90" radius="50" intensity="400" castShadow="true" shadowMapSize="256"/>',
+    '<light x="100" id="l" type="sphere-area" y="-540" radius="40" intensity="400" castShadow="true" shadowMapSize="256"/>',
 ])
 def test_shadows_present_for_every_light_type(tmp_path, light):
     lit = _floor(tmp_path, light, "a.xml", 'castShadow="false"')
@@ -400,7 +401,7 @@ def test_shadows_present_for_every_light_type(tmp_path, light):
 
 
 def test_soft_shadow_penumbra_is_wider(tmp_path):
-    L = '<light id="l" type="spot" y="600" pitch="-90" spotAngle="90" intensity="400" castShadow="true" shadowMapSize="1024" shadowSoftness="{s}"/>'
+    L = '<light x="100" id="l" type="spot" y="-540" pitch="-90" spotAngle="90" intensity="400" castShadow="true" shadowMapSize="1024" shadowSoftness="{s}"/>'
     ref = _floor(tmp_path, L.format(s=0), "r.xml", 'castShadow="false"')[..., :3].sum(-1)
     m = ref > 0.05
     def partial(name, soft):
@@ -424,23 +425,23 @@ def test_receive_shadow_false_and_light_flags(tmp_path):
 def test_point_falloff_range_and_spot_cone(tmp_path):
     def floor_with(light, name):
         return _floor(tmp_path, light, name, 'castShadow="false"')[..., :3].sum(-1)
-    near = floor_with('<light id="l" type="point" y="300" intensity="100"/>', "a.xml")
-    far = floor_with('<light id="l" type="point" y="600" intensity="100"/>', "b.xml")
+    near = floor_with('<light x="100" id="l" type="point" y="-240" intensity="100"/>', "a.xml")
+    far = floor_with('<light x="100" id="l" type="point" y="-540" intensity="100"/>', "b.xml")
     assert near.sum() / far.sum() == pytest.approx(2.7, rel=0.35)      # ~inverse square on the lit floor
-    lin = floor_with('<light id="l" type="point" y="600" intensity="100" falloff="1"/>', "c.xml")
+    lin = floor_with('<light x="100" id="l" type="point" y="-540" intensity="100" falloff="1"/>', "c.xml")
     assert lin.sum() > far.sum() * 3
-    ranged = floor_with('<light id="l" type="point" y="600" intensity="100" range="650"/>', "d.xml")
+    ranged = floor_with('<light x="100" id="l" type="point" y="-540" intensity="100" range="650"/>', "d.xml")
     assert ranged.sum() < far.sum() * 0.8
-    narrow = floor_with('<light id="l" type="spot" y="600" pitch="-90" spotAngle="20" intensity="400"/>', "e.xml")
-    wide = floor_with('<light id="l" type="spot" y="600" pitch="-90" spotAngle="80" innerConeAngle="60" intensity="400"/>', "f.xml")
+    narrow = floor_with('<light x="100" id="l" type="spot" y="-540" pitch="-90" spotAngle="20" intensity="400"/>', "e.xml")
+    wide = floor_with('<light x="100" id="l" type="spot" y="-540" pitch="-90" spotAngle="80" innerConeAngle="60" intensity="400"/>', "f.xml")
     assert (narrow > 0.02).sum() < (wide > 0.02).sum() * 0.5
 
 
 def test_ies_profile_shapes_the_light(tmp_path):
     ies = os.path.join(MEDIA, "sample.ies")
-    plain = _floor(tmp_path, '<light id="l" type="point" y="500" pitch="-90" intensity="200"/>', "a.xml",
+    plain = _floor(tmp_path, '<light x="100" id="l" type="point" y="-440" pitch="-90" intensity="200"/>', "a.xml",
                    'castShadow="false"')
-    shaped = _floor(tmp_path, f'<light id="l" type="point" y="500" pitch="-90" intensity="200" ies="{ies}"/>', "b.xml",
+    shaped = _floor(tmp_path, f'<light x="100" id="l" type="point" y="-440" pitch="-90" intensity="200" ies="{ies}"/>', "b.xml",
                     'castShadow="false"')
     ratio = shaped[..., :3].sum(-1) / np.maximum(plain[..., :3].sum(-1), 1e-6)
     m = plain[..., :3].sum(-1) > 0.01
@@ -473,7 +474,7 @@ def test_dome_image_based_lighting_and_background(tmp_path):
     chrome = _sphere_scene(tmp_path, 'baseColor="#FFFFFFFF" metallic="1" roughness="0.05"', "b.xml",
                            f'<light id="d" type="dome" environment="{env}"/>')
     assert chrome[..., :3].max() > 5                                    # the sun is reflected
-    r = doc(tmp_path, '<camera id="c" z="500"/>', lights=f'<light id="d" type="dome" environment="{env}" environmentVisible="true"/>',
+    r = doc(tmp_path, '<camera x="80" y="45" id="c" z="-500"/>', lights=f'<light id="d" type="dome" environment="{env}" environmentVisible="true"/>',
             name="bg.xml")
     bg = frame(r)
     assert bg[..., 3].min() == pytest.approx(1.0) and bg[0, 80, 2] > bg[-1, 80, 2]   # sky gradient behind everything
@@ -490,14 +491,14 @@ def test_ambient_light(tmp_path):
 
 
 def test_default_rig_without_lights(tmp_path):
-    px = frame(doc(tmp_path, '<object3D id="o" primitive="sphere" radius="30"/>'))
+    px = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="30"/>'))
     assert px[..., :3].max() > 0.3
 
 
 # ---------------------------------------------------------------- camera effects on 3D
 def test_depth_of_field_from_depth_buffer(tmp_path):
-    body = ('<camera id="c" z="500" fov="40" depthOfField="true" fStop="0.7" focusDistance="{f}" apertureBlades="{b}"/>'
-            '<object3D id="o" primitive="box" width="40" height="40" depth="4" z="-300" material="u"/>')
+    body = ('<camera x="80" y="45" id="c" z="-500" fov="40" depthOfField="true" fStop="0.7" focusDistance="{f}" apertureBlades="{b}"/>'
+            '<object3D x="80" y="45" id="o" primitive="box" width="40" height="40" depth="4" z="300" material="u"/>')
     mats = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
     sharp = frame(doc(tmp_path, body.format(f=800, b=0), materials=mats, name="a.xml"))[..., 3]
     soft = frame(doc(tmp_path, body.format(f=200, b=0), materials=mats, name="b.xml"))[..., 3]
@@ -508,14 +509,14 @@ def test_depth_of_field_from_depth_buffer(tmp_path):
 
 
 def test_camera_exposure_scales_3d(tmp_path):
-    body = '<camera id="c" z="600" exposure="{e}"/><object3D id="o" primitive="sphere" radius="30"/>'
+    body = '<camera x="80" y="45" id="c" z="-600" exposure="{e}"/><object3D x="80" y="45" id="o" primitive="sphere" radius="30"/>'
     a = frame(doc(tmp_path, body.format(e=0), name="a.xml"))
     b = frame(doc(tmp_path, body.format(e=2), name="b.xml"))
     assert b[..., :3].sum() == pytest.approx(4 * a[..., :3].sum(), rel=1e-3)
 
 
 def test_antialias3d_supersamples_edges(tmp_path):
-    body = '<object3D id="o" primitive="box" width="80" height="50" rotation="17" material="u"/>'
+    body = '<object3D x="80" y="45" id="o" primitive="box" width="80" height="50" rotation="17" material="u"/>'
     mats = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
     a1 = frame(doc(tmp_path, body, materials=mats, name="a.xml"))[..., 3]
     a3 = frame(doc(tmp_path, body, materials=mats, project='antialias3d="3"', name="b.xml"))[..., 3]
@@ -524,7 +525,7 @@ def test_antialias3d_supersamples_edges(tmp_path):
 
 
 def test_linear_light_false_encodes_srgb(tmp_path):
-    body = '<object3D id="o" primitive="plane" width="160" height="90" material="u"/>'
+    body = '<object3D x="80" y="45" id="o" primitive="plane" width="160" height="90" material="u"/>'
     mats = '<material id="u" baseColor="#808080FF" unlit="true"/>'
     img = doc(tmp_path, body, materials=mats, project='linearLight="false"').frame_rgb(0.0)
     assert img[45, 80, 0] == pytest.approx(128, abs=1)
@@ -533,21 +534,21 @@ def test_linear_light_false_encodes_srgb(tmp_path):
 # ---------------------------------------------------------------- instancing, meshes
 def test_instances_grid_and_index_expressions(tmp_path):
     mats = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
-    grid = frame(doc(tmp_path, '<object3D id="o" primitive="sphere" radius="8" instances="4" material="u"/>', materials=mats))
+    grid = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="8" instances="4" material="u"/>', materials=mats))
     from scenerender.raster import Buf  # noqa: F401
     lab = grid[..., 3] > 0.5
     cols = np.nonzero(lab.any(0))[0]
     rows = np.nonzero(lab.any(1))[0]
     assert (np.diff(cols) > 1).sum() == 1 and (np.diff(rows) > 1).sum() == 1      # 2 x 2 grid
-    row = frame(doc(tmp_path, '<object3D id="o" primitive="sphere" radius="6" instances="3" material="u">'
-                              '<expression property="x">index * 40 - 40</expression></object3D>', materials=mats, name="e.xml"))
+    row = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="6" instances="3" material="u">'
+                              '<expression property="x">index * 40 + 40</expression></object3D>', materials=mats, name="e.xml"))
     xs = np.nonzero((row[..., 3] > 0.5).any(0))[0]
     assert (np.diff(xs) > 1).sum() == 2                                             # three separate copies
 
 
 def test_obj_mesh_and_mesh_layer_thumbnail(tmp_path):
     obj = os.path.join(MEDIA, "cube.obj")
-    r = doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="cube" scaleX="30" scaleY="30" scaleZ="30" rotationY="30" rotationX="20"/>'
+    r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="mesh" mesh="cube" scaleX="0.3" scaleY="0.3" scaleZ="0.3" rotationY="-30" rotationX="20"/>'
                       '<layer id="l" asset="cube" x="0" y="0" boxWidth="40" boxHeight="40" fit="contain"/>',
             assets=f'<mesh id="cube" src="{obj}" format="obj"/>')
     px = frame(r)
@@ -591,7 +592,7 @@ def _gltf_moving_box(path, morph=False):
 def test_gltf_clip_playback_speed_offset_and_loop(tmp_path):
     glb = tmp_path / "box.glb"
     _gltf_moving_box(glb)
-    body = ('<camera id="c" z="1000" fov="60"/><object3D id="o" primitive="mesh" mesh="m" scaleX="5" scaleY="5" scaleZ="5" '
+    body = ('<camera x="80" y="45" id="c" z="-1000" fov="60"/><object3D x="80" y="45" id="o" primitive="mesh" mesh="m" scaleX="0.05" scaleY="0.05" scaleZ="0.05" '
             'material="u" animationClip="move" animationSpeed="{s}" animationOffset="{o}"/>')
     mats = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
     f = 80 / math.tan(math.radians(30))
@@ -608,7 +609,7 @@ def test_gltf_clip_playback_speed_offset_and_loop(tmp_path):
 def test_gltf_morph_weights_override(tmp_path):
     glb = tmp_path / "m.glb"
     _gltf_moving_box(glb, morph=True)
-    body = ('<object3D id="o" primitive="mesh" mesh="m" scaleX="10" scaleY="10" scaleZ="10" material="u" {w}/>')
+    body = ('<object3D x="80" y="45" id="o" primitive="mesh" mesh="m" scaleX="0.1" scaleY="0.1" scaleZ="0.1" material="u" {w}/>')
     mats = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
     asset = f'<mesh id="m" src="{glb}" format="glb"/>'
     a = frame(doc(tmp_path, body.format(w=""), materials=mats, assets=asset, name="a.xml"))[..., 3]
@@ -620,7 +621,7 @@ def test_gltf_morph_weights_override(tmp_path):
 
 def test_splat_mesh_renders(tmp_path):
     sp = os.path.join(MEDIA, "two.splat")
-    r = doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="s" scaleX="40" scaleY="40" scaleZ="40"/>',
+    r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="mesh" mesh="s" scaleX="0.4" scaleY="0.4" scaleZ="0.4"/>',
             assets=f'<mesh id="s" src="{sp}" format="splat"/>')
     assert frame(r)[..., 3].sum() > 1
 
@@ -628,9 +629,9 @@ def test_splat_mesh_renders(tmp_path):
 def test_camera_layer_draws_visible_environment_as_backdrop(tmp_path):
     env = os.path.join(MEDIA, "env_sky.npy")
     body = ('<shape id="half" shape="rect" width="80" height="90" fill="#FF0000FF"/>'
-            '<camera id="c" z="300"/>'
+            '<camera x="80" y="45" id="c" z="-300"/>'
             '<shape id="over" shape="rect" x="0" y="0" width="20" height="20" fill="#00FF00FF"/>'
-            '<object3D id="o" primitive="sphere" radius="30" x="60"/>')
+            '<object3D y="45" id="o" primitive="sphere" radius="30" x="140"/>')
     r = doc(tmp_path, body, lights=f'<light id="d" type="dome" environment="{env}" environmentVisible="true"/>')
     px = frame(r)
     assert px[50, 40, 0] > 0.9 and px[50, 40, 1] < 0.05   # 2D content stays in front of the environment
@@ -641,14 +642,14 @@ def test_camera_layer_draws_visible_environment_as_backdrop(tmp_path):
 
 def test_materialx_constants_and_baked_procedural_graph(tmp_path):
     const = os.path.join(MEDIA, "constant.mtlx")
-    r = doc(tmp_path, '<object3D id="o" primitive="plane" width="160" height="90" material="m"/>',
+    r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="160" height="90" material="m"/>',
             materials=f'<material id="m" materialX="{const}" unlit="true"/>')
     c = frame(r)[45, 80, :3]
     assert c[1] > 0.7 and c[0] < 0.15
     if not os.environ.get("DISPLAY"):
         pytest.skip("the MaterialX TextureBaker needs a GLX display")
     chk = os.path.join(MEDIA, "checker.mtlx")
-    r = doc(tmp_path, '<object3D id="o" primitive="plane" width="160" height="90" material="m"/>',
+    r = doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="plane" width="160" height="90" material="m"/>',
             materials=f'<material id="m" materialX="{chk}" unlit="true"/>', name="b.xml")
     px = frame(r)
     red = (px[..., 0] > 0.5) & (px[..., 2] < 0.2)

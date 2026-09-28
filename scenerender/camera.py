@@ -1,22 +1,31 @@
 """Cameras, 3D transforms and the 2.5D projection of threeD="true" nodes (hook `camera`).
 
-World conventions (pinned; the schema leaves them open):
-  * World space: document pixels, origin at the frame centre, +X right, +Y up, +Z toward the
-    viewer. A 2D node's frame point (xd, yd) at zDepth d sits at (xd - W/2, H/2 - yd, -d), so a
-    positive zDepth pushes the node away from the viewer. Physical quantities that the schema gives
-    in metres (camera DoF, light falloff, shadow softness, material thickness/attenuation,
-    interpupillary distance) use UNITS_PER_METRE = 100 scene units per metre.
-  * 2.5D planes: rotationY > 0 turns the node's right edge away from the viewer; rotationX > 0 tilts
-    its top edge away. Both pivot on the node's anchor point, applied after its 2D transform (X then
+World conventions (normative: scene-render 1.1 CONVENTIONS.md section 2):
+  * Scene space (what the XML says): the composition's pixel space extended into depth, origin at
+    the frame's top-left corner on z = 0, +x right, +y down, +z away from the viewer; one unit is one
+    pixel. Physical quantities that the schema gives in metres (camera DoF, light falloff, shadow
+    softness, material thickness/attenuation, interpupillary distance) use UNITS_PER_METRE = 100
+    scene units per metre.
+  * Engine space (internal; every world matrix, Camera and light in this package): origin at the
+    frame centre, +X right, +Y up, +Z toward the viewer (GL). The XML is converted once, at this
+    boundary: engine = A . scene with A = T(-W/2, H/2, 0) . E, E = diag(1, -1, -1), so a scene point
+    (x, y, z) is (x - W/2, H/2 - y, -z) and an element's engine matrix is A . M_scene . E. A 2D
+    node's frame point (xd, yd) at zDepth d is the scene point (xd, yd, d).
+  * 2.5D planes (open question in CONVENTIONS section 3, kept as before): rotationY > 0 turns the
+    node's right edge away from the viewer; rotationX > 0 tilts its top edge away. Both pivot on the
+    node's anchor point (% anchors refer to the parent box), applied after its 2D transform (X then
     Y). The camera hook returns the exact 3x3 homography of that plane (local px -> frame px), so the
     compositor's projective path draws true perspective; it returns None when the whole plane is
     behind the camera (pixels behind the eye are dropped by the warp when it straddles it).
-  * object3D / light / camera transforms: world = T(x, y, z) . Ry(rotationY) . Rx(rotationX) .
-    Rz(-rotation) . S(scaleX, scaleY, scaleZ) for object3D (right-handed rotations about the world
-    axes, so a plane with rotationX = -90 faces +Y; `rotation` > 0 is clockwise on screen like 2D).
-    Cameras and lights look down their local -Z: T . Ry(-yaw) . Rx(pitch) . Rz(roll) (yaw > 0 turns
-    right, pitch > 0 looks up, roll > 0 turns the picture clockwise); a camera `target` replaces
-    yaw/pitch with a look-at (world up +Y), roll still applies.
+  * object3D: scene M = T(x, y, z) . Rz(rotation) . Ry(rotationY) . Rx(rotationX) . S(scaleX, scaleY,
+    scaleZ) (right-handed rotations in scene space: +rotation is clockwise on screen like 2D; a plane
+    faces the camera, normal -z). In engine space: T(E t [+ (-W/2, H/2, 0) at the root]) .
+    Rz(-rotation) . Ry(-rotationY) . Rx(rotationX) . S. Cameras and lights: x/y/z are absolute scene
+    positions; at yaw = pitch = roll = 0 they look along scene +z with +y down in the image; scene
+    R = Ry(yaw) . Rx(pitch) . Rz(roll) (+yaw looks right, +pitch looks up, +roll turns the camera
+    clockwise so the picture content turns counter-clockwise); engine: local -Z forward, +Y up,
+    Ry(-yaw) . Rx(pitch) . Rz(-roll). A camera `target` replaces yaw/pitch with a look-at (up
+    hint: scene -y = engine +Y), roll still applies.
   * @parent on a 3D element composes the target's world matrix (object3D / camera / light: its full
     3D matrix; a 2D node: its frame position at its zDepth, its rotation as a roll about Z and its
     mean 2D scale). XML ancestors only gate time, visibility and opacity of 3D elements.
@@ -24,14 +33,13 @@ World conventions (pinned; the schema leaves them open):
     decomposition + quaternion slerp): parent (as @parent, space=local ignores the target's own
     parents), look-at (object3D: +Z axis toward the target; camera/light: -Z; offsetRotation adds
     roll), copy-position / copy-rotation / copy-scale / copy-transform (space=world: the target's
-    world component, local: its own attributes; offsetX/offsetY add world units), distance (clamp
+    world component, local: its own attributes; offsetX/offsetY add scene units, +y down), distance (clamp
     to [minDistance, maxDistance] from the target), follow-path (@path in document-frame pixels on
     the z = 0 plane at @progress; autoOrient rolls +X along the tangent). ik and track are
     delegated to scenerender.constraints on the node's projected 2D position (see note).
-  * Lens: fov is horizontal (deg). focalLength with the sensor (sensorWidth x sensorHeight, mm)
-    overrides it using Maya's "fill" film fit: the sensor width maps to the frame width when the
-    frame is at least as wide as the sensor aspect, otherwise the sensor height maps to the frame
-    height. orthographic uses orthoHeight world units across the frame height (default: frame
+  * Lens: fov is horizontal (deg). focalLength overrides it with the horizontal fov
+    2 atan(sensorWidth / (2 focalLength)) (sensorWidth default 36 mm; no film-fit switching to the
+    sensor height). orthographic uses orthoHeight world units across the frame height (default: frame
     height, 1:1). near/far clip the 3D renderer; exposure (EV) scales rendered 3D radiance by
     2**exposure. lensDistortion is Brown-Conrady radial k1 on radius normalised by the half
     diagonal (x_d = x_u (1 + k1 r_u^2); k1 < 0 barrel, > 0 pincushion), applied to object3D renders
@@ -39,11 +47,12 @@ World conventions (pinned; the schema leaves them open):
   * Depth of field: thin lens; circle of confusion diameter on the sensor
     c = f^2 / N * |d - s| / (d (s - f)) (f focal length, N = fStop, s = focus distance
     (focusDistance, or the distance along the view axis to focusTarget), all in mm with
-    UNITS_PER_METRE), converted to pixels through the fitted sensor size. object3D renders use a
+    UNITS_PER_METRE), converted to pixels through the sensor width. object3D renders use a
     per-pixel CoC from the depth buffer; threeD planes a per-pixel CoC from the plane depth. The
     bokeh is a disc (apertureBlades < 3) or a regular polygon with apertureBlades sides.
-  * No active camera: a default perspective camera (50 mm on a 36 mm sensor) at (0, 0, f) looking
-    down -Z, where f is the focal length in pixels, so zDepth = 0 without rotation renders unchanged.
+  * No active camera: the implicit camera at scene (W/2, H/2, -(W/2)/tan 30 deg) = engine (0, 0, f)
+    with a horizontal fov of 60 deg looking along scene +z, so the plane z = 0 (zDepth = 0 without
+    rotation) maps onto the frame pixel for pixel.
   * Active camera at t: the last camera with active="true" whose [start, end) (and its ancestors'
     windows) contains t. project/@mode="viewport" films through scene360/@viewportCamera instead.
   * shake: seeded fractal value noise (octaves, frequency Hz) in [start, end); amplitude = world
@@ -223,8 +232,10 @@ def rz(deg: float) -> np.ndarray:
 
 
 def ypr(yaw: float, pitch: float, roll: float) -> np.ndarray:
-    """World-from-local rotation of a camera/light (local -Z forward)."""
-    return ry(-yaw) @ rx(pitch) @ rz(roll)
+    """Engine world-from-local rotation of a camera/light (local -Z forward, +Y up). Scene space has
+    R = Ry(yaw) . Rx(pitch) . Rz(roll) (+yaw looks right, +pitch looks up, +roll turns the camera
+    clockwise); conjugated by E = diag(1, -1, -1) that is Ry(-yaw) . Rx(pitch) . Rz(-roll)."""
+    return ry(-yaw) @ rx(pitch) @ rz(-roll)
 
 
 def look_rotation(fwd: np.ndarray, up_hint=np.array([0.0, 1.0, 0.0]), axis: str = "-z") -> np.ndarray:
@@ -362,11 +373,28 @@ def node_clock(rc, el, t: float, base: Ctx | None = None) -> Ctx | None:
     return rc.enter_node(el, ctx) if ln(el) != "light" else ctx
 
 
-def _local3d(rc, el, ctx: Ctx) -> np.ndarray:
+def _has_parent3d(rc, el, ctx: Ctx) -> bool:
+    pid = rc.ev.str(el, "parent", ctx)
+    par = rc.doc.ids.get(pid) if pid else None
+    return par is not None and par is not el
+
+
+def _local3d(rc, el, ctx: Ctx, rooted: bool | None = None) -> np.ndarray:
+    """Engine-space local matrix of an object3D / camera / light. The document gives x/y/z in scene
+    space (origin frame top-left on z = 0, +y down, +z away); the engine frame is A = T(-W/2, H/2, 0) . E
+    with E = diag(1, -1, -1), so an element's engine matrix is A . M_doc . E: its translation is
+    E . (x, y, z) (plus (-W/2, H/2, 0) when it has no resolvable @parent, whose own engine frame
+    already carries that offset) and every rotation is conjugated by E (Rz and Ry change sign)."""
     ev = rc.ev
-    t = np.array([ev.num(el, "x", ctx, 0.0), ev.num(el, "y", ctx, 0.0), ev.num(el, "z", ctx, 0.0)])
+    t = np.array([ev.num(el, "x", ctx, 0.0), -ev.num(el, "y", ctx, 0.0), -ev.num(el, "z", ctx, 0.0)])
+    if rooted is None:
+        rooted = not _has_parent3d(rc, el, ctx)
+    if rooted:
+        W, H = frame_size(rc)
+        t = t + np.array([-W / 2, H / 2, 0.0])
     if ln(el) == "object3D":
-        R = ry(ev.num(el, "rotationY", ctx, 0.0)) @ rx(ev.num(el, "rotationX", ctx, 0.0)) @ rz(-ev.num(el, "rotation", ctx, 0.0))
+        # scene space: Rz(rotation) . Ry(rotationY) . Rx(rotationX); E . R . E in engine space
+        R = rz(-ev.num(el, "rotation", ctx, 0.0)) @ ry(-ev.num(el, "rotationY", ctx, 0.0)) @ rx(ev.num(el, "rotationX", ctx, 0.0))
         s = [ev.num(el, "scaleX", ctx, 1.0), ev.num(el, "scaleY", ctx, 1.0), ev.num(el, "scaleZ", ctx, 1.0)]
         return trs(t, R, s)
     return trs(t, ypr(ev.num(el, "yaw", ctx, 0.0), ev.num(el, "pitch", ctx, 0.0), ev.num(el, "roll", ctx, 0.0)), [1, 1, 1])
@@ -389,7 +417,7 @@ def world3d(rc, el, ctx: Ctx, local_only: bool = False, _depth: int = 0) -> np.n
             tp = element_world_pos(rc, tgt, ctx.comp_t)
             if tp is not None and np.linalg.norm(tp - M[:3, 3]) > 1e-9:
                 roll = rc.ev.num(el, "roll", ctx, 0.0)
-                M[:3, :3] = look_rotation(tp - M[:3, 3]) @ rz(roll)
+                M[:3, :3] = look_rotation(tp - M[:3, 3]) @ rz(-roll)
     pid = rc.ev.str(el, "parent", ctx)
     if pid and not local_only and _depth < 32:
         par = rc.doc.ids.get(pid)
@@ -438,7 +466,7 @@ def apply_constraint3d(rc, c, el, M: np.ndarray, ctx: Ctx, depth: int = 0) -> np
     if tgt is not None and tgt is not el and depth < 32:
         tc = (node_clock(rc, tgt, ctx.comp_t) if is3d_tag(tgt) else ctx) or ctx
         T = world3d(rc, tgt, tc, local_only=local, _depth=depth + 1) if is3d_tag(tgt) else _frame_of_2d(rc, tgt, tc)
-    off = np.array([ev.num(c, "offsetX", ctx, 0.0), ev.num(c, "offsetY", ctx, 0.0), 0.0])
+    off = np.array([ev.num(c, "offsetX", ctx, 0.0), -ev.num(c, "offsetY", ctx, 0.0), 0.0])   # scene +y is down
     orot = ev.num(c, "offsetRotation", ctx, 0.0)
     t, R, s = decompose(M)
     out = None
@@ -513,7 +541,8 @@ def _constraint_via_2d(rc, c, el, M: np.ndarray, ctx: Ctx) -> np.ndarray | None:
 
 
 def default_fpx(W: float) -> float:
-    return (W / 2) / (36.0 / (2 * 50.0))
+    """Focal length (px) of the implicit camera: horizontal fov 60 deg."""
+    return (W / 2) / math.tan(math.radians(30.0))
 
 
 def _window_ok(rc, el, t: float) -> bool:
@@ -578,7 +607,7 @@ def build_camera(rc, el, t: float, W: float | None = None, H: float | None = Non
     if el is None:
         f = default_fpx(W)
         return Camera(np.array([0.0, 0.0, f]), np.array([1.0, 0, 0]), np.array([0, 1.0, 0]), np.array([0, 0, -1.0]),
-                      f, False, 1.0, W, H, focal_mm=50.0, px_per_mm=W / 36.0, far=max(10000.0, 20 * f))
+                      f, False, 1.0, W, H, focal_mm=f * 36.0 / W, px_per_mm=W / 36.0, far=max(10000.0, 20 * f))
     ev = rc.ev
     c = node_clock(rc, el, t) or rc.node_ctx(el, _ctx(t))
     M = world3d(rc, el, c)
@@ -590,15 +619,14 @@ def build_camera(rc, el, t: float, W: float | None = None, H: float | None = Non
         right = _rot_axis(fwd, -sr, right)
         up = _rot_axis(fwd, -sr, up)
     eye = eye + right * sx + up * sy
-    sw, sh = ev.num(el, "sensorWidth", c, 36.0), ev.num(el, "sensorHeight", c, 24.0)
-    width_fit = W / H >= sw / sh
-    if ev.explicit(el, "focalLength", c):
+    sw = ev.num(el, "sensorWidth", c, 36.0)
+    if ev.explicit(el, "focalLength", c):          # horizontal fov = 2 atan(sensorWidth / (2 focalLength))
         fl = ev.num(el, "focalLength", c, 50.0)
-        fpx = fl * (W / sw if width_fit else H / sh)
+        fpx = fl * W / sw
     else:
         fov = min(179.0, max(0.1, ev.num(el, "fov", c, 60.0)))
         fpx = (W / 2) / math.tan(math.radians(fov) / 2)
-        fl = fpx * (sw / W if width_fit else sh / H)
+        fl = fpx * sw / W
     fpx *= 1 + sz
     ortho = ev.str(el, "projection", c, "perspective") == "orthographic"
     oh = ev.num(el, "orthoHeight", c, H)
@@ -610,7 +638,7 @@ def build_camera(rc, el, t: float, W: float | None = None, H: float | None = Non
     shutter = ev.num(el, "shutterAngle", c, 180.0) if ev.explicit(el, "shutterAngle", c) else None
     return Camera(eye, right, up, fwd, fpx, ortho, H / oh * (1 + sz), W, H, max(1e-4, ev.num(el, "near", c, 0.1)), el,
                   focus, ev.num(el, "fStop", c, 2.8), ev.bool(el, "depthOfField", c, False),
-                  ev.num(el, "far", c, 10000.0), fl, (W / sw if width_fit else H / sh) * (1 + sz),
+                  ev.num(el, "far", c, 10000.0), fl, W / sw * (1 + sz),
                   int(ev.num(el, "apertureBlades", c, 0)), ev.num(el, "exposure", c, 0.0),
                   ev.num(el, "lensDistortion", c, 0.0), shutter)
 
@@ -699,12 +727,29 @@ def _plane_rotation(rxd: float, ryd: float) -> np.ndarray:
     return Ry @ Rx
 
 
+def parent_box(rc, el, ctx: Ctx) -> tuple[float, float]:
+    """(w, h) of el's parent box (the base of its % lengths): the frame at the top level, else the
+    box its compositor traversal hands it."""
+    p = el.getparent()
+    if p is None or not isinstance(p.tag, str) or ln(p) in ("composition", "symbol", "scene"):
+        return frame_size(rc)
+    key = ("parent-box", el, ctx)
+    hit = rc.frame_cache.get(key)
+    if hit is None:
+        try:
+            hit = tuple(rc.node_location(el, ctx).box)
+        except Exception:  # noqa: BLE001 — unresolvable traversal: the frame
+            hit = frame_size(rc)
+        rc.frame_cache[key] = hit
+    return hit
+
+
 def _node_3d(rc, el, M_frame_doc: np.ndarray, ctx: Ctx, size) -> tuple[np.ndarray, float, np.ndarray]:
     """(R, zDepth, pivot_world) of a 2.5D node whose doc-frame matrix is M_frame_doc."""
     ev = rc.ev
-    w, h = size
-    ax = ev.length(el, "anchorX", ctx, w)
-    ay = ev.length(el, "anchorY", ctx, h)
+    bw, bh = parent_box(rc, el, ctx)                            # % anchors refer to the parent box
+    ax = ev.length(el, "anchorX", ctx, bw)
+    ay = ev.length(el, "anchorY", ctx, bh)
     zd = ev.num(el, "zDepth", ctx, 0.0)
     pv = M_frame_doc @ np.array([ax, ay, 1.0])
     pivot = frame_to_world(rc, pv[:2], zd)

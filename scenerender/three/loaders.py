@@ -6,8 +6,9 @@ Pinned decisions
   General
     * `load_model` caches by (abspath, mtime) in process; the format comes from `fmt` (mesh asset
       @format: gltf|glb|obj|usd|usdz|fbx|ply|splat, plus stl) or the file extension. Units stay the
-      file's; output is right-handed +Y up (Z-up USD stages get a synthetic root rotating -90 deg
-      about X; FBX is converted by ufbx to right-handed Y-up).
+      file's (treated as metres); output is right-handed +Y up (Z-up USD stages get a synthetic root
+      rotating -90 deg about X; FBX is converted by ufbx to right-handed Y-up). Splats keep their
+      COLMAP axes. The renderer maps both into scene space (CONVENTIONS 2.6, see model.py).
     * Colours in `MaterialSpec.params` are linear float tuples (RGBA; emissive/attenuation/sheen/
       specular colours carry alpha 1). Textures are float32 (h, w, 4) in [0, 1]; baseColorMap and
       emissiveMap are sRGB-decoded to linear, data maps (normal, metallicRoughness, occlusion) are not.

@@ -1,7 +1,7 @@
 """Procedural geometry for object3D primitives, 3D text and extruded SVG paths.
 
-All meshes are built in the object's local space (scene units = document pixels, +Y up, +Z toward
-the default viewer) with smooth normals, UVs (glTF convention: v = 0 at the top of an image) and
+All meshes are built in the object's engine-local space (camera.py: scene units = document pixels,
++Y up = scene -y, +Z toward the implicit camera = scene -z, so a plane's normal is scene -z) with smooth normals, UVs (glTF convention: v = 0 at the top of an image) and
 MikkTSpace-style per-vertex tangents. Pinned dimensions (the schema leaves them open):
 
   * sphere: radius; `segments` longitudes and segments/2 latitude bands; equirectangular UVs.

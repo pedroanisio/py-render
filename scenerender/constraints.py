@@ -91,8 +91,8 @@ def _parent_box(rc, el, ctx):
 def _anchor(rc, el, ctx) -> tuple[float, float]:
     loc = rc.node_location(el, ctx)
     nctx = loc.rc.enter_node(el, loc.ctx)
-    w, h = loc.rc.node_size(el, nctx, loc.box, loc.layout)
-    return rc.ev.length(el, "anchorX", nctx, w), rc.ev.length(el, "anchorY", nctx, h)
+    bw, bh = loc.box                                     # % anchors refer to the parent box
+    return rc.ev.length(el, "anchorX", nctx, bw), rc.ev.length(el, "anchorY", nctx, bh)
 
 
 def parent_frame(rc, el, ctx) -> np.ndarray:

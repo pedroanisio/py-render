@@ -1,9 +1,12 @@
 """In-memory 3D model: geometry primitives, node hierarchy, skins, animation clips and splats.
 
 Every loader (glTF/GLB, OBJ/PLY/STL, USD/USDZ, FBX, .splat) produces a `Model`; the renderer only
-reads `Model.pose(...)`. Units are the file's own units; the object3D node's scale maps them to
-scene units (document pixels). Coordinates are right-handed, +Y up (glTF convention); loaders of
-Z-up formats convert.
+reads `Model.pose(...)`. Units are the file's own units, read as metres; coordinates are
+right-handed, +Y up (glTF convention); loaders of Z-up formats convert. An object3D places every
+mesh format by CONVENTIONS 2.6: model point g -> scene (ppm gx, -ppm gy, -ppm gz) with
+ppm = physics/@pixelsPerMeter (default 100), i.e. engine space (+Y up) ppm . g, before its own
+transform (three/scene.build_object). Splat positions keep the file's COLMAP axes (y down, z forward),
+which already match scene space, and are only scaled by ppm.
 
 Animation (glTF semantics, used for every format):
   * A clip is a set of channels (node, path in translation|rotation|scale|weights) with keyframe

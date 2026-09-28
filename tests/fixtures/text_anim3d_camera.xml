@@ -13,7 +13,7 @@
           align="center" text="DEPTH WAVE"/>
   </assets>
   <composition>
-    <camera id="cam" x="-500" y="150" z="1500" yaw="18" pitch="-5" fov="55"/>
+    <camera id="cam" x="140" y="210" z="-1500" yaw="18" pitch="-5" fov="55"/>
     <layer id="l-var" asset="t-var" x="90" y="60">
       <textAnimator unit="character" shape="smooth" start="0" end="40" variation="wght 900">
         <animate property="offset"><key time="0" value="-40"/><key time="3" value="100"/></animate>

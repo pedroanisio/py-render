@@ -2,7 +2,7 @@
 
 Pinned rendering rules (where the schema leaves the choice open):
   * Local transform  M = T(x, y) · R(rotation) · Skew(skewX, skewY) · S(scaleX, scaleY) · T(-anchorX, -anchorY).
-    Node geometry occupies its box (0,0)-(w,h) in local space; x/y are lengths relative to the parent box.
+    Node geometry occupies its box (0,0)-(w,h) in local space; x/y and anchorX/anchorY are lengths relative to the parent box (% of the parent, never of the node).
   * Times on nodes, keys and markers are composition time; a symbol instance, and a sequence child,
     runs its subtree on its own clock. Node windows are half-open [start, end).
   * A group's children run at  t' = start + (t - start - timeOffset) · timeScale.
@@ -285,8 +285,8 @@ class RenderContext:
         if layout_pos is not None:
             x += layout_pos[0]
             y += layout_pos[1]
-        ax = ev.length(el, "anchorX", ctx, w)
-        ay = ev.length(el, "anchorY", ctx, h)
+        ax = ev.length(el, "anchorX", ctx, bw)       # % anchors refer to the parent box (CONVENTIONS 1.2)
+        ay = ev.length(el, "anchorY", ctx, bh)
         sx = ev.num(el, "scaleX", ctx, 1.0)
         sy = ev.num(el, "scaleY", ctx, 1.0)
         if layout_pos is not None and len(layout_pos) > 2 and ln(el) not in ("shape", "group", "sequence"):

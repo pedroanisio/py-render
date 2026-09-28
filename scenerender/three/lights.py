@@ -5,8 +5,10 @@ units per metre; radiance values feed a linear HDR pipeline, the colour finish h
   * Every light: radiometric colour = linear(color) x blackbody(colorTemperature) x intensity x
     2**exposure. colorTemperature tints by the Planckian-locus chromaticity (Kang et al. 2002, valid
     1667-25000 K; values outside are clamped to that range) normalised to unit luminance.
-  * Orientation: position x/y/z, forward = local -Z of Ry(-yaw) . Rx(pitch) . Rz(roll) (like cameras);
-    @parent and transformConstraint compose as for object3D.
+  * Orientation: position x/y/z in scene space (CONVENTIONS 2.7: origin frame top-left, +y down, +z
+    away); like cameras, yaw = pitch = roll = 0 points along scene +z, and in engine space (camera.py)
+    forward = local -Z of Ry(-yaw) . Rx(pitch) . Rz(-roll); @parent and transformConstraint compose
+    as for object3D. All positions/directions below are engine space.
   * ambient: constant radiance intensity from every direction (diffuse irradiance pi*L and, when
     affectsSpecular, the split-sum specular of a uniform environment). Uniform light casts no shadow.
   * directional: irradiance (lux) along forward.

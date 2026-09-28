@@ -191,9 +191,7 @@ def _repeater(rc, m, cmds, ctx):
     shp = _shape_of(m)
     ax = ay = 0.0
     if shp is not None:
-        w = ev.length(shp, "width", ctx, rc.doc.width)
-        h = ev.length(shp, "height", ctx, rc.doc.height)
-        ax, ay = ev.length(shp, "anchorX", ctx, w), ev.length(shp, "anchorY", ctx, h)
+        ax, ay = ev.length(shp, "anchorX", ctx, rc.doc.width), ev.length(shp, "anchorY", ctx, rc.doc.height)
     out = []
     for i in range(n):
         k = i + off

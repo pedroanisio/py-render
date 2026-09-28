@@ -32,7 +32,7 @@ def ctx(t=0.0):
 
 # ---------------------------------------------------------------- projection
 def test_pinhole_projection_of_known_point(tmp_path):
-    r = doc(tmp_path, '<camera id="c" z="1000" fov="60"/>')
+    r = doc(tmp_path, '<camera id="c" x="160" y="90" z="-1000" fov="60"/>')     # engine (0, 0, 1000)
     cam = C.camera_at(r.rc, 0.0)
     f = 160 / math.tan(math.radians(30))
     s, ok = cam.project(np.array([100.0, 50.0, 0.0]))
@@ -41,17 +41,19 @@ def test_pinhole_projection_of_known_point(tmp_path):
 
 
 def test_yaw_pitch_roll_orientation(tmp_path):
-    r = doc(tmp_path, '<camera id="c" yaw="90"/><camera id="d" pitch="90" start="1"/><camera id="e" roll="90" start="2"/>')
+    r = doc(tmp_path, '<camera id="c" yaw="90"/><camera id="d" pitch="90" start="1"/>'
+                      '<camera id="e" x="160" y="90" roll="90" start="2"/>')
     assert C.camera_at(r.rc, 0.5).fwd == pytest.approx([1, 0, 0], abs=1e-9)     # yaw > 0 turns right
     assert C.camera_at(r.rc, 1.5).fwd == pytest.approx([0, 1, 0], abs=1e-9)     # pitch > 0 looks up
     e = C.camera_at(r.rc, 2.5)
     s, _ = e.project(np.array([0.0, 100.0, -1000.0]))                          # a point above centre...
-    assert s[0] > 160 + 1 and abs(s[1] - 90) < 1e-6                            # ...moves right: picture turns clockwise
+    assert s[0] < 160 - 1 and abs(s[1] - 90) < 1e-6                            # ...moves left: camera turns clockwise,
+    #                                                                            the picture counter-clockwise
 
 
 def test_target_look_at_and_focus_target(tmp_path):
-    r = doc(tmp_path, '<camera id="c" x="300" y="200" z="500" target="o" focusTarget="o" depthOfField="true"/>'
-                      '<object3D id="o" primitive="sphere" x="-100" y="0" z="-200"/>')
+    r = doc(tmp_path, '<camera id="c" x="460" y="-110" z="-500" target="o" focusTarget="o" depthOfField="true"/>'
+                      '<object3D id="o" primitive="sphere" x="60" y="90" z="200"/>')      # engine (300, 200, 500), (-100, 0, -200)
     cam = C.camera_at(r.rc, 0.0)
     d = np.array([-400.0, -200.0, -700.0])
     assert cam.fwd == pytest.approx(d / np.linalg.norm(d))
@@ -60,15 +62,25 @@ def test_target_look_at_and_focus_target(tmp_path):
     assert s == pytest.approx([160, 90], abs=1e-6)
 
 
-def test_focal_length_sensor_fill_fit(tmp_path):
+def test_focal_length_is_horizontal_on_sensor_width(tmp_path):
     r = doc(tmp_path, '<camera id="c" focalLength="50" sensorWidth="36" sensorHeight="24"/>')
-    assert C.camera_at(r.rc, 0).fpx == pytest.approx(50 * 320 / 36)             # landscape: width fits
+    assert C.camera_at(r.rc, 0).fpx == pytest.approx(50 * 320 / 36)             # fov = 2 atan(sw / 2f) across W
     r2 = doc(tmp_path, '<camera id="c" focalLength="50" sensorWidth="36" sensorHeight="24"/>', w=180, h=320, name="p.xml")
-    assert C.camera_at(r2.rc, 0).fpx == pytest.approx(50 * 320 / 24)            # portrait: height fits
+    assert C.camera_at(r2.rc, 0).fpx == pytest.approx(50 * 180 / 36)            # portrait too: no film-fit switch
+    assert C.camera_at(r2.rc, 0).px_per_mm == pytest.approx(180 / 36)
+
+
+def test_implicit_camera_is_60_degrees_horizontal(tmp_path):
+    r = doc(tmp_path, '<shape id="s" shape="rect" width="1" height="1"/>')
+    cam = C.camera_at(r.rc, 0)
+    f = 160 / math.tan(math.radians(30))
+    assert cam.fpx == pytest.approx(f)
+    assert cam.eye == pytest.approx([0, 0, f])                                  # scene (W/2, H/2, -f)
+    assert cam.focal_mm == pytest.approx(f * 36 / 320)
 
 
 def test_orthographic_ortho_height(tmp_path):
-    r = doc(tmp_path, '<camera id="c" projection="orthographic" orthoHeight="360" z="500"/>')
+    r = doc(tmp_path, '<camera id="c" projection="orthographic" orthoHeight="360" x="160" y="90" z="-500"/>')
     cam = C.camera_at(r.rc, 0)
     s, _ = cam.project(np.array([90.0, 45.0, -3000.0]))
     assert s == pytest.approx([160 + 45, 90 - 22.5])
@@ -94,7 +106,7 @@ def test_camera_switching_with_windows_and_viewport_mode(tmp_path):
 
 
 def test_shake_is_seeded_and_windowed(tmp_path):
-    body = '<camera id="c" z="800"><shake amplitude="20" frequency="3" rotation="2" zoom="0.1" seed="{s}" start="1" end="3"/></camera>'
+    body = '<camera id="c" x="160" y="90" z="-800"><shake amplitude="20" frequency="3" rotation="2" zoom="0.1" seed="{s}" start="1" end="3"/></camera>'
     a, b = doc(tmp_path, body.format(s=7), name="a.xml"), doc(tmp_path, body.format(s=7), name="b.xml")
     c = doc(tmp_path, body.format(s=8), name="c2.xml")
     ea, eb, ec = (C.camera_at(x.rc, 2.2) for x in (a, b, c))
@@ -122,27 +134,27 @@ def test_coc_thin_lens():
 
 # ---------------------------------------------------------------- 3D transforms and constraints
 def test_object_transform_order_and_parent(tmp_path):
-    r = doc(tmp_path, '<object3D id="p" primitive="box" x="100" rotationY="90"/>'
+    r = doc(tmp_path, '<object3D id="p" primitive="box" x="260" y="90" rotationY="-90"/>'     # engine x = 100
                       '<object3D id="o" primitive="box" x="50" parent="p" scaleX="2"/>')
     M = C.world3d(r.rc, r.doc.ids["o"], ctx())
     assert M[:3, 3] == pytest.approx([100, 0, -50], abs=1e-9)                 # +X of p turned to -Z
     assert np.linalg.norm(M[:3, 0]) == pytest.approx(2)
     plane = doc(tmp_path, '<object3D id="f" primitive="plane" rotationX="-90"/>', name="f.xml")
     Mf = C.world3d(plane.rc, plane.doc.ids["f"], ctx())
-    assert Mf[:3, 2] == pytest.approx([0, 1, 0], abs=1e-9)                    # rotationX=-90 faces +Y
+    assert Mf[:3, 2] == pytest.approx([0, 1, 0], abs=1e-9)                    # rotationX=-90 faces up (engine +Y)
 
 
 def test_constraints_3d(tmp_path):
     r = doc(tmp_path, """
-<object3D id="t" primitive="sphere" x="300" y="100" z="-400"/>
-<object3D id="look" primitive="box"><transformConstraint type="look-at" target="t"/></object3D>
+<object3D id="t" primitive="sphere" x="460" y="-10" z="400"/>
+<object3D id="look" primitive="box" x="160" y="90"><transformConstraint type="look-at" target="t"/></object3D>
 <object3D id="copy" primitive="box" x="5"><transformConstraint type="copy-position" target="t" offsetX="10"/></object3D>
-<object3D id="half" primitive="box"><transformConstraint type="copy-position" target="t" influence="0.5"/></object3D>
-<object3D id="dist" primitive="box" x="300" y="100" z="600"><transformConstraint type="distance" target="t" maxDistance="200"/></object3D>
-<camera id="cam" z="900"><transformConstraint type="look-at" target="t"/></camera>
+<object3D id="half" primitive="box" x="160" y="90"><transformConstraint type="copy-position" target="t" influence="0.5"/></object3D>
+<object3D id="dist" primitive="box" x="460" y="-10" z="-600"><transformConstraint type="distance" target="t" maxDistance="200"/></object3D>
+<camera id="cam" x="160" y="90" z="-900"><transformConstraint type="look-at" target="t"/></camera>
 <object3D id="path" primitive="box"><transformConstraint type="follow-path" path="M0 0 L320 0" progress="0.5"/></object3D>""")
     ids = r.doc.ids
-    t = np.array([300.0, 100, -400])
+    t = np.array([300.0, 100, -400])                                            # engine space
     Ml = C.world3d(r.rc, ids["look"], ctx())
     assert Ml[:3, 2] == pytest.approx(t / np.linalg.norm(t))                  # object +Z toward the target
     assert C.world3d(r.rc, ids["copy"], ctx())[:3, 3] == pytest.approx(t + [10, 0, 0])
@@ -177,7 +189,7 @@ def _expected_corners(rc, el, M, cam, size, rxd, ryd, zd, ax, ay):
 
 
 def test_threed_homography_matches_projected_corners(tmp_path):
-    r = doc(tmp_path, '<camera id="c" x="40" y="-30" z="700" yaw="8" pitch="-5" roll="3" fov="50"/>'
+    r = doc(tmp_path, '<camera id="c" x="200" y="120" z="-700" yaw="8" pitch="-5" roll="-3" fov="50"/>'
                       '<shape id="s" shape="rect" x="60" y="40" width="120" height="70" anchorX="30" anchorY="20" '
                       'threeD="true" rotationX="25" rotationY="-40" zDepth="150" rotation="10" fill="#FFFFFFFF"/>')
     r.rc.scale = 1.0
@@ -196,7 +208,7 @@ def test_threed_homography_matches_projected_corners(tmp_path):
 
 
 def test_threed_fronto_parallel_is_affine_and_behind_is_culled(tmp_path):
-    r = doc(tmp_path, '<camera id="c" z="1000" fov="60"/>'
+    r = doc(tmp_path, '<camera id="c" x="160" y="90" z="-1000" fov="60"/>'
                       '<shape id="s" shape="rect" width="50" height="50" threeD="true" zDepth="1000"/>'
                       '<shape id="b" shape="rect" width="50" height="50" threeD="true" zDepth="-2000"/>')
     s, b = r.doc.ids["s"], r.doc.ids["b"]
@@ -206,7 +218,7 @@ def test_threed_fronto_parallel_is_affine_and_behind_is_culled(tmp_path):
 
 
 def test_collapse_composes_group_3d_transform(tmp_path):
-    r = doc(tmp_path, '<camera id="c" z="900"/>'
+    r = doc(tmp_path, '<camera id="c" x="160" y="90" z="-900"/>'
                       '<group id="g" x="100" y="50" width="100" height="80" threeD="true" rotationY="30" zDepth="100" collapse="true">'
                       '<shape id="k" shape="rect" width="40" height="40" threeD="true" zDepth="20" fill="#FFFFFFFF"/></group>')
     rc = r.rc
@@ -237,7 +249,7 @@ def test_depth_sort_hook_orders_farthest_first(tmp_path):
                       '<shape id="a" shape="rect" width="10" height="10" threeD="true" zDepth="-100"/>'
                       '<shape id="flat" shape="rect" width="10" height="10"/>'
                       '<shape id="b" shape="rect" width="10" height="10" threeD="true" zDepth="300"/>'
-                      '<object3D id="o" primitive="sphere" z="-600"/></group>')
+                      '<object3D id="o" primitive="sphere" x="160" y="90" z="600"/></group>')
     g = r.doc.ids["g"]
     order = r.rc.child_order(g)
     slots = [i for i, e in enumerate(order) if e.get("id") != "flat"]
@@ -259,7 +271,7 @@ def test_lens_distortion_barrel_pulls_points_inward(tmp_path):
 
 
 def test_threed_depth_of_field_blurs_out_of_focus_plane(tmp_path):
-    body = ('<camera id="c" z="600" fov="40" depthOfField="true" fStop="0.8" focusDistance="{f}"/>'
+    body = ('<camera id="c" x="160" y="90" z="-600" fov="40" depthOfField="true" fStop="0.8" focusDistance="{f}"/>'
             '<shape id="s" shape="rect" x="140" y="70" width="40" height="40" threeD="true" zDepth="-300" fill="#FFFFFFFF"/>')
     sharp = doc(tmp_path, body.format(f=300), name="a.xml").frame_rgb(0.0)[..., 0].astype(float)
     soft = doc(tmp_path, body.format(f=3000), name="b.xml").frame_rgb(0.0)[..., 0].astype(float)
