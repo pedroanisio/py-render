@@ -45,7 +45,9 @@ def blend_func(*names: str):
 
 def _unpremul(px: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     a = px[..., 3:4]
-    return np.where(a > _EPS, px[..., :3] / np.maximum(a, _EPS), 0.0).astype(np.float32), a
+    rgb = np.zeros(px.shape[:-1] + (3,), np.float32)
+    np.divide(px[..., :3], a, out=rgb, where=a > _EPS, casting="same_kind")
+    return rgb, a
 
 
 def _separable(fn: BlendFunc):
@@ -334,9 +336,13 @@ def composite(dst: Buf, src: Buf, mode: str = "normal", opacity: float = 1.0, gr
         s = s * opacity
     d = dst.px[r[1] - dst.y0:r[3] - dst.y0, r[0] - dst.x0:r[2] - dst.x0]
     if op is _normal and not np.may_share_memory(d, s):
-        # In-place source-over: the same arithmetic as _normal without full-tile temporaries.
-        d *= 1 - s[..., 3:4]
-        d += s
+        # In-place source-over: the same arithmetic as _normal without full-tile temporaries;
+        # a fully opaque source simply replaces a finite backdrop.
+        if (s[..., 3] == 1).all() and np.isfinite(d).all():
+            d[:] = s
+        else:
+            d *= 1 - s[..., 3:4]
+            d += s
     elif getattr(op, "with_origin", False):
         d[:] = op(d, s, origin=(r[0], r[1]))
     else:

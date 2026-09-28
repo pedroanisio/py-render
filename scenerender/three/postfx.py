@@ -38,10 +38,27 @@ def aperture_kernel(r: float, blades: int, rotation: float = 0.0) -> np.ndarray:
     return k / s
 
 
+def _fast_len(n: int) -> int:
+    """Smallest 2-3-5-smooth length >= n (FFTs of such lengths are several times faster)."""
+    best = 1 << max(0, (n - 1).bit_length())
+    p5 = 1
+    while p5 < best:
+        p35 = p5
+        while p35 < best:
+            m = p35
+            while m < n:
+                m *= 2
+            best = min(best, m)
+            p35 *= 3
+        p5 *= 5
+    return best
+
+
 def _fft_conv(img: np.ndarray, k: np.ndarray) -> np.ndarray:
     h, w = img.shape[:2]
     kh, kw = k.shape
-    H, W = h + kh, w + kw
+    # Any padding of at least h + kh gives the same linear convolution; pick fast FFT sizes.
+    H, W = _fast_len(h + kh), _fast_len(w + kw)
     F = np.fft.rfft2(img, s=(H, W), axes=(0, 1))
     K = np.fft.rfft2(k, s=(H, W))
     out = np.fft.irfft2(F * K[..., None], s=(H, W), axes=(0, 1))

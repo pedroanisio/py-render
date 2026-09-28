@@ -197,7 +197,7 @@ def _bgra_to_working(raw: np.ndarray, linear: bool, out: np.ndarray) -> None:
     # Flat (alpha << 8 | channel) indices into the 256x256 table gather faster than 2-D indexing.
     alpha = raw[..., 3].astype(np.intp) << 8
     for dst, src in ((0, 2), (1, 1), (2, 0)):
-        np.take(_PREMUL_LIN_FLAT, alpha | raw[..., src], out=out[..., dst], mode="clip")
+        out[..., dst] = _PREMUL_LIN_FLAT[alpha | raw[..., src]]
     out[..., 3] = a
     if _WM is not None:
         out[..., :3] = out[..., :3] @ _WM.T

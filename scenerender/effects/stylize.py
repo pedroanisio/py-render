@@ -23,7 +23,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from . import (Params, center, display_rgb, from_display, gaussian, grid, luma,
+from . import (Params, affine_sample, center, display_rgb, from_display, gaussian, grid, luma,
                over, premul, result, sample, shifted, straight)
 from ..registry import EFFECTS, FULL
 
@@ -102,12 +102,14 @@ def chromatic_aberration(rc, e, buf, ctx, node):
     sigmas = [abs(p.param("focus"+c,f))*longitudinal for c,f in zip("RGB",(1,0,.7))]
     pad = math.ceil(max(abs(v-1) for v in scales)*reach+4*max(sigmas))
     b=buf.pad(pad)
-    x,y=grid(b);cx,cy=cx+pad,cy+pad
+    cx,cy=cx+pad,cy+pad
     channels=[]
     for i,(scale,sigma) in enumerate(zip(scales,sigmas)):
         # Each pass keeps only its own colour channel and alpha (channels blur and sample independently).
+        # Radial magnification about the centre is affine: output (x, y) reads c + (x - c) / scale.
         src=gaussian(b.px[...,(i,3)],sigma)
-        channels.append(sample(src,cx+(x-cx)/max(scale,.01),cy+(y-cy)/max(scale,.01)))
+        k=1/max(scale,.01)
+        channels.append(affine_sample(src,[[k,0,cx*(1-k)],[0,k,cy*(1-k)],[0,0,1]]))
     return result(b,np.stack([c[...,0] for c in channels]+
                             [np.maximum.reduce([c[...,1] for c in channels])],-1))
 

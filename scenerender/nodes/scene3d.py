@@ -99,22 +99,24 @@ def _cpu_fallback(rc: RenderContext, el, ctx: Ctx):
     cr = cv.cr
     cr.set_antialias(cairo.ANTIALIAS_GOOD)
     Rm = rc.root_matrix
-    for i in order:
-        s = cam.project_cam(C[i])
-        s = np.c_[s, np.ones(3)] @ Rm.T
-        lam = max(0.0, float(nn[i] @ LIGHT))
-        col = base if unlit else base * (0.35 + 0.65 * lam) + emis
-        col = np.clip(col, 0, 1)
-        if not rc.linear:
-            from ..raster import linear_to_srgb
-            col = linear_to_srgb(col.astype(np.float32))
-        cr.move_to(*s[0, :2])
+    # Project and shade every triangle at once; only the cairo drawing stays per triangle.
+    C = C[order]
+    S = cam.project_cam(C)
+    S = np.concatenate([S, np.ones(S.shape[:2] + (1,))], -1) @ Rm.T
+    lam = np.maximum(0.0, nn[order] @ LIGHT)
+    cols = np.broadcast_to(base, (len(C), 3)) if unlit else base * (0.35 + 0.65 * lam[:, None]) + emis
+    cols = np.clip(cols, 0, 1)
+    if not rc.linear:
+        from ..raster import linear_to_srgb
+        cols = linear_to_srgb(cols.astype(np.float32))
+    cr.set_line_width(0.5)
+    for s, col in zip(S[:, :, :2].tolist(), cols.tolist()):
+        cr.move_to(*s[0])
         for p in s[1:]:
-            cr.line_to(*p[:2])
+            cr.line_to(*p)
         cr.close_path()
-        cr.set_source_rgba(float(col[0]), float(col[1]), float(col[2]), 1.0)
+        cr.set_source_rgba(col[0], col[1], col[2], 1.0)
         cr.fill_preserve()
-        cr.set_line_width(0.5)
         cr.stroke()
     buf = cv.to_buf(False)
     if rc.linear:

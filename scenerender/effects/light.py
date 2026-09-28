@@ -78,10 +78,19 @@ def halation(rc, e, buf, ctx, node):
 @EFFECTS.register("vignette", level=FULL, note="elliptical radial colour falloff, retaining the input matte")
 def vignette(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
-    x, y = grid(buf)
     cx, cy = center(p, buf)
-    d = np.hypot((x-cx)/max(buf.w/2, 1), (y-cy)/max(buf.h/2, 1))
-    w = np.clip(smoothstep(np.clip(p.n("threshold", .7), 0, 1), 1.4, d)*p.n("intensity", 1), 0, 1)[..., None]
+    threshold, intensity = p.n("threshold", .7), p.n("intensity", 1)
+    # The falloff depends only on geometry and two numbers: motion-blur samples and still shots reuse it.
+    key = (buf.w, buf.h, cx, cy, threshold, intensity)
+    memo = rc.cache.get("vignette")
+    if memo is not None and memo[0] == key:
+        w = memo[1]
+    else:
+        x, y = grid(buf)
+        d = np.hypot((x-cx)/max(buf.w/2, 1), (y-cy)/max(buf.h/2, 1))
+        w = np.clip(smoothstep(np.clip(threshold, 0, 1), 1.4, d)*intensity, 0, 1)[..., None]
+        w.flags.writeable = False
+        rc.cache["vignette"] = (key, w)
     rgb, a = straight(buf.px)
     c = p.color(default=(0,0,0,1))
     return result(buf, premul(rgb+(c[:3]-rgb)*w*c[3], a))
