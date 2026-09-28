@@ -386,18 +386,39 @@ def _local3d(rc, el, ctx: Ctx, rooted: bool | None = None) -> np.ndarray:
     E . (x, y, z) (plus (-W/2, H/2, 0) when it has no resolvable @parent, whose own engine frame
     already carries that offset) and every rotation is conjugated by E (Rz and Ry change sign)."""
     ev = rc.ev
-    t = np.array([ev.num(el, "x", ctx, 0.0), -ev.num(el, "y", ctx, 0.0), -ev.num(el, "z", ctx, 0.0)])
+    inst = bool(ctx.vars) and all(name in ("index", "count") for name, _ in ctx.vars)
+    if inst:
+        # Instances (ctx.vars carries only index / count): only expressions can differ between copies,
+        # so every other property is evaluated once per element and sample time and shared.
+        def num(prop, default):
+            if any(ln(a) == "expression" for a in ev._anims(el, prop)):
+                return ev.num(el, prop, ctx, default)
+            key = ("inst-prop", el, prop, ctx.t, ctx.comp_t, ctx.frame, ctx.scope)
+            hit = rc.frame_cache.get(key)
+            if hit is None:
+                hit = rc.frame_cache[key] = ev.num(el, prop, ctx, default)
+            return hit
+    else:
+        def num(prop, default):
+            return ev.num(el, prop, ctx, default)
+    t = np.array([num("x", 0.0), -num("y", 0.0), -num("z", 0.0)])
     if rooted is None:
-        rooted = not _has_parent3d(rc, el, ctx)
+        if inst:
+            key = ("inst-rooted", el, ctx.t, ctx.comp_t, ctx.scope)
+            rooted = rc.frame_cache.get(key)
+            if rooted is None:
+                rooted = rc.frame_cache[key] = not _has_parent3d(rc, el, ctx)
+        else:
+            rooted = not _has_parent3d(rc, el, ctx)
     if rooted:
         W, H = frame_size(rc)
         t = t + np.array([-W / 2, H / 2, 0.0])
     if ln(el) == "object3D":
         # scene space: Rz(rotation) . Ry(rotationY) . Rx(rotationX); E . R . E in engine space
-        R = rz(-ev.num(el, "rotation", ctx, 0.0)) @ ry(-ev.num(el, "rotationY", ctx, 0.0)) @ rx(ev.num(el, "rotationX", ctx, 0.0))
-        s = [ev.num(el, "scaleX", ctx, 1.0), ev.num(el, "scaleY", ctx, 1.0), ev.num(el, "scaleZ", ctx, 1.0)]
+        R = rz(-num("rotation", 0.0)) @ ry(-num("rotationY", 0.0)) @ rx(num("rotationX", 0.0))
+        s = [num("scaleX", 1.0), num("scaleY", 1.0), num("scaleZ", 1.0)]
         return trs(t, R, s)
-    return trs(t, ypr(ev.num(el, "yaw", ctx, 0.0), ev.num(el, "pitch", ctx, 0.0), ev.num(el, "roll", ctx, 0.0)), [1, 1, 1])
+    return trs(t, ypr(num("yaw", 0.0), num("pitch", 0.0), num("roll", 0.0)), [1, 1, 1])
 
 
 def world3d(rc, el, ctx: Ctx, local_only: bool = False, _depth: int = 0) -> np.ndarray:

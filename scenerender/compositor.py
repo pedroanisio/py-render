@@ -290,6 +290,8 @@ class RenderContext:
         """Render a non-isolated group straight into dst so its children blend with the real backdrop.
         Returns the updated dst, or None when the group must be isolated."""
         from .nodes.core import _repeat_vars, child_ctx, is_isolated
+        if not self.ev.str(el, "effects", ctx) and not self.active(el, ctx):
+            return dst       # inactive and without (possibly temporal) effects: nothing to draw either way
         if is_isolated(self, el, self.enter_node(el, ctx)) and not self._isolation_redundant(el, ctx):
             return None
         if not self.active(el, ctx):
@@ -907,19 +909,39 @@ class RenderContext:
         hi = np.array([[1, 0, -src.x0], [0, 1, -src.y0], [0, 0, 1]], np.float64) @ np.linalg.inv(H)
         return rect, hi[:2]
 
+    @staticmethod
+    def _moved(entry, M) -> float:
+        """Largest displacement (frame pixels) of the raster's corners between the placement of the
+        entry's last warp and M; inf when there is none."""
+        last = entry.get("last")
+        if last is None or entry["buf"] is None:
+            return math.inf
+        src = entry["buf"]
+        c = np.array([[src.x0, src.y0, 1], [src.x0 + src.w, src.y0, 1], [src.x0, src.y0 + src.h, 1],
+                      [src.x0 + src.w, src.y0 + src.h, 1]], np.float64)
+        Ai = np.linalg.inv(entry["A"])
+        d = c @ (M @ Ai).T - c @ (last[0] @ Ai).T
+        return float(np.hypot(d[:, 0], d[:, 1]).max())
+
     def _warp_raster(self, entry, M) -> Buf | None:
         from .raster import warp_projective
         src = entry["buf"]
         if src is None:
             return None
+        if self._moved(entry, M) < WARP_REUSE_PX:
+            b = entry["last"][1]
+            return None if b is None else Buf(b.px.copy(), b.x0, b.y0)
         from . import kernels
         if not kernels.enabled():
             return warp_projective(src, M @ np.linalg.inv(entry["A"]), self.frame_rect)
         g = self._warp_geometry(src, entry["A"], M)
         if g is None:
+            entry["last"] = (np.array(M, copy=True), None)
             return None
         rect, hi = g
-        return Buf(kernels.warp_affine(src.px, hi, rect), rect[0], rect[1])
+        out = Buf(kernels.warp_affine(src.px, hi, rect), rect[0], rect[1])
+        entry["last"] = (np.array(M, copy=True), out)
+        return Buf(out.px.copy(), out.x0, out.y0)
 
     def _composite_cached(self, dst: Buf, key, sig, k: int, M, draw):
         """dst with a cached run composited over it (source-over), or _NOT_CACHED. Like _cached_draw,
@@ -933,10 +955,20 @@ class RenderContext:
             s_now = math.sqrt(abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))
             view = self._local_view(M, 64)
             if view is not None and entry["s"] * 0.45 <= s_now <= entry["s"] and _contains(entry["region"], view):
+                if self._moved(entry, M) < WARP_REUSE_PX:
+                    b = entry["last"][1]       # a shutter sample within WARP_REUSE_PX of the last warp
+                    return dst if b is None else blending.composite(dst, b, "normal", 1.0)
                 g = self._warp_geometry(entry["buf"], entry["A"], M)
                 if g is None:
+                    entry["last"] = (np.array(M, copy=True), None)
                     return dst
                 rect, hi = g
+                if WARP_REUSE_PX > 0:
+                    # Keep this warp: the frame's other shutter samples usually land within a pixel
+                    # fraction of it (slow pans, Ken Burns moves).
+                    w = Buf(kernels.warp_affine(entry["buf"].px, hi, rect), rect[0], rect[1])
+                    entry["last"] = (np.array(M, copy=True), w)
+                    return blending.composite(dst, w, "normal", 1.0)
                 dst = dst.expand_to(rect)
                 d = dst.px[rect[1] - dst.y0:rect[3] - dst.y0, rect[0] - dst.x0:rect[2] - dst.x0]
                 kernels.warp_over(d, entry["buf"].px, hi, (rect[0], rect[1]))
@@ -1350,6 +1382,7 @@ RASTER_TAGS = frozenset({"group", "shape", "layer"})
 SELF_PLACEMENT = frozenset({"x", "y", "scaleX", "scaleY", "rotation", "anchorX", "anchorY", "skewX", "skewY", "opacity"})
 RASTER_WINDOW = 1.0                    # seconds a raster-cache entry may live
 RASTER_MAX_PIXELS = 16_000_000         # larger resampling rasters are not cached
+WARP_REUSE_PX = 0.1                    # a resampled raster is reused while it moves less than this
 import os as _os
 RASTER_CACHE = _os.environ.get("SCENERENDER_RASTER_CACHE", "1") != "0"
 

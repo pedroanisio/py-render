@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import math
 from dataclasses import dataclass
 
@@ -197,8 +198,8 @@ class Renderer:
         if self._pool is None:
             import multiprocessing as mp
             import weakref
-            if mp.current_process().daemon:
-                return None      # a frame worker: processes cannot have children; its share of CPUs is threads
+            if mp.current_process().daemon or os.environ.get("SCENERENDER_FRAME_WORKER") == "1":
+                return None      # a frame worker: its share of CPUs is threads, samples render serially
             try:
                 with _without_main_reimport():
                     self._pool = mp.get_context("spawn").Pool(workers, initializer=_sample_init,

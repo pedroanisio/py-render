@@ -410,6 +410,9 @@ _W: dict = {}
 
 def _winit(open_kwargs, cache, envelopes, kind, size, pad_even, threads=None):
     logging.getLogger("scenerender").setLevel(logging.ERROR)
+    # A frame worker renders its frames' shutter samples itself: sample worker processes would reload
+    # the document in every one of them and lose the reuse of unchanged nodes across samples.
+    os.environ["SCENERENDER_FRAME_WORKER"] = "1"
     if threads:
         os.environ["SCENERENDER_THREADS"] = str(threads)
     try:        # never share a parent's live ffmpeg decoder pipes (matters if the pool ever forks)
@@ -434,25 +437,60 @@ def _wframes(ts: list[float]) -> list:
     return [_wframe(t) for t in ts]
 
 
+def _bounded_results(pool, runs, ahead: int):
+    """Frames of runs in order, keeping at most `ahead` runs submitted beyond the one being consumed,
+    so frames finished out of order cannot pile up in this process."""
+    from collections import deque
+    pending, it = deque(), iter(runs)
+    for run in it:
+        pending.append(pool.submit(_wframes, run))
+        if len(pending) >= ahead:
+            break
+    while pending:
+        frames = pending.popleft().result()
+        nxt = next(it, None)
+        if nxt is not None:
+            pending.append(pool.submit(_wframes, nxt))
+        yield from frames
+
+
 def _fit_frame_workers(procs: int) -> int:
     """procs, reduced so that many renderers fit in 60% of the memory still available (host or
-    cgroup); each is sized by this process's peak so far (it has just rendered a frame)."""
+    cgroup); each is budgeted twice this process's peak so far (it has just rendered a frame)."""
     from .render import _mem_available, _rss
-    per = max(_rss("self", peak=True), 512 << 20)
+    # The first frame understates later ones (3D shots load models, textures and environments):
+    # budget twice its peak per renderer.
+    per = max(2 * _rss("self", peak=True), 1 << 30)
     fit = int(_mem_available() * 0.6 // per)
     if fit < procs:
         log.info("frame workers: %d fit in memory (%.1f GB peak per renderer)", max(fit, 1), per / 2 ** 30)
     return max(1, min(procs, fit))
 
 
-def _runs(n: int, procs: int, longest: int = 48, shortest: int = 4) -> list[tuple[int, int]]:
+def _runs(n: int, procs: int, longest: int = 48, shortest: int = 4, times=None) -> list[tuple[int, int]]:
     """Guided runs of consecutive frames: long ones first (a worker reuses the previous frame's
-    effect results and noise lattices within a run), shrinking so every worker finishes together."""
+    effect results, noise lattices and raster-cache windows within a run), shrinking so every worker
+    finishes together. With the frame times, a run ends on a raster-cache window boundary (the nearer
+    one), so no window is drawn by two workers."""
+    from .compositor import RASTER_WINDOW
     runs, i = [], 0
     while i < n:
         size = max(shortest, min(longest, (n - i) // (procs * 2)))
-        runs.append((i, min(n, i + size)))
-        i += size
+        j = min(n, i + size)
+        if times is not None and j < n:
+            w = math.floor(times[j] / RASTER_WINDOW)
+            start = j
+            while start > i and math.floor(times[start - 1] / RASTER_WINDOW) == w:
+                start -= 1
+            end = j
+            while end < n and math.floor(times[end] / RASTER_WINDOW) == w:
+                end += 1
+            if start > i and (j - start) <= (end - j):
+                j = start
+            else:
+                j = end
+        runs.append((i, j))
+        i = j
     return runs
 
 
@@ -543,8 +581,9 @@ class FrameSource:
             pool = ProcessPoolExecutor(procs, mp_context=mp.get_context("spawn"), initializer=_winit,
                                        initargs=(self.job.open_kwargs, _job_cache(self.job), envelopes, self.kind,
                                                  self.size, self.pad, max(1, threads() // procs)))
-            runs = [[self.times[i] for i in rest[a:b]] for a, b in _runs(len(rest), procs)]
-            results = (frame for run in pool.map(_wframes, runs) for frame in run)
+            runs = [[self.times[i] for i in rest[a:b]]
+                    for a, b in _runs(len(rest), procs, times=[self.times[i] for i in rest])]
+            results = _bounded_results(pool, runs, procs + 2)
             rest_set = set(rest)
         else:
             rest_set = set()

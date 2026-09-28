@@ -296,7 +296,16 @@ def _read_rgbe(data: bytes) -> np.ndarray:
         if pos + count > len(buf):
             raise ValueError("truncated RGBE scanline")
 
-    for y in range(n1):
+    y0 = 0
+    from .. import kernels
+    if kernels.enabled():
+        # New-style RLE scanlines (virtually every file) in one compiled pass; the loop below takes
+        # over at the first old-style scanline.
+        y0, pos, err = kernels.rgbe_rle(buf, pos, n1, n2, out)
+        if err:
+            raise ValueError({1: "truncated RGBE scanline", 2: "RGBE scanline width mismatch",
+                              3: "invalid RGBE run length"}[err])
+    for y in range(y0, n1):
         require(4)
         if buf[pos] == 2 and buf[pos + 1] == 2 and not buf[pos + 2] & 0x80:
             if (int(buf[pos + 2]) << 8 | int(buf[pos + 3])) != n2:

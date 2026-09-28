@@ -490,6 +490,45 @@ if nb is not None:
                 for c in range(4):
                     d[y, x, c] = d[y, x, c] + s[y, x, c] * k
 
+    @nb.njit(cache=True)
+    def _rgbe_rle(buf, pos, n1, n2, out):
+        """New-style RLE scanlines of a Radiance picture from row 0 on: (next row, position, error);
+        stops at the first old-style scanline (next row < n1, error 0). Errors: 1 truncated,
+        2 width mismatch, 3 invalid run length."""
+        size = len(buf)
+        for y in range(n1):
+            if pos + 4 > size:
+                return y, pos, 1
+            if not (buf[pos] == 2 and buf[pos + 1] == 2 and (buf[pos + 2] & 0x80) == 0):
+                return y, pos, 0
+            if ((np.int64(buf[pos + 2]) << 8) | np.int64(buf[pos + 3])) != n2:
+                return y, pos, 2
+            pos += 4
+            for c in range(4):
+                x = 0
+                while x < n2:
+                    if pos + 1 > size:
+                        return y, pos, 1
+                    cnt = np.int64(buf[pos])
+                    length = cnt - 128 if cnt > 128 else cnt
+                    if length == 0 or x + length > n2:
+                        return y, pos, 3
+                    if cnt > 128:
+                        if pos + 2 > size:
+                            return y, pos, 1
+                        v = buf[pos + 1]
+                        for i in range(length):
+                            out[y, x + i, c] = v
+                        pos += 2
+                    else:
+                        if pos + 1 + cnt > size:
+                            return y, pos, 1
+                        for i in range(cnt):
+                            out[y, x + i, c] = buf[pos + 1 + i]
+                        pos += 1 + cnt
+                    x += length
+        return n1, pos, 0
+
     @_par
     def _over(d, s):
         """Source-over in place: d = d * (1 - s.alpha) + s (any memory layout)."""
@@ -765,6 +804,12 @@ def under(d: np.ndarray, s: np.ndarray) -> None:
     """In-place destination-over of float32 (h, w, 4) views that do not overlap."""
     _threads()
     _under(d, s)
+
+
+def rgbe_rle(buf: np.ndarray, pos: int, n1: int, n2: int, out: np.ndarray) -> tuple[int, int, int]:
+    """See _rgbe_rle."""
+    y, p, err = _rgbe_rle(buf, int(pos), int(n1), int(n2), out)
+    return int(y), int(p), int(err)
 
 
 def over(d: np.ndarray, s: np.ndarray) -> None:
