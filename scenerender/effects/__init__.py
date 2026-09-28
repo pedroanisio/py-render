@@ -34,10 +34,19 @@ def _blur_axis(a: np.ndarray, sigma: float, axis: int) -> np.ndarray:
         w = int(math.sqrt(12 * sigma * sigma / 3 + 1))
         w += (w + 1) % 2
         for _ in range(3):
-            a = uniform_filter1d(a, w, axis=axis, mode="constant", cval=0.0)
+            a = _rows(lambda b: uniform_filter1d(b, w, axis=axis, mode="constant", cval=0.0), a, axis)
         return a.astype(np.float32, copy=False)
     # Zero-padded correlation with the sampled kernel (edges treated as transparent).
-    return correlate1d(a, _kernel(sigma), axis=axis, mode="constant", cval=0.0)
+    k = _kernel(sigma)
+    return _rows(lambda b: correlate1d(b, k, axis=axis, mode="constant", cval=0.0), a, axis)
+
+
+def _rows(fn, a, axis):
+    """Filters along axis 1 treat rows independently: run them in row bands (identical result)."""
+    if axis != 1 or a.ndim < 2:
+        return fn(a)
+    from .. import banded
+    return banded(fn, np.empty_like(a), a)
 
 
 def _box_axis(a: np.ndarray, w: int, axis: int) -> np.ndarray:

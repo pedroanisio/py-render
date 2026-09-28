@@ -1124,7 +1124,8 @@ def finish(rc, buf, ctx):
                 prev_in[changed] = px[changed]
                 prev_out[changed] = _finish_px(rc, prev_in[changed], plan)
             return Buf(prev_out.copy(), buf.x0, buf.y0)
-    res = _finish_px(rc, px, plan)
+    from . import banded
+    res = banded(lambda band: _finish_px(rc, band, plan), np.empty_like(px), px)
     rc.cache["finish-memo"] = (plan, px.copy(), res.copy())
     return Buf(res, buf.x0, buf.y0)
 

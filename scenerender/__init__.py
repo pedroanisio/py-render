@@ -27,6 +27,9 @@ def _tune_allocator() -> None:
 _tune_allocator()
 
 
+_THREAD_LIMIT: list = []
+
+
 def threads() -> int:
     """Threads one frame may use for native (GIL-releasing) work; SCENERENDER_THREADS overrides.
 
@@ -37,4 +40,39 @@ def threads() -> int:
         n = int(os.environ.get("SCENERENDER_THREADS", "0"))
     except ValueError:
         n = 0
-    return max(1, n or os.cpu_count() or 1)
+    n = max(1, n or os.cpu_count() or 1)
+    return min(n, _THREAD_LIMIT[-1]) if _THREAD_LIMIT else n
+
+
+class thread_limit:
+    """Cap threads() inside the block (e.g. while sample worker processes use the other CPUs)."""
+
+    def __init__(self, n: int):
+        self.n = n
+
+    def __enter__(self):
+        _THREAD_LIMIT.append(self.n)
+
+    def __exit__(self, *exc):
+        _THREAD_LIMIT.pop()
+
+
+def banded(fn, out, *arrays, min_rows: int = 256):
+    """out[rows] = fn(*(a[rows] for a in arrays)) over row bands, in threads when CPUs are spare.
+
+    Only for work where each output row depends on the same input rows alone (per-pixel maps,
+    filters along axis 1): the result is identical to one call on the whole arrays."""
+    n = min(threads(), len(out) // min_rows)
+    if n <= 1:
+        out[...] = fn(*arrays)
+        return out
+    import numpy as np
+    from concurrent.futures import ThreadPoolExecutor
+    edges = np.linspace(0, len(out), n + 1).astype(int)
+
+    def band(i):
+        lo, hi = edges[i], edges[i + 1]
+        out[lo:hi] = fn(*(a[lo:hi] for a in arrays))
+    with ThreadPoolExecutor(n) as pool:
+        list(pool.map(band, range(n)))
+    return out

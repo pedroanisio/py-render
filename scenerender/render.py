@@ -32,6 +32,8 @@ class Renderer:
     _hooks: frozenset = frozenset()      # hook names a freshly opened renderer has
     _pool: object = None
     _pool_key: object = None
+    _shm: object = None
+    _shm_finalizer: object = None
 
     @classmethod
     def open(cls, path: str, *, scale: float = 1.0, params: dict | None = None, variant: str | None = None,
@@ -113,17 +115,18 @@ class Renderer:
                 px = rc.render_frame(ts, frame).px
                 acc = px if acc is None else acc + px
             return acc
-        from multiprocessing import shared_memory
+        from . import thread_limit
         shape = (rc.height, rc.width, 4)
-        shm = shared_memory.SharedMemory(create=True, size=len(times) * int(np.prod(shape)) * 4)
+        shm = self._sample_buffer(len(times) * int(np.prod(shape)) * 4)
         try:
             out = np.ndarray((len(times),) + shape, np.float32, buffer=shm.buf)
             chunks = [c.tolist() for c in np.array_split(np.arange(len(times)), pool._processes + 1)]
             state = (frame, rc.mb_center, rc.mb_interval, shm.name, shape)
             pending = [(c, pool.apply_async(_sample_render, ([(i, times[i]) for i in c],) + state))
                        for c in chunks[1:] if c]
-            for i in chunks[0]:
-                out[i] = rc.render_frame(times[i], frame).px
+            with thread_limit(1):     # the other CPUs are rendering the workers' samples
+                for i in chunks[0]:
+                    out[i] = rc.render_frame(times[i], frame).px
             for c, res in pending:
                 try:
                     res.get()
@@ -136,9 +139,25 @@ class Renderer:
                 acc = out[i].copy() if acc is None else acc + out[i]
             del out
             return acc
-        finally:
-            shm.close()
-            shm.unlink()
+        except BaseException:
+            self._release_buffer()
+            raise
+
+    def _sample_buffer(self, size: int):
+        """Shared memory for one frame's samples, kept for later frames (fresh pages cost page faults)."""
+        from multiprocessing import shared_memory
+        if self._shm is not None and self._shm.size >= size:
+            return self._shm
+        self._release_buffer()
+        import weakref
+        self._shm = shared_memory.SharedMemory(create=True, size=size)
+        self._shm_finalizer = weakref.finalize(self, _unlink_shm, self._shm)
+        return self._shm
+
+    def _release_buffer(self) -> None:
+        if self._shm is not None:
+            self._shm_finalizer()
+            self._shm = None
 
     def _sample_pool(self, times: list[float], frame: int):
         """Worker processes for shutter samples, or None when rendering here is as fast or not equivalent."""
@@ -158,9 +177,16 @@ class Renderer:
         if self._pool is None:
             import multiprocessing as mp
             import weakref
-            with _without_main_reimport():
-                self._pool = mp.get_context("spawn").Pool(workers, initializer=_sample_init,
-                                                          initargs=(self.open_kwargs, state))
+            if mp.current_process().daemon:
+                return None      # a frame worker: processes cannot have children; its share of CPUs is threads
+            try:
+                with _without_main_reimport():
+                    self._pool = mp.get_context("spawn").Pool(workers, initializer=_sample_init,
+                                                              initargs=(self.open_kwargs, state))
+            except (OSError, AssertionError, ValueError) as e:
+                log.warning("shutter samples render serially: no worker processes (%s)", e)
+                self.open_kwargs = None
+                return None
             self._pool_key = key
             weakref.finalize(self, self._pool.terminate)
         return self._pool
@@ -169,6 +195,7 @@ class Renderer:
         if self._pool is not None:
             self._pool.terminate()
             self._pool = self._pool_key = None
+        self._release_buffer()
 
     def _static_shutter(self, first: float, last: float) -> bool:
         """Conservatively prove the scene has no time-varying input in this interval.
@@ -275,6 +302,14 @@ def _sample_init(open_kwargs: dict, state: dict) -> None:
     r = Renderer.open(kw.pop("path"), **kw)
     r.rc.cache.update(state)
     _SW["r"] = r
+
+
+def _unlink_shm(shm) -> None:
+    try:
+        shm.close()
+        shm.unlink()
+    except (FileNotFoundError, BufferError):
+        pass
 
 
 def _sample_render(samples, frame, center, interval, shm_name, shape) -> None:
