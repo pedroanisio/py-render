@@ -47,30 +47,29 @@ def _channel(rgb, a, channel, fn):
     return rgb, a
 
 
-def _grade_op(p):
-    return kernels.OP_GRADE, np.array([p.n("saturation", 1), p.n("contrast", 1), p.n("brightness", 0)], np.float32)
-
-
 def _lgg_op(p):
     return kernels.OP_LGG, np.concatenate([p.vec("lift", 0), 1/np.maximum(p.vec("gamma", 1), 1e-4), p.vec("gain", 1)])
 
 
 # Display-referred effects the fused kernel runs; consecutive ones share one pass (see apply_effects).
-DISPLAY_OPS = {"color-grade": _grade_op, "lift-gamma-gain": _lgg_op}
+DISPLAY_OPS = {"lift-gamma-gain": _lgg_op}
 
 
 def display_chain(rc, buf, ops):
     return Buf(kernels.display_chain(buf.px, ops, rc.linear), buf.x0, buf.y0)
 
 
-@EFFECTS.register("color-grade", level=FULL, note="encoded sRGB saturation, centred contrast, additive brightness")
+@EFFECTS.register("color-grade", level=FULL, note="D9: exposure, 0.18-pivot power contrast, Rec. 709 saturation, brightness")
 def color_grade(rc, e, buf, ctx, node):
+    """D9, on unpremultiplied working values: exposure scales by 2^exposure; contrast maps v to
+    0.18 (v / 0.18)^contrast (0 for v <= 0); saturation blends from Rec. 709 luma; brightness then
+    adds to each channel; negative results clamp to 0."""
     p = Params(rc, e, ctx)
-    if kernels.enabled():
-        return display_chain(rc, buf, [_grade_op(p)])
-    rgb, a = display_rgb(rc, buf.px)
-    rgb = (_saturate(rgb, p.n("saturation", 1))-.5)*p.n("contrast", 1)+.5+p.n("brightness", 0)
-    return from_display(rc, buf, rgb, a)
+    rgb, a = straight(buf.px)
+    v = rgb * np.float32(2.0 ** p.n("exposure", 0))
+    c = np.where(v > 0, np.float32(.18) * np.power(np.maximum(v, 1e-30) / np.float32(.18), np.float32(p.n("contrast", 1))), 0)
+    rgb = np.maximum(_saturate(c, np.float32(p.n("saturation", 1))) + np.float32(p.n("brightness", 0)), 0)
+    return result(buf, premul(rgb, a))
 
 
 @EFFECTS.register("lift-gamma-gain", level=FULL, note="encoded sRGB lift, inverse gamma, gain per channel")

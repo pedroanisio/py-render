@@ -1,8 +1,12 @@
 """Alpha-based layer styles.
 
-compositeOriginal describes the original's placement relative to the style:
-behind (default), on-top, or none. Position selects outside/inside/centred
-rings for stroke/outline/bevel. Shadow offsets and radii are document pixels.
+compositeOriginal places the style relative to the unchanged original
+(CONVENTIONS 5.6): behind it (default), on-top, or the style alone (none).
+Styles inside the content (inner shadow and glow, inside and centred rings,
+inner bevel) are drawn over it for behind too. Position selects
+outside/inside/centred rings for stroke/outline/bevel. Shadow offsets and radii
+are document pixels; a drop shadow's radius is twice its Gaussian standard
+deviation (CSS drop-shadow(), D9).
 """
 from __future__ import annotations
 
@@ -19,8 +23,8 @@ def drop_shadow(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
     r = max(0, p.d("radius", 4))
     dx, dy = p.d("offsetX", 8), p.d("offsetY", 8)
-    b = buf.pad(math.ceil(4*r+max(abs(dx), abs(dy))))
-    alpha = gaussian(b.px[..., 3:4], r)
+    b = buf.pad(math.ceil(2*r+max(abs(dx), abs(dy))))
+    alpha = gaussian(b.px[..., 3:4], r/2)
     alpha = shifted(alpha, dx, dy)[..., 0]*max(0, p.n("intensity", 1))
     return result(b, composite(p, b.px, colored(alpha, p.color(default=(0,0,0,1)))))
 
@@ -33,7 +37,7 @@ def inner_shadow(rc, e, buf, ctx, node):
     b = buf.pad(math.ceil(4*r+max(abs(dx), abs(dy))))
     blurred = shifted(gaussian(b.px[..., 3:4], r), dx, dy)[..., 0]
     alpha = b.px[..., 3]*(1-blurred)*max(0, p.n("intensity", 1))
-    return result(b, composite(p, b.px, colored(alpha, p.color(default=(0,0,0,1))))).crop_to(buf.rect)
+    return result(b, composite(p, b.px, colored(alpha, p.color(default=(0,0,0,1))), True)).crop_to(buf.rect)
 
 
 @EFFECTS.register("inner-glow", level=FULL, note="inverse blurred matte creates an interior edge glow")
@@ -42,7 +46,7 @@ def inner_glow(rc, e, buf, ctx, node):
     r = max(0, p.d("radius", 4))
     b = buf.pad(math.ceil(4*r))
     alpha = b.px[..., 3]*(1-gaussian(b.px[..., 3:4], r)[..., 0])*max(0, p.n("intensity", 1))
-    return result(b, composite(p, b.px, colored(alpha, p.color()))).crop_to(buf.rect)
+    return result(b, composite(p, b.px, colored(alpha, p.color()), True)).crop_to(buf.rect)
 
 
 def _ring(alpha, r, position):
@@ -59,7 +63,7 @@ def stroke(rc, e, buf, ctx, node):
     r, position = max(0, p.d("radius", 4)), p.s("position", "outside")
     b = buf.pad(0 if position == "inside" else math.ceil(r+1))
     alpha = _ring(b.px[..., 3], r, position)*max(0, p.n("intensity", 1))
-    return result(b, composite(p, b.px, colored(alpha, p.color())))
+    return result(b, composite(p, b.px, colored(alpha, p.color()), position != "outside"))
 
 
 @EFFECTS.register("bevel", level=FULL, note="inner/outer/emboss/pillow alpha-relief profile, size/soften, angle and relief")
@@ -90,7 +94,7 @@ def bevel(rc,e,buf,ctx,node):
     v=(gx*math.cos(angle)+gy*math.sin(angle))*relief*p.n("intensity",1)
     light=colored(ring*np.clip(v,0,1),p.color())
     dark=colored(ring*np.clip(-v,0,1),p.color("keyColor",(0,0,0,1)))
-    out=result(b,composite(p,b.px,light+dark))
+    out=result(b,composite(p,b.px,light+dark,style != "outer"))
     return out.crop_to(buf.rect) if style == "inner" else out
 
 

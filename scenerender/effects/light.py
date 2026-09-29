@@ -18,7 +18,7 @@ import os
 
 import numpy as np
 
-from . import (Params, affine_sampler, center, colored, composite, gaussian, grid, linear_pixels,
+from . import (Params, affine_sampler, center, colored, gaussian, grid, linear_pixels,
                luma, premul, result, sample, smoothstep, straight, working_pixels)
 from .. import kernels
 from ..raster import color_to_working
@@ -29,21 +29,19 @@ def _linear_color(p, default=(1,1,1,1)):
     return np.asarray(color_to_working(p.rc.ev.color(p.el, "color", p.ctx, default), True), np.float32)
 
 
-@EFFECTS.register("glow", level=FULL, note="tinted Gaussian alpha glow, padded spill, original placement control")
+@EFFECTS.register("glow", level=FULL, note="bright pass over threshold (working-space luminance), blurred and added in linear light")
 def glow(rc, e, buf, ctx, node):
+    """D9 / CONVENTIONS 5.6: the part of each pixel whose luminance exceeds threshold, blurred with
+    standard deviation radius, tinted by color and scaled by intensity, is added to the content (as
+    bloom, and as the C and Rust renderers do). compositeOriginal none returns the glow alone."""
+    return _bloom(rc, e, buf, ctx, alone=Params(rc, e, ctx).s("compositeOriginal", "behind") == "none")
+
+
+def _bloom(rc, e, buf, ctx, halation=False, alone=False):
     p = Params(rc, e, ctx)
     r = max(0, p.d("radius", 4))
     b = buf.pad(math.ceil(4*r))
-    alpha = gaussian(b.px[..., 3:4], r)[..., 0]*max(0, p.n("intensity", 1))
-    px = composite(p, linear_pixels(rc, b.px), colored(alpha, _linear_color(p)))
-    return result(b, working_pixels(rc, px))
-
-
-def _bloom(rc, e, buf, ctx, halation=False):
-    p = Params(rc, e, ctx)
-    r = max(0, p.d("radius", 4))
-    b = buf.pad(math.ceil(4*r))
-    if not halation and rc.linear and os.environ.get("SCENERENDER_GPU", "1") != "0":
+    if not halation and not alone and rc.linear and os.environ.get("SCENERENDER_GPU", "1") != "0":
         from .gl_bloom import bloom as gl_bloom
         out = gl_bloom(b.px, r, max(0, p.n("threshold", .7)), max(0, p.n("intensity", 1)), _linear_color(p))
         if out is not None:
@@ -67,6 +65,8 @@ def _bloom(rc, e, buf, ctx, halation=False):
         halo[...,2] *= .25
         halo[..., :3] *= (1-strength)[...,None]
     halo *= tint[3]
+    if alone:
+        return result(b, working_pixels(rc, halo))
     px = src+halo
     px[..., 3] = np.clip(src[..., 3]+halo[..., 3]*(1-src[..., 3]), 0, 1)
     return result(b, working_pixels(rc, px))
@@ -82,20 +82,34 @@ def halation(rc, e, buf, ctx, node):
     return _bloom(rc, e, buf, ctx, True)
 
 
-@EFFECTS.register("vignette", level=FULL, note="elliptical radial colour falloff, retaining the input matte")
+@EFFECTS.register("vignette", level=FULL, note="D9 radial darkening from the frame centre, retaining the input matte")
 def vignette(rc, e, buf, ctx, node):
+    """D9 / CONVENTIONS 5.8: colour moves toward `color` (black: darkening) by
+    amount . smoothstep(r0, r0 + softness, r), with r the distance of the pixel centre from the frame
+    centre over the half diagonal and r0 = radius (document pixels) / half diagonal. Defaults: amount
+    0.5, radius half the half diagonal, softness 0.5. centerX / centerY (frame document pixels) move
+    the centre."""
     p = Params(rc, e, ctx)
-    cx, cy = center(p, buf)
-    threshold, intensity = p.n("threshold", .7), p.n("intensity", 1)
-    # The falloff depends only on geometry and two numbers: motion-blur samples and still shots reuse it.
-    key = (buf.w, buf.h, cx, cy, threshold, intensity)
+    s = rc.scale
+    half = 0.5 * math.hypot(rc.doc.width, rc.doc.height)
+    cx = p.n("centerX", rc.doc.width / 2) * s - buf.x0
+    cy = p.n("centerY", rc.doc.height / 2) * s - buf.y0
+    # CONVENTIONS 5.8 gives the vignette its own defaults, in place of the effectType ones the schema
+    # declares for every effect (amount 1, radius 4, softness 0.1: a degenerate vignette).
+    def own(name, default):
+        return p.n(name, default) if rc.ev.explicit(e, name, ctx) else default
+    amount, softness = own("amount", .5), max(0.0, own("softness", .5))
+    r0 = own("radius", half / 2) / half
+    # The falloff depends only on geometry and three numbers: motion-blur samples and still shots reuse it.
+    key = (buf.w, buf.h, cx, cy, s, half, amount, r0, softness)
     memo = rc.cache.get("vignette")
     if memo is not None and memo[0] == key:
         w = memo[1]
     else:
         x, y = grid(buf)
-        d = np.hypot((x-cx)/max(buf.w/2, 1), (y-cy)/max(buf.h/2, 1))
-        w = np.clip(smoothstep(np.clip(threshold, 0, 1), 1.4, d)*intensity, 0, 1)[..., None]
+        r = np.hypot(x + .5 - cx, y + .5 - cy) / (half * s)
+        edge = smoothstep(r0, r0 + softness, r) if softness > 0 else (r >= r0).astype(np.float32)
+        w = np.clip(amount * edge, -np.inf, 1).astype(np.float32)[..., None]
         w.flags.writeable = False
         rc.cache["vignette"] = (key, w)
     c = p.color(default=(0,0,0,1))

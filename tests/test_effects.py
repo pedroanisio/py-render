@@ -158,12 +158,70 @@ def test_colour_semantics(make_renderer, kind, attrs, source, expected):
     ("lift-gamma-gain", {"gamma":"2,2,2"}, .5),
     ("cdl", {"slope":"2,2,2"}, .5),
     ("posterize", {"levels":3}, 0),
-    ("color-grade", {"brightness":.25}, .5),
 ])
 def test_display_referred_operations(make_renderer, kind, attrs, expected):
     b = solid(tuple(srgb_to_linear(np.full(3, .25))), alpha=.5)
     rgb, a = straight(apply(make_renderer(effect(kind, **attrs)), b).px)
     np.testing.assert_allclose(linear_to_srgb(rgb), expected, atol=2e-6)
+
+
+@pytest.mark.parametrize("attrs", [{}, {"exposure": .5}, {"contrast": 1.3}, {"saturation": .4}, {"brightness": -.1},
+                                   {"exposure": -.3, "contrast": .8, "saturation": 1.6, "brightness": .05}])
+def test_color_grade_is_d9(make_renderer, attrs):
+    """D9: on unpremultiplied working values, 2^exposure, 0.18 (v/0.18)^contrast, Rec. 709 saturation,
+    then brightness, negatives clamped to 0."""
+    src = np.array([.02, .3, .9], np.float32)
+    b = solid(tuple(src), alpha=.6)
+    rgb, a = straight(apply(make_renderer(effect("color-grade", **attrs)), b).px)
+    v = src * 2 ** attrs.get("exposure", 0)
+    c = .18 * (v / .18) ** attrs.get("contrast", 1)
+    y = .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
+    want = np.maximum(y + (c - y) * attrs.get("saturation", 1) + attrs.get("brightness", 0), 0)
+    np.testing.assert_allclose(rgb, np.broadcast_to(want, rgb.shape), rtol=1e-5, atol=1e-6)
+    np.testing.assert_allclose(a, .6, atol=1e-7)
+
+
+def test_drop_shadow_radius_is_twice_sigma(make_renderer):
+    """CONVENTIONS 5.7: a drop shadow's radius is twice the Gaussian standard deviation."""
+    b = Buf.empty(0, 0, 80, 40)
+    b.px[:, :40] = 1
+    out = apply(make_renderer(effect("drop-shadow", radius=8, offsetX=0, offsetY=0, compositeOriginal="none")), b)
+    row = out.region((0, 0, 80, 40))[20, :, 3]
+    from math import erf, sqrt
+    want = [.5 * (1 - erf((x + .5 - 40) / (4 * sqrt(2)))) for x in range(80)]
+    np.testing.assert_allclose(row[30:50], want[30:50], atol=.02)
+
+
+def test_glow_is_a_thresholded_bloom(make_renderer):
+    """CONVENTIONS 5.6 / D9: glow adds the part above threshold (working-space luminance), so content
+    below the threshold does not glow, and the glow is added to (not drawn over) the content."""
+    dim = solid((.3, .3, .3), w=20, h=20)
+    out = apply(make_renderer(effect("glow", radius=3, threshold=.5)), dim)
+    np.testing.assert_allclose(out.region(dim.rect), dim.px, atol=1e-6)
+    bright = solid((1, 1, 1), w=20, h=20)
+    bright.px[:, :10] = 0
+    out = apply(make_renderer(effect("glow", radius=3, threshold=.5)), bright)
+    px = out.region(bright.rect)
+    assert px[10, 8, 3] > .05                                          # spill beside the bright half
+    assert px[10, 15, 0] > 1                                           # added onto the content
+
+
+def test_vignette_is_d9(make_renderer):
+    """CONVENTIONS 5.8: 1 - amount . smoothstep(r0, r0 + softness, r), r over the half diagonal from the
+    frame centre, r0 = radius / half diagonal; defaults amount 0.5, radius half the half diagonal,
+    softness 0.5."""
+    b = solid((1, 1, 1), w=64, h=48)
+    half = .5 * np.hypot(64, 48)
+    y, x = np.indices((48, 64)) + .5
+    r = np.hypot(x - 32, y - 24) / half
+
+    def ss(lo, hi, v):
+        u = np.clip((v - lo) / (hi - lo), 0, 1)
+        return u * u * (3 - 2 * u)
+    got = apply(make_renderer(effect("vignette")), b).px[..., 0]
+    np.testing.assert_allclose(got, 1 - .5 * ss(.5, 1, r), atol=1e-5)
+    got = apply(make_renderer(effect("vignette", amount=.8, radius=10, softness=.2)), b).px[..., 0]
+    np.testing.assert_allclose(got, 1 - .8 * ss(10 / half, 10 / half + .2, r), atol=1e-5)
 
 
 def test_threshold_is_binary_and_preserves_matte(make_renderer, tile):
@@ -193,8 +251,9 @@ def test_blur_scaling(make_renderer, tile):
     assert b.x0-tile.x0 == 2*(a.x0-tile.x0)
 
 
-@pytest.mark.parametrize("mode,expected", [("behind", (0,0,1)), ("on-top", (1,0,0)), ("none", (0,0,1))])
+@pytest.mark.parametrize("mode,expected", [("behind", (1,0,0)), ("on-top", (0,0,1)), ("none", (0,0,1))])
 def test_shadow_composite_original_placement(make_renderer, mode, expected):
+    """CONVENTIONS 5.6: compositeOriginal places the effect, by default beneath the original."""
     r = make_renderer(effect("drop-shadow", radius=0, offsetX=0, offsetY=0,
                              color="#0000FFFF", compositeOriginal=mode))
     out = apply(r, solid((1,0,0)))

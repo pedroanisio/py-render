@@ -253,12 +253,15 @@ def over(front, back):
     return front + back * (1 - front[..., 3:4])
 
 
-def composite(p, original, effect):
-    """compositeOriginal locates the ORIGINAL: behind/on-top of the effect, or absent."""
+def composite(p, original, effect, interior=False):
+    """compositeOriginal (CONVENTIONS 5.6) places the EFFECT: behind (the default) beneath the
+    unchanged original, on-top above it, none alone. interior: the effect lies inside the content
+    (inner shadow and glow, inside strokes, inner bevel), where beneath the opaque original it could
+    not show, so it is drawn over the original for behind as well."""
     mode = p.s("compositeOriginal", "behind")
     if mode == "none":
         return effect
-    return over(original, effect) if mode == "on-top" else over(effect, original)
+    return over(effect, original) if mode == "on-top" or interior else over(original, effect)
 
 
 def colored(mask, color):
