@@ -24,8 +24,6 @@ exr = ["OpenEXR>=3.3"]
 
 [project.scripts]
 scenerender = "scenerender.cli:main"
-# Scene video packages (.vpkg.zip); standard library only, no engine import.
-scenerender-vpkg = "scenerender.vpkg.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -35,4 +33,4 @@ build-backend = "setuptools.build_meta"
 include = ["scenerender*"]
 
 [tool.setuptools.package-data]
-scenerender = ["schema/*.xsd", "schema/*.sch", "schema/*.md", "schema/*.LICENSE", "vpkg/schema/*.json"]
+scenerender = ["schema/*.xsd", "schema/*.sch", "schema/*.md", "schema/*.LICENSE"]

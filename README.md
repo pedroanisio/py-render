@@ -96,7 +96,7 @@ scenerender render hello.xml -o hello.mp4
 | `scenerender render SCENE [-o OUT]` | Render the document's `<output>`s, or a single file with `-o`. |
 | `scenerender check SCENE` | Run the QA checks on a quick low-resolution pass. |
 | `scenerender coverage SCENE` | Report which of the document's features the renderer supports. |
-| `scenerender-vpkg ...` | Build and inspect portable scene video packages (`.vpkg.zip`); see [docs/VPKG-HOWTO.md](docs/VPKG-HOWTO.md). |
+| `scenerender-vpkg ...` | Build and inspect portable scene video packages (`.vpkg.zip`); now in sr-core (https://github.com/pedroanisio/sr-core, SREP 1). |
 
 Useful `render` options:
 
