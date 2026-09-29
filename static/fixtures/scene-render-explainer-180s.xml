@@ -871,7 +871,7 @@
 
   <!-- ============================================================ physics -->
   <physics fixedStep="0.008333333333333333" gravityY="-9.80665" pixelsPerMeter="100" solverIterations="10" start="102" bounds="frame">
-    <forceField id="ff-vortex" type="vortex" x="480" y="700" strength="120" radius="400" falloff="1.5" affects="particles" start="108.8"/>
+    <forceField id="ff-vortex" type="vortex" x="480" y="700" strength="120" radius="4" falloff="1.5" affects="particles" start="108.8"/>
     <forceField id="ff-wind" type="wind" forceX="40" forceY="0" affects="particles" start="110">
       <animate property="forceX"><key time="110" value="0"/><key time="114" value="80"/></animate>
     </forceField>

@@ -92,6 +92,6 @@
     </shape>
   </composition>
   <physics gravityY="-9.80665" pixelsPerMeter="100" bounds="frame">
-    <forceField id="ff-vortex" type="vortex" x="140" y="560" strength="60" radius="200" falloff="1" affects="particles"/>
+    <forceField id="ff-vortex" type="vortex" x="140" y="560" strength="60" radius="2" falloff="1" affects="particles"/>
   </physics>
 </scene>
