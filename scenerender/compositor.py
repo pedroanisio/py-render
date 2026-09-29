@@ -274,6 +274,10 @@ class RenderContext:
                 done_tr.add(tr[0])
                 out = self.render_transition(tr, ctx, M, box, layout)
             else:
+                if ln(child) == "object3D" and "3d-backdrop" not in self.frame_cache and self._transmissive():
+                    # What transmissive 3D surfaces refract: the composite at the first object3D's paint
+                    # position, 2D layers painted before it included (CONVENTIONS 5.24).
+                    self.frame_cache["3d-backdrop"] = self._snapshot(dst)
                 if ln(child) == "adjustment":
                     dst = self.apply_adjustment(child, dst, ctx, M, box, fold_opacity)
                     continue
@@ -286,6 +290,23 @@ class RenderContext:
             if out is not None:
                 dst = blending.composite(dst, out.buf, out.blend, out.opacity * fold_opacity)
         return dst
+
+    def _transmissive(self) -> bool:
+        """Whether the document has a transmissive material (whose 3D surfaces refract the backdrop)."""
+        hit = self.cache.get("transmissive")
+        if hit is None:
+            hit = self.cache["transmissive"] = any(
+                ln(m) == "material" and float(m.get("transmission", 0) or 0) > 0 for m in self.doc.root.iter("{*}material", "material"))
+        return hit
+
+    @staticmethod
+    def _snapshot(dst: Buf) -> Buf | None:
+        if dst.is_null:
+            return None
+        if dst.gpu is not None:
+            from . import gpucomp
+            return gpucomp.copy(dst)
+        return Buf(dst.px.copy(), dst.x0, dst.y0)
 
     def hidden_mattes(self, ctx: Ctx) -> set:
         if not self.matte_users:

@@ -664,6 +664,9 @@ def render_node_layer(rc, el, ctx: Ctx) -> Buf | None:
         return None
     r = R.res()
     gpu = _gpu_layer(rc, fr)
+    if fr.backdrop is None:
+        fr.backdrop = rc.frame_cache.get("3d-backdrop")     # what transmissive surfaces refract (5.24)
+        fr.linear = rc.linear
     got = R.render_layer(r, fr, obj, rc.cache.setdefault("gl-tex", {}), depth=fr.cam.dof and not fr.cam.ortho, gpu=gpu)
     if got is None:
         return None

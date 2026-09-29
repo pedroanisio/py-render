@@ -334,6 +334,7 @@ class Frame3D:
     ssaa: int
     world: World3D
     opaque: object = None      # texture with mipmaps (refraction source)
+    backdrop: object = None    # the 2D composite behind the 3D content (a Buf in frame pixels), see draw_backdrop
     frame_scale: float = 1.0   # frame px per document px
     view: tuple | None = None  # (x, y, w, h) of the render target in the camera's document frame
 
@@ -1176,6 +1177,7 @@ def render_opaque(r: Res, fr: Frame3D, tex_cache: dict):
     _begin(r, t)
     V, P = matrices(fr)
     draw_background(r, fr, V, P)
+    draw_backdrop(r, fr, t)
     for o in fr.objects.values():
         if o.occluder:
             draw_object(r, fr, o, V, P, tex_cache)
@@ -1186,6 +1188,67 @@ def render_opaque(r: Res, fr: Frame3D, tex_cache: dict):
     tex.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
     tex.repeat_x = tex.repeat_y = False
     return tex
+
+
+_BACKDROP_FS = """
+#version 410
+// The 2D backdrop (premultiplied, frame pixels, rows top-down) under the refraction source: target pixel
+// (x, y from the bottom) shows frame pixel org + (x, H - y) / ssaa.
+uniform sampler2D u_bd; uniform vec2 u_org; uniform float u_ssaa; uniform float u_H;
+uniform vec2 u_bdOrg; uniform vec2 u_bdSize; uniform vec2 u_texSize; uniform int u_srgb;
+out vec4 o;
+float s2l(float c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4); }
+void main() {
+    vec2 f = u_org + vec2(gl_FragCoord.x, u_H - gl_FragCoord.y) / u_ssaa;
+    vec2 q = f - u_bdOrg;
+    if (q.x < 0.0 || q.y < 0.0 || q.x >= u_bdSize.x || q.y >= u_bdSize.y) discard;
+    vec4 c = texture(u_bd, q / u_texSize);
+    if (u_srgb == 1 && c.a > 0.0) {
+        vec3 st = c.rgb / c.a;
+        c.rgb = vec3(s2l(st.r), s2l(st.g), s2l(st.b)) * c.a;
+    }
+    o = c;
+}
+"""
+
+
+def draw_backdrop(r: Res, fr: Frame3D, t) -> None:
+    """The 2D composite behind the 3D content, over the dome and under the opaque objects of the
+    refraction source (CONVENTIONS 5.24: transmissive surfaces refract 2D layers painted before them)."""
+    import moderngl
+    b = fr.backdrop
+    if b is None or b.is_null:
+        return
+    from .. import gpucomp
+    ctx = r.ctx
+    prog = getattr(r, "backdrop_prog", None)
+    if prog is None:
+        prog = r.backdrop_prog = ctx.program(vertex_shader=gpucomp._VS, fragment_shader=_BACKDROP_FS)
+        vbo = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], np.float32).tobytes())
+        r.backdrop_vao = ctx.vertex_array(prog, [(vbo, "2f", "in_pos")])
+    tile, temp = gpucomp.tile_of(b)
+    try:
+        tile.tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        tile.tex.use(0)
+        _set(prog, "u_bd", 0)
+        _set(prog, "u_org", (float(fr.ox), float(fr.oy)))
+        _set(prog, "u_ssaa", float(fr.ssaa))
+        _set(prog, "u_H", float(t.h))
+        _set(prog, "u_bdOrg", (float(b.x0), float(b.y0)))
+        _set(prog, "u_bdSize", (float(b.w), float(b.h)))
+        _set(prog, "u_texSize", (float(tile.tex.width), float(tile.tex.height)))
+        _set(prog, "u_srgb", int(not getattr(fr, "linear", True)))
+        t.fbo.use()
+        ctx.viewport = (0, 0, t.w, t.h)
+        ctx.disable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
+        ctx.enable(moderngl.BLEND)
+        ctx.blend_func = moderngl.ONE, moderngl.ONE_MINUS_SRC_ALPHA
+        r.backdrop_vao.render(moderngl.TRIANGLE_STRIP)
+        ctx.disable(moderngl.BLEND)
+    finally:
+        tile.tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+        if temp:
+            tile.release()
 
 
 def render_layer(r: Res, fr: Frame3D, obj: ObjDraw, tex_cache: dict, depth: bool = True, gpu: bool = False):

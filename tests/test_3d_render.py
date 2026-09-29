@@ -684,3 +684,16 @@ def test_fixture_documents_validate_and_render(name):
     else:
         px = r.rc.render_frame(0.5).px
     assert px[..., 3].mean() > 0.05 and np.isfinite(px).all()
+
+
+def test_glass_refracts_the_2d_layers_painted_before_it(tmp_path):
+    """CONVENTIONS 5.24: a transmissive surface refracts the composite behind it, 2D layers included, as
+    an opaque layer over it: clear glass over a 2D band keeps the band's colour, less Fresnel's share."""
+    r = doc(tmp_path, """<shape id="band" shape="rect" x="0" y="0" width="160" height="60" fill="#F0B030"/>
+<object3D id="glass" primitive="box" width="100" height="100" depth="10" x="80" y="45" z="-20" material="g"/>""",
+            materials='<material id="g" transmission="1" roughness="0" ior="1.5" thickness="10"/>',
+            lights='<light id="a" type="ambient" intensity="0.2"/>')
+    px = r.frame_rgb(0.0).astype(float)
+    band = np.array([0xF0, 0xB0, 0x30], float)
+    assert np.abs(px[20, 80] - band).max() < 0.08 * 255      # through the glass: the band, not a hole
+    assert np.abs(px[20, 5] - band).max() < 2                 # beside it: untouched

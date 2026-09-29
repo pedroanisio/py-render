@@ -412,6 +412,19 @@ def _grown(buf, rect):
     return out
 
 
+def copy(buf):
+    """A GPU Buf holding a copy of buf's pixels (a snapshot later draws cannot change)."""
+    from .raster import Buf
+    t, temp = tile_of(buf)
+    out = GpuTile(buf.w, buf.h, clear=False)
+    try:
+        _draw("copy", out.fbo, (0, 0, buf.w, buf.h), None, [("src", t.tex)], off=(0, 0), k=1.0)
+    finally:
+        if temp:
+            t.release()
+    return Buf(None, buf.x0, buf.y0, gpu=out)
+
+
 def scaled(buf, k: float):
     """buf's pixels times k as a new GPU Buf."""
     from .raster import Buf
