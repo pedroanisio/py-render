@@ -532,18 +532,30 @@ def test_linear_light_false_encodes_srgb(tmp_path):
 
 
 # ---------------------------------------------------------------- instancing, meshes
-def test_instances_grid_and_index_expressions(tmp_path):
+def test_instances_index_expressions_and_no_implicit_layout(tmp_path):
+    """CONVENTIONS 5.2: copy i evaluates with index = i, count = N; equal transforms coincide."""
     mats = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
-    grid = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="8" instances="4" material="u"/>', materials=mats))
-    from scenerender.raster import Buf  # noqa: F401
-    lab = grid[..., 3] > 0.5
-    cols = np.nonzero(lab.any(0))[0]
-    rows = np.nonzero(lab.any(1))[0]
-    assert (np.diff(cols) > 1).sum() == 1 and (np.diff(rows) > 1).sum() == 1      # 2 x 2 grid
+    one = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="8" material="u"/>', materials=mats))
+    four = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="8" instances="4" material="u"/>',
+                     materials=mats, name="4.xml"))
+    assert np.abs(four[..., 3] - one[..., 3]).max() < 1e-3                         # no grid: one sphere's footprint
     row = frame(doc(tmp_path, '<object3D x="80" y="45" id="o" primitive="sphere" radius="6" instances="3" material="u">'
                               '<expression property="x">index * 40 + 40</expression></object3D>', materials=mats, name="e.xml"))
     xs = np.nonzero((row[..., 3] > 0.5).any(0))[0]
     assert (np.diff(xs) > 1).sum() == 2                                             # three separate copies
+
+
+def test_instances_differ_beyond_the_transform(tmp_path):
+    """CONVENTIONS 5.2: every property may differ by index (here the radius and the material)."""
+    mats = ('<material id="u" baseColor="#FFFFFFFF" unlit="true" alphaMode="blend">'
+            '<expression property="opacity">index == 0 ? 1 : 0.5</expression></material>')
+    px = frame(doc(tmp_path, '<object3D x="40" y="45" id="o" primitive="sphere" radius="6" instances="2" material="u">'
+                             '<expression property="x">40 + index * 80</expression>'
+                             '<expression property="radius">6 + index * 10</expression></object3D>', materials=mats))
+    a = px[..., 3] > 0.2
+    left, right = a[:, :80].sum(), a[:, 80:].sum()
+    assert right > 4 * left > 0                                                     # copy 1 has radius 16, copy 0 6
+    assert px[45, 40, 3] > 0.99 and 0.3 < px[45, 120, 3] < 0.7                       # its own material each
 
 
 def test_obj_mesh_and_mesh_layer_thumbnail(tmp_path):

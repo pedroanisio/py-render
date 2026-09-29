@@ -16,9 +16,8 @@ Frame model (pinned):
   * Anti-aliasing: 4x MSAA always; project/@antialias3d = N additionally supersamples N x N (box
     filtered), capped at 32 Mpx per pass. Shadow map sizes scale with the render scale.
   * Instancing: object3D/@instances = N draws N GPU instances. Copy i evaluates the transform with
-    the expression variables index = i and count = N (as <repeat> does); when every copy resolves to
-    the same transform, copies are laid out on a centred grid of ceil(sqrt(N)) columns in the object's
-    local XY plane, spaced by 1.25x the object's local bounding box.
+    the expression variables index = i and count = N (as <repeat> does); there is no implicit layout,
+    so copies whose transforms are equal coincide (CONVENTIONS 5.2).
   * Mesh animation: clip time = (t - start) * animationSpeed + animationOffset, looping over the clip
     duration (negative speeds play backwards); no animationClip = rest pose. morphWeights override
     the file's weights; materialVariant selects a KHR_materials_variants material. An object3D
@@ -269,6 +268,13 @@ class ObjDraw:
     splats: SplatGPU | None = None
     inst_buf: object = None
     temp: list = field(default_factory=list)   # per-frame GPU objects to release
+    item_inst: list | None = None              # per item (instance buffer, count) when copies differ
+
+    def inst_of(self, i: int) -> tuple:
+        """(instance buffer, instance count) item i draws with."""
+        if self.item_inst is not None:
+            return self.item_inst[i]
+        return self.inst_buf, len(self.instances)
 
 
 @dataclass
@@ -540,7 +546,7 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
     _camera_uniforms(prog, fr, V, P)
     _set(prog, "u_modelScale", float(obj.model_scale))
     _set(prog, "u_receiveShadow", int(obj.receive))
-    for item, m in obj.items:
+    for i, (item, m) in enumerate(obj.items):
         unit = _material_uniforms(r, prog, m, tex_cache, 0)
         unit = _lights_uniforms(r, prog, fr, unit)
         if opaque_tex is not None and m.transmissive:
@@ -552,8 +558,8 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
             r.white.use(unit)
             _set(prog, "t_opaque", unit)
             _set(prog, "u_hasOpaque", 0)
-        vao = item_vao(ctx, item, prog, obj.inst_buf)
-        k = len(obj.instances)
+        buf, k = obj.inst_of(i)
+        vao = item_vao(ctx, item, prog, buf)
         ds = bool(m.p["doubleSided"])
         if m.blend or m.transmissive:
             ctx.depth_mask = m.transmissive and not m.blend
@@ -587,7 +593,7 @@ def draw_depth(r: Res, obj: ObjDraw, VP: np.ndarray, mode: int, lp=(0, 0, 0), ld
     _set(prog, "u_mode", mode)
     _set(prog, "u_lp", tuple(float(v) for v in lp))
     _set(prog, "u_ldir", tuple(float(v) for v in ldir))
-    for item, m in obj.items:
+    for i, (item, m) in enumerate(obj.items):
         _set(prog, "u_alphaMode", 1 if m.p["alphaMode"] == "mask" else 0)
         _set(prog, "u_cutoff", float(m.p["alphaCutoff"]))
         _set(prog, "u_alpha", float(m.p["baseColor"][3] * m.p["opacity"]))
@@ -605,7 +611,8 @@ def draw_depth(r: Res, obj: ObjDraw, VP: np.ndarray, mode: int, lp=(0, 0, 0), ld
         else:
             ctx.enable(moderngl.CULL_FACE)
             ctx.cull_face = "back"
-        item_vao(ctx, item, prog, obj.inst_buf).render(item.mode, instances=len(obj.instances))
+        buf, k = obj.inst_of(i)
+        item_vao(ctx, item, prog, buf).render(item.mode, instances=k)
 
 
 _SPLAT_ORDER: dict = {}      # id(splat set) -> (splats, eye, fwd, depth span, instance buffer, order)

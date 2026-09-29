@@ -237,26 +237,16 @@ def _spec_material(rc, spec) -> Material:
     return hit[1]
 
 
-def _instances(rc, el, ctx, local_bounds) -> np.ndarray:
+def _instances(rc, el, ctx) -> np.ndarray:
+    """World matrices of an object3D's copies: copy i is world3d evaluated with index = i and
+    count = N (CONVENTIONS 5.2). There is no implicit layout: copies whose transforms are equal
+    coincide."""
     n = max(1, int(rc.ev.num(el, "instances", ctx, 1)))
     if n == 1:
         return world3d(rc, el, ctx)[None]
     mats = _instance_worlds(rc, el, ctx, n)
     if mats is None:
         mats = np.stack([world3d(rc, el, ctx.with_vars(index=float(i), count=float(n))) for i in range(n)])
-    if np.allclose(mats, mats[0][None], atol=1e-9):
-        lo, hi = local_bounds if local_bounds is not None else (np.full(3, -50.0), np.full(3, 50.0))
-        size = np.maximum(hi - lo, 1e-3) * 1.25
-        cols = int(math.ceil(math.sqrt(n)))
-        rows = int(math.ceil(n / cols))
-        out = []
-        for i in range(n):
-            cx, cy = i % cols, i // cols
-            off = np.eye(4)
-            off[0, 3] = (cx - (cols - 1) / 2) * size[0]
-            off[1, 3] = ((rows - 1) / 2 - cy) * size[1]
-            out.append(mats[0] @ off)
-        mats = np.stack(out)
     return mats
 
 
@@ -371,9 +361,9 @@ def pixels_per_metre(rc) -> float:
 _E4 = np.diag([1.0, -1.0, -1.0, 1.0])
 
 
-def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
-    ev = rc.ev
-    prim = ev.str(el, "primitive", ctx)
+def _object_items(rc, el, ctx: Ctx, ctx_gl):
+    """(items, temp, splats, bounds) of one object3D evaluated at ctx; None when it draws nothing."""
+    prim = rc.ev.str(el, "primitive", ctx)
     obj_mat = material_for(rc, el, ctx)
     items, temp, splats, bounds = [], [], None, None
     if prim in PRIMS:
@@ -404,16 +394,73 @@ def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
         return None
     if not items and splats is None:
         return None
-    inst = _instances(rc, el, ctx, bounds)
-    if prim == "mesh":
-        # Imported models are Y-up metres: scene point = ppm . E . g (CONVENTIONS 2.6), and the engine
-        # frame is E . scene, so in engine space the model is only scaled by ppm (E . E = I). Applied
-        # here, not in world3d, so @parent children do not inherit it.
-        k = pixels_per_metre(rc)
-        inst = inst @ np.diag([k, k, k, 1.0])
-    lo, hi = bounds if bounds is not None else (np.zeros(3), np.zeros(3))
-    corners = np.array([[x, y, z, 1.0] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
-    wc = np.concatenate([corners @ M.T for M in inst])[:, :3]
+    return items, temp, splats, bounds
+
+
+_COPY_SHARED = {name for name, _ in (("x", 0), ("y", 0), ("z", 0), ("rotation", 0), ("rotationY", 0), ("rotationX", 0),
+                                     ("scaleX", 1), ("scaleY", 1), ("scaleZ", 1))} | {"instances", "opacity"}
+
+
+def _copies_differ(rc, el, ctx: Ctx) -> bool:
+    """Can an instanced object3D's copies differ in more than their transform? Only expressions see
+    index / count, so: an expression on another of its properties (geometry, clip time, ...), or on
+    a property of its material."""
+    def exprs(e):
+        return any(isinstance(c.tag, str) and ln(c) == "expression" and c.get("property") not in _COPY_SHARED
+                   for c in e)
+    if exprs(el):
+        return True
+    mid = rc.ev.str(el, "material", ctx)
+    mat = rc.doc.ids.get(mid) if mid else None
+    return mat is not None and any(isinstance(c.tag, str) and ln(c) == "expression" for c in mat)
+
+
+def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
+    """The draw of an object3D and all its copies (CONVENTIONS 5.2). Copies that differ only in their
+    transform are GPU instances of one set of items; otherwise each copy's items are evaluated with
+    its own index and drawn with its own matrix (ObjDraw.item_inst)."""
+    ev = rc.ev
+    prim = ev.str(el, "primitive", ctx)
+    n = max(1, int(ev.num(el, "instances", ctx, 1)))
+    k = pixels_per_metre(rc) if prim == "mesh" else 1.0
+    # Imported models are Y-up metres: scene point = ppm . E . g (CONVENTIONS 2.6), and the engine
+    # frame is E . scene, so in engine space the model is only scaled by ppm (E . E = I). Applied
+    # here, not in world3d, so @parent children do not inherit it.
+    ppm = np.diag([k, k, k, 1.0])
+    item_inst = None
+    if n > 1 and _copies_differ(rc, el, ctx):
+        items, temp, splats, boxes, item_inst, inst = [], [], None, [], [], []
+        for i in range(n):
+            ci = ctx.with_vars(index=float(i), count=float(n))
+            got = _object_items(rc, el, ci, ctx_gl)
+            if got is None:
+                continue
+            its, tmp, sp, b = got
+            Mi = world3d(rc, el, ci) @ ppm
+            items += its
+            temp += tmp
+            splats = splats if splats is not None else sp
+            inst.append(Mi)
+            if b is not None:
+                boxes.append((b, Mi))
+            buf = ctx_gl.buffer(np.ascontiguousarray(Mi.T.reshape(1, 16), np.float32).tobytes())
+            temp.append(buf)
+            item_inst += [(buf, 1)] * len(its)
+        if not inst:
+            return None
+        inst = np.stack(inst)
+    else:
+        got = _object_items(rc, el, ctx, ctx_gl)
+        if got is None:
+            return None
+        items, temp, splats, bounds = got
+        inst = _instances(rc, el, ctx) @ ppm
+        boxes = [(bounds, M) for M in inst] if bounds is not None else []
+    corners = []
+    for (lo, hi), M in boxes or [((np.zeros(3), np.zeros(3)), M) for M in inst]:
+        c = np.array([[x, y, z, 1.0] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
+        corners.append(c @ M.T)
+    wc = np.concatenate(corners)[:, :3]
     center = wc.mean(0)
     radius = float(np.max(np.linalg.norm(wc - center, axis=1))) if len(wc) else 0.0
     A = inst[0][:3, :3]
@@ -423,7 +470,7 @@ def build_object(rc, el, ctx: Ctx, ctx_gl) -> R.ObjDraw | None:
     occ = opacity >= 0.999 and all(m.opaque_occluder for m in mats) and splats is None
     cast = ev.bool(el, "castShadow", ctx, True) and (all(m.casts_shadow for m in mats) if mats else False)
     o = R.ObjDraw(el, items, inst, cast, ev.bool(el, "receiveShadow", ctx, True), occ, center, radius, mscale,
-                  temp=temp)
+                  temp=temp, item_inst=item_inst)
     o.inst_buf = ctx_gl.buffer(np.ascontiguousarray(np.transpose(inst, (0, 2, 1)).reshape(len(inst), 16),
                                                     np.float32).tobytes())
     if splats is not None:
