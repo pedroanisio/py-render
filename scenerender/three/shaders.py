@@ -164,17 +164,18 @@ vec3 envLevel(vec3 d, float lvl) {
     float v = clamp(uv.y, 0.5 / lh, 1.0 - 0.5 / lh);
     return texture(t_env, vec2(uv.x, (lvl + v) / float(u_envLevels))).rgb;
 }
+// The dome environment only: ambient light is added apart (CONVENTIONS 5.20, see the lighting sum).
 vec3 envSpec(vec3 d, float rough) {
-    if (u_hasEnv == 0) return u_ambS;
+    if (u_hasEnv == 0) return vec3(0.0);
     float l = clamp(rough, 0.0, 1.0) * float(u_envLevels - 1);
     float l0 = floor(l); float l1 = min(l0 + 1.0, float(u_envLevels - 1));
-    return mix(envLevel(d, l0), envLevel(d, l1), l - l0) * u_envSpecOn + u_ambS;
+    return mix(envLevel(d, l0), envLevel(d, l1), l - l0) * u_envSpecOn;
 }
 vec3 envIrradiance(vec3 n) {
     vec3 e = u_sh9[0] * 0.282095 + u_sh9[1] * 0.488603 * n.y + u_sh9[2] * 0.488603 * n.z + u_sh9[3] * 0.488603 * n.x
            + u_sh9[4] * 1.092548 * n.x * n.y + u_sh9[5] * 1.092548 * n.y * n.z + u_sh9[6] * 0.315392 * (3.0 * n.z * n.z - 1.0)
            + u_sh9[7] * 1.092548 * n.x * n.z + u_sh9[8] * 0.546274 * (n.x * n.x - n.y * n.y);
-    return max(e, vec3(0.0)) * u_envDiffOn + u_ambD;
+    return max(e, vec3(0.0)) * u_envDiffOn;
 }
 
 // ---------------------------------------------------------------- shadows
@@ -456,8 +457,10 @@ void main() {
         float bf = 1.0 - an * (1.0 - rough); bf = bf * bf * bf * bf;
         Rv = reflect(-V, normalize(mix(anN, N, bf)));
     }
-    vec3 iblSpec = envSpec(Rv, rough) * Fms;
-    vec3 iblDiff = envIrradiance(N) * s.diff / PI * (vec3(1.0) - Fr);
+    // Ambient light (CONVENTIONS 5.20): dielectrics take it diffusely (albedo x radiance); metals reflect it
+    // as a uniform environment, in proportion to metalness.
+    vec3 iblSpec = (envSpec(Rv, rough) + u_ambS * metal) * Fms;
+    vec3 iblDiff = envIrradiance(N) * s.diff / PI * (vec3(1.0) - Fr) + u_ambD * s.diff / PI;
     vec3 iblSheen = u_sheenCol * sheenE * envSpec(Rv, s.sheenR);
     vec3 ibl = (iblDiff * s.sheenScale + iblSheen + iblSpec * s.sheenScale) * ao;
     if (s.cc > 0.0) {
