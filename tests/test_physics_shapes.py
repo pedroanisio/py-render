@@ -185,7 +185,7 @@ def test_weld_is_rigid_and_breaks(tmp_path):
 # ---------------------------------------------------------------- soft bodies
 def test_cloth_drapes_from_pinned_top(tmp_path):
     body = ('<shape id="c" shape="rect" x="100" y="50" width="200" height="100" fill="#FFFFFFFF">'
-            '<softBody kind="cloth" pin="top" rows="6" cols="8" stiffness="200" damping="0.3" mass="0.5"/></shape>')
+            '<softBody kind="cloth" pin="top" rows="5" cols="7" stiffness="200" damping="0.3" mass="0.5"/></shape>')   # 6 x 8 points
     r = Renderer.open(scene(tmp_path, body))
     s, pw = physics.soft_world(r.rc, r.doc.ids["c"], 4.0)
     top = pw[:8]
@@ -289,3 +289,13 @@ def test_cloth_self_collision_separates_nodes(tmp_path):
     s.pos[24] = s.pos[0] + 1e-4                      # two far-apart nodes forced onto each other
     sim._soft_self(s)
     assert np.hypot(*(s.pos[24] - s.pos[0])) == pytest.approx(0.5 * s.spacing, rel=1e-3)
+
+
+def test_soft_body_lattice_counts_cells(tmp_path):
+    """5.10 / D7: rows x cols cells make a (rows + 1) x (cols + 1) lattice, for cloth and jelly."""
+    for kind in ("cloth", "jelly"):
+        body = ('<shape id="c" shape="rect" x="100" y="50" width="200" height="100" fill="#FFFFFFFF">'
+                f'<softBody kind="{kind}" pin="top" rows="3" cols="5"/></shape>')
+        r = Renderer.open(scene(tmp_path, body, name=f"{kind}.xml"))
+        s, _ = physics.soft_world(r.rc, r.doc.ids["c"], 0.0)
+        assert (s.rows, s.cols) == (4, 6)

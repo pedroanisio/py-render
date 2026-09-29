@@ -17,6 +17,11 @@ def _mask_attrs(rc, m, ctx, size):
     kind = ev.str(m, "type", ctx, "rect")
     if kind == "rect" and a.get("radius"):
         kind = "rounded-rect"
+    if kind == "star":
+        # A mask's innerRadius is a fraction of the outer ellipse, 0.5 when absent (D16; shapes use
+        # units, D27): the shared star geometry takes it in the units of the outer radius, min(w, h) / 2.
+        frac = a.get("innerRadius")
+        a = {**a, "innerRadius": (0.5 if frac is None else float(frac)) * min(w, h) / 2}
     return kind, w, h, a
 
 

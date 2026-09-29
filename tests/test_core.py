@@ -481,3 +481,23 @@ def test_clip_ends_when_its_media_runs_out(tmp_path):
     assert px(r, 1.0, 5, 5) == (0, 0, 0)                                      # then the clip has ended
     assert px(r, 3.0, 5, 15) == pytest.approx((100, 255, 0), abs=1)            # frame 4 (0.3 s) held
     assert px(r, 1.5, 5, 25)[1] == 255 and px(r, 2.0, 5, 25) == (0, 0, 0)     # two plays, then nothing
+
+
+def test_mask_star_inner_radius_is_a_fraction(tmp_path):
+    """5.15 / D16: a mask star's innerRadius is a fraction of the box's ellipse (0.5 when absent); a
+    shape star's is in units (D27)."""
+    from scenerender import masks
+    p = tmp_path / "m.xml"
+    p.write_text('''<scene version="1.1"><project width="200" height="200" fps="24" duration="1"/><composition>
+      <shape id="s" shape="rect" width="200" height="200" fill="#FFFFFFFF">
+        <mask type="star" width="200" height="200" points="5" innerRadius="0.25"/>
+        <mask type="star" width="200" height="200" points="5"/></shape>
+      </composition></scene>''')
+    r = Renderer.open(str(p))
+    ctx = Ctx(t=0.0, comp_t=0.0)
+    for m, frac in zip(r.doc.ids["s"], (0.25, 0.5)):
+        _, w, h, a = masks._mask_attrs(r.rc, m, ctx, (200, 200))
+        assert a["innerRadius"] == pytest.approx(frac * 100)
+    cmds = geometry.shape_commands("star", 200, 200, {"points": 5, "innerRadius": 20})
+    inner = [c for c in cmds if c[0] in ("M", "L")][1]
+    assert math.hypot(inner[1] - 100, inner[2] - 100) == pytest.approx(20, abs=1e-6)

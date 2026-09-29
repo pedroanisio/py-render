@@ -38,7 +38,8 @@ Rigid bodies (rigidBody)
     linearDamping/angularDamping (1/s): v /= 1 + dt*damping every step.
 
 Soft bodies (softBody)
-  * The node box becomes a rows x cols grid of point masses (@mass split evenly) simulated in the same
+  * The node box becomes a grid of rows x cols cells, (rows + 1) x (cols + 1) point masses (@mass split
+    evenly; CONVENTIONS 5.10, D7), simulated in the same
     world. jelly: structural and shear springs of @stiffness (N/m each) plus bend springs (every
     second node) of stiffness/4. cloth: structural springs of @stiffness (threads), shear springs of
     0.15*stiffness and bend springs of stiffness/50, so a pinned cloth drapes by shearing without
@@ -1182,8 +1183,8 @@ class PhysicsSim:
         ev = self.rc.ev
         c0 = self._ctx(t0)
         kind = sb.get("kind", "jelly")
-        rows = max(2, int(ev.num(sb, "rows", c0, 4)))
-        cols = max(2, int(ev.num(sb, "cols", c0, 4)))
+        rows = max(1, int(ev.num(sb, "rows", c0, 4)))
+        cols = max(1, int(ev.num(sb, "cols", c0, 4)))
         w, h = self._size(el, t0)
         if w <= 0 or h <= 0:
             warn_once("softBody", el.get("id", "?"), "node has no box; not simulated")
@@ -1211,6 +1212,7 @@ class PhysicsSim:
             rows_, cols_ = (1, n) if w >= h else (n, 1)
             neigh = 1
         else:
+            rows, cols = rows + 1, cols + 1        # rows x cols cells: a (rows + 1) x (cols + 1) lattice (5.10, D7)
             gx, gy = np.meshgrid(np.linspace(0, w, cols), np.linspace(0, h, rows))
             rest = np.stack([gx.ravel(), gy.ravel()], 1)
             idx = lambda r, c: r * cols + c  # noqa: E731
