@@ -212,3 +212,10 @@ def test_results_stay_valid_premultiplied():
         assert np.all(np.isfinite(res)), m
         assert np.all(res[..., 3] <= 1 + 1e-5) and np.all(res[..., 3] >= -1e-6), m
         assert np.all(res[..., :3] <= res[..., 3:4] + 1e-4), m
+
+
+def test_dissolve_hash_is_d14():
+    """D14: a stateless hash of (x, y, scene seed), as the C renderer's dissolve_noise computes it."""
+    xs, ys = np.array([0, 5, -3, 1919]), np.array([0, 7, 2, 1079])
+    np.testing.assert_allclose(blend._hash01(xs, ys, 42), [0.504035532, 0.65266186, 0.462154925, 0.571911156],
+                               rtol=0, atol=1e-8)

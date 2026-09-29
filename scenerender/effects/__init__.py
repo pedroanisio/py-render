@@ -111,8 +111,10 @@ class Params:
         return np.full(3, default, np.float32)
 
     def rng(self, temporal=True):
-        extra = f"{self.n('seed', 0)}:{self.ctx.frame if temporal else ''}"
-        return np.random.default_rng(self.rc.ev.seed_for(self.el, extra))
+        """Seeded draws (D24 splitmix64, scenerender.noise.Rng): the effect's seed, and the frame as
+        the channel when temporal."""
+        from ..noise import Rng
+        return Rng(self.rc.ev.seed_for(self.el, str(self.n("seed", 0))), self.ctx.frame if temporal else 0)
 
     def param(self, name, default=0.0):
         """Named param default, overridden/animated by a property on the effect.
@@ -295,8 +297,9 @@ def smoothstep(lo, hi, x):
 
 
 def _lattice(x, y, seed):
-    v = np.sin(x * 127.1 + y * 311.7 + seed % 65521) * 43758.5453
-    return v - np.floor(v)
+    """Value in [0, 1) at integer lattice points: D24's uniform(seed, 0, pack(x, y))."""
+    from ..noise import pack, uniform
+    return uniform(seed, 0, pack(x, y)).astype(np.float32)
 
 
 def value_noise(x, y, seed):

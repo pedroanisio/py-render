@@ -163,6 +163,7 @@ class RenderContext:
         self._fx_gen += 1
         self._fx_memo = {k: v for k, v in self._fx_memo.items() if v[0] >= self._fx_gen - 1}
         self.install_working_primaries()
+        blending.set_scene_seed(self.doc.seed)
         ctx = Ctx(t=t, comp_t=t, frame=frame)
         comp = self.doc.section("composition")
         out = self._frame_target()

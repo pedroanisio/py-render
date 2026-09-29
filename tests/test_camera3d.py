@@ -117,6 +117,23 @@ def test_shake_is_seeded_and_windowed(tmp_path):
     assert np.allclose(C.camera_at(a.rc, 3.0).eye, [0, 0, 800])                # [start, end)
 
 
+def test_shake_is_d24(tmp_path):
+    """D24: four fractal noise channels at x = frequency . t with @seed (else the project's): the
+    camera moves amplitude . N0 px right and amplitude . N1 px down; zoom scales by 1 + zoom . N3."""
+    from scenerender import noise
+    r = doc(tmp_path, '<camera id="c" x="160" y="90" z="-800"><shake amplitude="20" frequency="3" zoom="0.1" octaves="3"/></camera>'
+                      '<camera id="d" x="160" y="90" z="-800" start="5"/>')
+    t = 1.37
+    n = [noise.fractal(5, k, 3 * t, 3) for k in range(4)]                    # project seed 5
+    cam, still = C.camera_at(r.rc, t), C.camera_at(r.rc, 5.5)
+    assert cam.eye == pytest.approx(still.eye + [20 * n[0], -20 * n[1], 0], abs=1e-9)      # engine +y is up
+    assert cam.fpx == pytest.approx(still.fpx * (1 + 0.1 * n[3]), rel=1e-12)
+    r = doc(tmp_path, '<camera id="c" x="160" y="90" z="-800"><shake amplitude="0" rotation="4" seed="9"/></camera>'
+                      f'<camera id="d" x="160" y="90" z="-800" roll="{4 * noise.fractal(9, 2, 2 * t, 2)}" start="5"/>',
+            name="roll.xml")
+    assert C.camera_at(r.rc, t).right == pytest.approx(C.camera_at(r.rc, 5 + t).right, abs=1e-9)   # roll's sign
+
+
 def test_shutter_angle_override(tmp_path):
     r = doc(tmp_path, '<camera id="c" shutterAngle="90"/><camera id="d" start="2"/>')
     assert C.shutter_angle(r.rc, 1.0, 180.0) == 90.0

@@ -636,18 +636,27 @@ class Evaluator:
             hit = memo[key] = zlib.crc32(f"{key[0]}:{key[1]}:{key[2]}:{key[3]}".encode())
         return hit
 
+    def expression_seed(self, seed: str | None) -> int:
+        """D25 `seed`: the expression's @seed, else the project's seed."""
+        try:
+            return int(float(seed)) if seed not in (None, "") else int(self.doc.seed)
+        except (TypeError, ValueError):
+            return int(self.doc.seed)
+
     def run_expression(self, src: str, el, prop: str, ctx: Ctx, value: Any, seed: str | None = None) -> Any:
-        from . import expr
+        from . import expr, noise
         fn = expr.compile_expr(src)
-        s = self.seed_for(el, seed or prop)
+        s = self.expression_seed(seed)
+        channel = noise.channel_of(prop)
+        frame = math.floor(ctx.t * float(self.doc.fps) + 1e-9)       # D25 frame: of the node's time
         # The built-ins may be reused across evaluations (expr.builtin_functions): one set per
-        # (seed, time, value), e.g. for every instance of an instanced object at one sample time.
-        bkey = (s, ctx.t, value if isinstance(value, (int, float, str, type(None))) else None)
+        # (seed, time, property, value), e.g. for every instance of an instanced object at one sample time.
+        bkey = (s, ctx.t, channel, value if isinstance(value, (int, float, str, type(None))) else None)
         memo = self.__dict__.setdefault("_builtin_memo", {})
-        base_env = memo.get(bkey) if bkey[2] is not None or value is None else None
+        base_env = memo.get(bkey) if bkey[3] is not None or value is None else None
         if base_env is None:
-            base_env = expr.builtin_functions(s, ctx.t, value=value)
-            if bkey[2] is not None or value is None:
+            base_env = expr.builtin_functions(s, ctx.t, value=value, channel=channel, frame=frame)
+            if bkey[3] is not None or value is None:
                 if len(memo) > 4096:
                     memo.clear()
                 memo[bkey] = base_env

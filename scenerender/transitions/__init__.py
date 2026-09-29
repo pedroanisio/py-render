@@ -146,11 +146,12 @@ def color(rc, tr, ctx, default=(0.0, 0.0, 0.0, 1.0)) -> np.ndarray:
     return np.array([r * a, g * a, b * a, a], np.float32)
 
 
-def rng(rc, tr, ctx, extra: str = "", temporal: bool = True) -> np.random.Generator:
-    key = extra
-    if temporal:
-        key += f"@{int(round(ctx.comp_t * float(rc.doc.fps)))}"
-    return np.random.default_rng(rc.ev.seed_for(tr, "transition:" + key))
+def rng(rc, tr, ctx, extra: str = "", temporal: bool = True):
+    """Seeded draws (D24 splitmix64, scenerender.noise.Rng); temporal: the composition frame is the
+    channel."""
+    from ..noise import Rng
+    frame = int(round(ctx.comp_t * float(rc.doc.fps))) if temporal else 0
+    return Rng(rc.ev.seed_for(tr, "transition:" + extra), frame)
 
 
 def velocity(rc, tr, ctx) -> float:

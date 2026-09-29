@@ -26,12 +26,13 @@ from __future__ import annotations
 
 import math
 import re
-import struct
 from contextvars import ContextVar
 from functools import lru_cache
 from typing import Callable, Mapping, NamedTuple, Sequence
 
 import numpy as np
+
+from . import noise
 
 __all__ = ["ExprError", "Expr", "UNDEFINED", "compile_expr", "builtin_functions", "make_wiggle",
            "to_num", "to_str", "truthy"]
@@ -265,10 +266,10 @@ def _vmap(f: Callable[..., float], *xs: object) -> object:
 
 
 class _Ctx:
-    __slots__ = ("env", "locals", "steps", "max_steps", "draws")
+    __slots__ = ("env", "locals", "steps", "max_steps", "site")
 
     def __init__(self, env: Mapping[str, object], max_steps: int) -> None:
-        self.env, self.locals, self.steps, self.max_steps, self.draws = env, {}, 0, max_steps, 0
+        self.env, self.locals, self.steps, self.max_steps, self.site = env, {}, 0, max_steps, 0
 
     def tick(self, n: int = 1) -> None:
         self.steps += n
@@ -558,6 +559,7 @@ class _Parser:
         self.level = 0
         self.names: set[str] = set()   # identifiers the current statement reads
         self.pure = True               # ... and whether it calls only Math.* functions
+        self.random_sites = 0          # random() calls numbered in source order (D25's call site)
 
     def peek(self) -> _Tok:
         return self.toks[self.i]
@@ -775,11 +777,16 @@ class _Parser:
         if op == "(":
             if not (left.name or "").startswith("Math."):
                 self.pure = False
+            site = None
+            if left.name == "random":
+                site, self.random_sites = self.random_sites, self.random_sites + 1
             args = self.items(")")
             fns, desc = [n.fn for n in args], left.name or "expression"
 
             def call(ctx: _Ctx) -> object:
                 ctx.tick()
+                if site is not None:
+                    ctx.site = site
                 f = a(ctx)
                 if not callable(f) or isinstance(f, type):
                     raise ExprError(f"{desc} is not a function")
@@ -923,34 +930,14 @@ def compile_expr(src: str) -> Expr:
 
 
 # ---------------------------------------------------------------- deterministic helpers
-
-_M64 = (1 << 64) - 1
-
-
-def _mix64(x: int) -> int:
-    x = (x + 0x9E3779B97F4A7C15) & _M64
-    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & _M64
-    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & _M64
-    return x ^ (x >> 31)
+# Seeded functions draw from D24 (scenerender.noise): wiggle and noise from its gradient noise N,
+# random from splitmix64 (CONVENTIONS 5.19).
 
 
-def _hash01(*words: int) -> float:
-    h = 0
-    for w in words:
-        h = _mix64(h ^ (w & _M64))
-    return (h >> 11) / float(1 << 53)
-
-
-def _float_bits(x: float) -> int:
-    return struct.unpack("<Q", struct.pack("<d", float(x) + 0.0))[0]
-
-
-@lru_cache(maxsize=8192)       # one per seed in use: scenes seed elements individually
+@lru_cache(maxsize=8192)
 def _perm(seed: int) -> tuple[int, ...]:
-    p = list(range(256))
-    for i in range(255, 0, -1):
-        j = int(_hash01(seed, 0x5EED, i) * (i + 1))
-        p[i], p[j] = p[j], p[i]
+    """Permutation of 0..255 for multi-dimensional noise: Fisher-Yates over D24 draws of channel 7."""
+    p = [int(v) for v in noise.Rng(seed, 7).permutation(256)]
     return tuple(p + p)
 
 
@@ -982,9 +969,6 @@ def _perlin(p: Sequence[int], x: float, y: float, z: float) -> float:
              lerp(v, lerp(u, _grad(p[AA + 1], x, y, z - 1), _grad(p[BA + 1], x - 1, y, z - 1)),
                   lerp(u, _grad(p[AB + 1], x, y - 1, z - 1), _grad(p[BB + 1], x - 1, y - 1, z - 1))))
     return min(1.0, max(-1.0, r))
-
-
-_NOISE_OFFSET = (0.1234, 0.5678, 0.9101)  # keeps integer inputs off the lattice, where Perlin noise is 0
 
 
 def _clamp(v: float, a: float, b: float) -> float:
@@ -1034,62 +1018,73 @@ def _spring(t: object, stiffness: object = 100.0, damping: object = 10.0, mass: 
     return 1 - (r2 * math.exp(r1 * t) - r1 * math.exp(r2 * t)) / (r2 - r1)
 
 
-def make_wiggle(value: object, seed: int, time: float) -> Callable[..., object]:
-    """Return AE-style ``wiggle(freq, amp, octaves=1, ampMult=0.5, t=time)`` = value + fractal noise offset.
+def make_wiggle(value: object, seed: int, time: float, channel: int = 0) -> Callable[..., object]:
+    """Return AE-style ``wiggle(freq, amp, octaves=1, ampMult=0.5, t=time)`` (D25): value +
+    amp . sum_k ampMult^k N(seed, channel . 1024 + k, t . freq . 2^k) / sum_k ampMult^k over
+    k < octaves, N being D24's noise and channel the property's (noise.channel_of).
 
-    Each component of a list ``value`` gets an independent offset; the result is
-    smooth in ``t`` and depends only on (seed, t, arguments).
+    Component i > 0 of a list ``value`` uses channel + i . 2^16, so each moves independently.
     """
     seed, base = int(seed), _py(value)
 
     def wiggle(freq: object, amp: object, octaves: object = 1.0, amp_mult: object = 0.5,
                t: object = time) -> object:
-        perm = _perm(seed)
         f, a, m, tt, o = map(to_num, (freq, amp, amp_mult, t, octaves))
         n = int(_clamp(o, 1, MAX_OCTAVES)) if o == o else 1
 
         def offset(i: int) -> float:
-            return sum(a * m ** k * _perlin(perm, tt * f * 2 ** k + _NOISE_OFFSET[0],
-                                            i * 17.13 + k * 3.71 + _NOISE_OFFSET[1], _NOISE_OFFSET[2])
-                       for k in range(n))
+            total = weight = 0.0
+            for k in range(n):
+                total += m ** k * noise.noise1(seed, (channel + (i << 16)) * 1024 + k, tt * f * 2 ** k)
+                weight += m ** k
+            return a * (total / weight if weight != 0 else 0.0)
         if isinstance(base, list):
             return [to_num(c) + offset(i) for i, c in enumerate(base)]
         return (0.0 if base is None or base is UNDEFINED else to_num(base)) + offset(0)
     return wiggle
 
 
-def builtin_functions(seed: int, time: float, value: object = None) -> dict[str, Callable[..., object]]:
+def builtin_functions(seed: int, time: float, value: object = None, *, channel: int = 0,
+                      frame: int = 0) -> dict[str, Callable[..., object]]:
     """Pure deterministic built-ins that need no renderer state.
 
-    ``random`` draws are keyed by (seed, time, n) where n counts draws within the
-    current expression evaluation, so the returned dict may be reused across
-    evaluations. ``wiggle`` wiggles ``value`` (0 when ``None``).
+    D25: ``random()`` is uniform in [0, 1) from splitmix64 of (seed, frame, call site, channel):
+    splitmix64(seed ^ splitmix64(frame ^ splitmix64(site + channel . 2^32))), the site being the
+    call's number in source order; the same within a frame. Component i > 0 of a list draw adds
+    i . 2^48 to the site. ``noise(x)`` is N(seed, 7, x); with a y or z it is 3D Perlin noise over
+    a permutation drawn from the same hash. ``wiggle`` wiggles ``value`` (0 when ``None``) on the
+    property's noise channel. The returned dict may be reused across evaluations.
     """
-    seed, tbits = int(seed), _float_bits(time)     # the noise table is built on first use
-    fallback = [0]
+    seed, frame = int(seed), int(frame)
 
-    def draw() -> float:
+    def draw(component: int = 0) -> float:
         ctx = _CURRENT.get()
-        if ctx is None:
-            n, fallback[0] = fallback[0], fallback[0] + 1
-        else:
-            n, ctx.draws = ctx.draws, ctx.draws + 1
-        return _hash01(seed, tbits, n)
+        site = ctx.site if ctx is not None else 0
+        h = noise.hash64(seed, frame, site + (channel << 32) + (component << 48))
+        return (h >> 11) / float(1 << 53)
 
     def random(*args: object) -> object:
         if not args:
             return draw()
         if len(args) == 1:
             hi = args[0]
-            return [draw() * to_num(c) for c in hi] if isinstance(hi, list) else draw() * to_num(hi)
+            return [draw(i) * to_num(c) for i, c in enumerate(hi)] if isinstance(hi, list) else draw() * to_num(hi)
         if len(args) == 2:
-            return _vmap(lambda lo, hi: lo + draw() * (hi - lo), *args)
+            lo, hi = args
+            if isinstance(lo, list) or isinstance(hi, list):
+                n = max(len(v) for v in (lo, hi) if isinstance(v, list))
+                comp = lambda v, i: (to_num(v[i]) if i < len(v) else 0.0) if isinstance(v, list) else to_num(v)  # noqa: E731
+                return [comp(lo, i) + draw(i) * (comp(hi, i) - comp(lo, i)) for i in range(n)]
+            return to_num(lo) + draw() * (to_num(hi) - to_num(lo))
         raise ExprError("random expects (), (max) or (min, max)")
 
-    def noise(x: object = 0.0, y: object = 0.0, z: object = 0.0) -> float:
+    def noise_fn(x: object = 0.0, y: object = 0.0, z: object = 0.0) -> float:
         if isinstance(x, list):
             x, y, z = (list(x) + [0.0, 0.0, 0.0])[:3]
-        return _perlin(_perm(seed), *(to_num(c) + o for c, o in zip((x, y, z), _NOISE_OFFSET)))
+        x, y, z = to_num(x), to_num(y), to_num(z)
+        if y == 0 and z == 0:
+            return noise.noise1(seed, 7, x)
+        return _perlin(_perm(seed), x, y, z)
 
     return {
         "clamp": lambda v, a, b: _vmap(_clamp, v, a, b),
@@ -1100,7 +1095,7 @@ def builtin_functions(seed: int, time: float, value: object = None) -> dict[str,
         "easeIn": _interp(lambda u: u * u * (2 - u)),
         "easeOut": _interp(lambda u: 1 - (1 - u) ** 2 * (1 + u)),
         "spring": _spring,
-        "noise": noise,
+        "noise": noise_fn,
         "random": random,
-        "wiggle": make_wiggle(value, seed, time),
+        "wiggle": make_wiggle(value, seed, time, channel),
     }

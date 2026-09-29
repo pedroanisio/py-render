@@ -573,7 +573,8 @@ def quantize(x: np.ndarray, bits: int, dither: bool, seed: int) -> np.ndarray:
     q = float(2 ** (bits - 1))
     v = x.astype(np.float64) * (q - 1)
     if dither:
-        rng = np.random.default_rng(seed)
+        from ..noise import Rng
+        rng = Rng(seed)                     # D24 draws (CONVENTIONS 5.19)
         v = v + rng.random(v.shape) - rng.random(v.shape)
     v = np.clip(np.round(v), -q, q - 1)
     return v.astype(np.int32 if bits > 16 else np.int16)

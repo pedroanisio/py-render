@@ -109,6 +109,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from . import noise
 from .document import ln
 from .registry import FEATURES, FULL, log, warn_once
 from .values import parse_bool
@@ -130,34 +131,17 @@ CACHE_VERSION = 1
 
 
 # ====================================================================== shared utilities
-_M64 = (1 << 64) - 1
-
-
-def _mix64(z: np.ndarray) -> np.ndarray:
-    z = (z ^ (z >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
-    return z ^ (z >> np.uint64(31))
-
-
 def hash01(seed: int, ids, channel: int = 0) -> np.ndarray:
-    """Uniform [0, 1) per id: a pure function of (seed, id, channel). ids: int array."""
-    with np.errstate(over="ignore"):
-        a = np.asarray(ids, dtype=np.int64).astype(np.uint64)
-        z = a * np.uint64(0x9E3779B97F4A7C15) + np.uint64((seed * 0x632BE59BD9B4E019 + channel * 0xD1B54A32D192ED03) & _M64)
-        z = _mix64(_mix64(z))
-    return (z >> np.uint64(11)).astype(np.float64) / float(1 << 53)
+    """Uniform [0, 1) per id: D24's splitmix64 hash of (seed, channel, id). ids: int array."""
+    return noise.uniform(seed, channel, np.asarray(ids, dtype=np.int64))
 
 
-def _lattice(seed: int, ix, iy, iz) -> np.ndarray:
-    with np.errstate(over="ignore"):
-        k = (ix.astype(np.int64).astype(np.uint64) * np.uint64(0x8DA6B343)
-             ^ iy.astype(np.int64).astype(np.uint64) * np.uint64(0xD8163841)
-             ^ iz.astype(np.int64).astype(np.uint64) * np.uint64(0xCB1AB31F))
-        z = _mix64(k + np.uint64(seed & _M64) * np.uint64(0x9E3779B97F4A7C15))
-    return (z >> np.uint64(11)).astype(np.float64) / float(1 << 52) - 1.0
+def _lattice(seed: int, channel: int, ix, iy, iz) -> np.ndarray:
+    """Lattice value in [-1, 1) at integer points: 2 . uniform(seed, channel, pack(i, j, k)) - 1."""
+    return 2.0 * noise.uniform(seed, channel, noise.pack(ix, iy, iz)) - 1.0
 
 
-def vnoise(seed: int, x, y, z=0.0) -> np.ndarray:
+def vnoise(seed: int, x, y, z=0.0, channel: int = 0) -> np.ndarray:
     """Seeded smooth value noise in [-1, 1] (quintic interpolation of hashed lattice values)."""
     x, y, z = np.broadcast_arrays(np.asarray(x, np.float64), np.asarray(y, np.float64), np.asarray(z, np.float64))
     x0, y0, z0 = np.floor(x), np.floor(y), np.floor(z)
@@ -171,14 +155,16 @@ def vnoise(seed: int, x, y, z=0.0) -> np.ndarray:
             wy = uy if dy else 1 - uy
             for dx in (0, 1):
                 wx = ux if dx else 1 - ux
-                out = out + wx * wy * wz * _lattice(seed, x0 + dx, y0 + dy, z0 + dz)
+                out = out + wx * wy * wz * _lattice(seed, channel, x0 + dx, y0 + dy, z0 + dz)
     return out
 
 
-def fbm(seed: int, x, y, z=0.0, octaves: int = 2) -> np.ndarray:
+def fbm(seed: int, x, y, z=0.0, octaves: int = 2, channel: int = 0) -> np.ndarray:
+    """Fractal value noise, octaves weighted as D24's fractal (octave k: channel . 1024 + k at
+    frequency 2^k, weight 0.5^k, normalised by the weights)."""
     out, amp, norm, f = 0.0, 1.0, 0.0, 1.0
     for k in range(max(1, int(octaves))):
-        out = out + amp * vnoise(seed + 7919 * k, np.asarray(x) * f, np.asarray(y) * f, np.asarray(z) * f)
+        out = out + amp * vnoise(seed, np.asarray(x) * f, np.asarray(y) * f, np.asarray(z) * f, channel * 1024 + k)
         norm += amp
         amp *= 0.5
         f *= 2.0

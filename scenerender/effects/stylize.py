@@ -40,12 +40,13 @@ def noise(rc, e, buf, ctx, node):
 
 def _grain_field(rc, p, shape, sigma):
     """Normalized grain for this frame; motion-blur samples of one frame share it, so it is kept."""
-    seed = rc.ev.seed_for(p.el, f"{p.n('seed', 0)}:{p.ctx.frame}")
-    key = (seed, shape, sigma)
+    from ..noise import Rng
+    seed = rc.ev.seed_for(p.el, str(p.n("seed", 0)))
+    key = (seed, p.ctx.frame, shape, sigma)
     memo = rc.cache.get("film-grain")
     if memo is not None and memo[0] == key:
         return memo[1]
-    grain = np.random.default_rng(seed).standard_normal(shape).astype(np.float32)   # = normal(0, 1), faster
+    grain = Rng(seed, p.ctx.frame).standard_normal(shape).astype(np.float32)        # D24 draws, one per sample
     grain = gaussian(grain,sigma)
     # Analytic normalization avoids frame-content dependent grain strength.
     grain *= max(1,2*math.sqrt(math.pi)*sigma)

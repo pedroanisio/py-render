@@ -38,7 +38,9 @@ _GRAD3 = np.array([[1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0], [1, 0, 1], [-
 
 # ---------------------------------------------------------------- noise primitives
 def _perm(seed: int) -> np.ndarray:
-    p = np.random.default_rng(seed & 0xFFFFFFFF).permutation(256).astype(np.int32)
+    """Perlin permutation: Fisher-Yates over D24 draws (scenerender.noise.Rng, channel 0)."""
+    from ..noise import Rng
+    p = Rng(seed, 0).permutation(256).astype(np.int32)
     return np.concatenate([p, p])
 
 
@@ -68,15 +70,9 @@ def perlin3(x: np.ndarray, y: np.ndarray, z: float | np.ndarray, perm: np.ndarra
 
 
 def _hash01(i: np.ndarray, j: np.ndarray, seed: int, k: int = 0) -> np.ndarray:
-    """Deterministic integer-lattice hash in [0, 1)."""
-    h = (i.astype(np.int64) * 73856093) ^ (j.astype(np.int64) * 19349663) ^ ((seed + k * 83492791) & 0x7FFFFFFF)
-    h = h.astype(np.uint64)
-    h ^= h >> np.uint64(13)
-    h *= np.uint64(0x5BD1E995)
-    h ^= h >> np.uint64(15)
-    h *= np.uint64(0x27D4EB2D)
-    h ^= h >> np.uint64(16)
-    return (h & np.uint64(0xFFFFFF)).astype(np.float64) / float(0x1000000)
+    """Integer-lattice hash in [0, 1): D24's uniform(seed, k, pack(i, j))."""
+    from ..noise import pack, uniform
+    return uniform(seed, k, pack(i, j))
 
 
 def fbm(x, y, z, perm, octaves: int) -> np.ndarray:

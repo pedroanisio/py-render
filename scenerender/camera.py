@@ -609,22 +609,24 @@ def active_camera(rc, t: float):
 
 
 def _shake(rc, cam_el, t: float):
-    """(dx, dy, droll, dzoom) summed over the camera's shake children active at t."""
+    """(dx, dy, droll, dzoom) summed over the camera's shake children active at t (D24): four fractal
+    noise channels 0 to 3 at x = frequency . t, with @seed or the project's seed; the camera moves
+    amplitude . N0 px right and amplitude . N1 px down, rolls rotation . N2 degrees and zooms by
+    1 + zoom . N3."""
+    from . import noise
     dx = dy = dr = dz = 0.0
     ev = rc.ev
     c = _ctx(t)
-    from .physics import fbm
-    for i, sh in enumerate(s for s in cam_el if isinstance(s.tag, str) and ln(s) == "shake"):
+    for sh in (s for s in cam_el if isinstance(s.tag, str) and ln(s) == "shake"):
         s0 = ev.num(sh, "start", c, 0.0)
         e0 = ev.num(sh, "end", c, 0.0) if sh.get("end") is not None else None
         if t < s0 or (e0 is not None and t >= e0):
             continue
-        seed = int(sh.get("seed")) if sh.get("seed") else ev.seed_for(cam_el, f"shake{i}")
-        seed &= 0x7FFFFFFF
+        seed = int(sh.get("seed")) if sh.get("seed") else int(rc.doc.seed)
         f = ev.num(sh, "frequency", c, 2.0)
         oc = max(1, int(ev.num(sh, "octaves", c, 2)))
         amp = ev.num(sh, "amplitude", c, 10.0)
-        n = [float(fbm(seed + k * 101, t * f, k * 7.31, 0.0, oc)) * 1.6 for k in range(4)]
+        n = [noise.fractal(seed, k, f * t, oc) for k in range(4)]
         dx += n[0] * amp
         dy += n[1] * amp
         dr += n[2] * ev.num(sh, "rotation", c, 0.0)
@@ -649,9 +651,9 @@ def build_camera(rc, el, t: float, W: float | None = None, H: float | None = Non
     right, up, fwd = R[:, 0].copy(), R[:, 1].copy(), -R[:, 2].copy()
     sx, sy, sr, sz = _shake(rc, el, t)
     if sr:
-        right = _rot_axis(fwd, -sr, right)
-        up = _rot_axis(fwd, -sr, up)
-    eye = eye + right * sx + up * sy
+        right = _rot_axis(fwd, sr, right)          # D24: rotation . N2 degrees of roll (2.4 sign)
+        up = _rot_axis(fwd, sr, up)
+    eye = eye + right * sx - up * sy                  # N1 moves the camera down (D24); engine up is image up
     sw = ev.num(el, "sensorWidth", c, 36.0)
     if ev.explicit(el, "focalLength", c):          # horizontal fov = 2 atan(sensorWidth / (2 focalLength))
         fl = ev.num(el, "focalLength", c, 50.0)

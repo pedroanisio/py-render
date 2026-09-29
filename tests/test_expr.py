@@ -115,8 +115,9 @@ def test_random_deterministic_and_varies():
     assert a == b
     assert a[0] != a[1]
     assert 10 <= a[2] < 20 and all(0 <= c < 5 for c in a[3])
-    assert ev("random()", seed=3, time=2.0) != ev("random()", seed=3, time=2.04)
-    assert ev("random()", seed=3, time=2.0) != ev("random()", seed=4, time=2.0)
+    assert ev("random()", seed=3, time=2.0) == ev("random()", seed=3, time=2.01)     # D25: the same within a frame
+    frame = lambda f, s=3: compile_expr("random()")({**builtin_functions(s, f / 25, frame=f)})  # noqa: E731
+    assert frame(50) != frame(51) and frame(50) != frame(50, 4)
 
 
 def test_random_counter_resets_per_evaluation():
@@ -136,14 +137,43 @@ def test_noise_deterministic():
 
 def test_wiggle_deterministic_smooth_and_varies():
     w = lambda t, **kw: ev("wiggle(2, 50)", seed=9, time=t, value=[100, 200], **kw)
-    assert w(1.0) == w(1.0)
-    assert w(1.0) != w(1.5)
-    a, b = w(1.0), w(1.001)
+    assert w(1.1) == w(1.1)
+    assert w(1.1) != w(1.6)
+    a, b = w(1.1), w(1.101)
     assert all(abs(x - y) < 1 for x, y in zip(a, b))
     assert a[0] - 100 != a[1] - 200
     offsets = [ev("wiggle(2, 50, 3) - value", seed=9, time=t / 10, value=0) for t in range(100)]
     assert max(offsets) - min(offsets) > 10 and all(abs(o) < 100 for o in offsets)
     assert ev("wiggle(1, 0)", value=42) == 42
+
+
+def test_d24_noise_matches_the_c_renderer():
+    """D24's N and fractal, against values printed by c-scene-render's sr_noise1 / sr_noise_fractal."""
+    from scenerender import noise
+    assert noise.noise1(42, 3, -3.7) == 0.16165332929432666
+    assert noise.noise1(2 ** 64 - 1, 7, -0.25) == 0.076222156533711338
+    assert noise.noise1(42, 3, 12.34) == -0.027632852161746047
+    assert noise.fractal(5, 2, 0.3, 3) == 0.44358458138303408
+    assert noise.fractal(5, 2, 1000.77, 3) == 0.30878335930235412
+    import numpy as np
+    xs = np.array([-3.7, 12.34])
+    np.testing.assert_array_equal(noise.noise1(42, 3, xs), [0.16165332929432666, -0.027632852161746047])
+
+
+def test_seeded_functions_are_d24():
+    """CONVENTIONS 5.19, D24 / D25: wiggle and noise draw from N; random from splitmix64 of
+    (seed, frame, call site, property channel)."""
+    from scenerender import noise
+    assert ev("noise(x)", seed=11, x=2.3) == noise.noise1(11, 7, 2.3)
+    assert ev("noise(3)", seed=11) == 0                                         # zero at integers
+    w = compile_expr("wiggle(3, 20, 2, 0.6)")({**builtin_functions(11, 0.37, value=5, channel=1), "value": 5})
+    n = [noise.noise1(11, 1 * 1024 + k, 0.37 * 3 * 2 ** k) for k in range(2)]
+    assert w == pytest.approx(5 + 20 * (n[0] + 0.6 * n[1]) / 1.6, abs=1e-12)
+    env = {**builtin_functions(11, 2.0, channel=1, frame=50)}
+    r = compile_expr("random() + 10 * random()")(env)
+    u = [(noise.hash64(11, 50, site + (1 << 32)) >> 11) / 2 ** 53 for site in (0, 1)]
+    assert r == pytest.approx(u[0] + 10 * u[1], abs=1e-12)
+    assert noise.channel_of("y") == 1 and noise.channel_of("opacity") == 7
 
 
 def test_linear_and_ease():

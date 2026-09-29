@@ -281,7 +281,7 @@ def _instance_worlds(rc, el, ctx, n: int) -> np.ndarray | None:
         if fn is None or base is not None and type(base) is not float:
             return None
         v = fn({"time": c0.t, "frame": float(c0.frame), "index": np.arange(n, dtype=np.float64), "count": float(n),
-                "seed": float(ev.seed_for(el, a.get("seed") or prop)), "value": base}, n)
+                "seed": float(ev.expression_seed(a.get("seed"))), "value": base}, n)
         if v is None:
             return None
         vals.append(v)

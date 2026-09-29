@@ -93,29 +93,42 @@ def _behind(dst, src):
     return dst + src * (1 - dst[..., 3:4])
 
 
-def _hash01(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Stable per-pixel noise in [0, 1) from integer frame coordinates."""
-    h = (x.astype(np.uint32) * np.uint32(0x8DA6B343)) ^ (y.astype(np.uint32) * np.uint32(0xD8163841))
-    h ^= h >> np.uint32(13)
-    h *= np.uint32(0x5BD1E995)
-    h ^= h >> np.uint32(15)
-    return (h >> np.uint32(8)).astype(np.float32) / np.float32(1 << 24)
+_SCENE_SEED = [0]
+
+
+def set_scene_seed(seed: int) -> None:
+    """The project seed dissolve hashes with (set by the compositor for each frame)."""
+    _SCENE_SEED[0] = int(seed) & 0xFFFFFFFFFFFFFFFF
+
+
+def _hash01(x: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray:
+    """D14's stateless hash of (x, y, scene seed), uniform in [0, 1), as the C renderer computes it:
+    seed ^ x . 0x9E3779B97F4A7C15 ^ y . 0xC2B2AE3D27D4EB4F (x, y as unsigned 32-bit), then the
+    murmur3 64-bit finaliser; its top 24 bits over 2^24."""
+    u = np.uint64
+    with np.errstate(over="ignore"):
+        h = (u(seed) ^ ((x.astype(np.int64) & 0xFFFFFFFF).astype(u) * u(0x9E3779B97F4A7C15))
+             ^ ((y.astype(np.int64) & 0xFFFFFFFF).astype(u) * u(0xC2B2AE3D27D4EB4F)))
+        h ^= h >> u(33)
+        h *= u(0xFF51AFD7ED558CCD)
+        h ^= h >> u(33)
+        h *= u(0xC4CEB9FE1A85EC53)
+        h ^= h >> u(33)
+    return (h >> u(40)).astype(np.float32) * np.float32(1.0 / 16777216.0)
 
 
 def _dissolve(dst, src, origin=(0, 0)):
     """Each pixel shows the source at full strength when noise < source alpha, else the backdrop."""
     h, w = src.shape[:2]
     ys, xs = np.mgrid[origin[1]:origin[1] + h, origin[0]:origin[0] + w]
-    xs = xs + (1 << 20)   # keep coordinates positive for the unsigned hash
-    ys = ys + (1 << 20)
     sa = src[..., 3:4]
-    keep = (_hash01(xs, ys)[..., None] < sa) & (sa > _EPS)
+    keep = (_hash01(xs, ys, _SCENE_SEED[0])[..., None] < sa) & (sa > _EPS)
     cs = np.where(sa > _EPS, src / np.maximum(sa, _EPS), 0.0)   # straight colour with alpha 1
     return np.where(keep, cs, dst).astype(np.float32)
 
 
 _dissolve.with_origin = True
-BLENDS.register("dissolve", level=FULL, note="stable per-pixel hash noise thresholded by source alpha")(_dissolve)
+BLENDS.register("dissolve", level=FULL, note="D14 per-pixel hash of (x, y, project seed) thresholded by source alpha")(_dissolve)
 
 
 def _stencil_factor(src, mode: str) -> np.ndarray:

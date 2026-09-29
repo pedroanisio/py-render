@@ -70,7 +70,6 @@ import json
 import math
 import mimetypes
 import os
-import random
 import zipfile
 from collections import OrderedDict
 
@@ -79,6 +78,7 @@ import numpy as np
 
 from ..registry import ASSET_SIZES, ASSETS, FULL, NONE, warn_once
 from ..expr import ExprError
+from ..noise import Rng
 from ..values import parse_color
 from . import array_to_surface
 
@@ -625,7 +625,7 @@ def _selector_mult(sel: dict, ind: float, total: int, t: float, order: list[int]
     if sel.get("t") == 1:
         from ..expr import builtin_functions, compile_expr
         seconds = t / fps
-        env = {**builtin_functions(seed, seconds, value=100), "time": seconds, "frame": t,
+        env = {**builtin_functions(seed, seconds, value=100, frame=math.floor(t + 1e-9)), "time": seconds, "frame": t,
                "textIndex": ind + 1, "textTotal": total, "selectorValue": 100, "value": 100,
                "framesToTime": lambda f: f / fps, "timeToFrames": lambda s=seconds: s * fps}
         result = compile_expr(sel.get("x") or "selectorValue")(env)
@@ -937,7 +937,7 @@ def _text_doc_groups(rc, asset, d, L, doc, animators, grouping, galign, times) -
         if sel.get("rn"):
             key = based.get(sel.get("b", 1), "idx")
             order = list(range(counts[key]))
-            random.Random(rc.ev.seed_for(asset, f"lottie:{L.get('nm')}:{ai}")).shuffle(order)
+            Rng(rc.ev.seed_for(asset, f"lottie:{L.get('nm')}:{ai}")).shuffle(order)       # D24 draws
             orders.append(order)
         else:
             orders.append(None)

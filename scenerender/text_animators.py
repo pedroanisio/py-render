@@ -114,12 +114,11 @@ their offset below the first baseline.
 from __future__ import annotations
 
 import math
-import random
 import re
 
 import numpy as np
 
-from . import curves
+from . import curves, noise
 from .assets import text as T
 from .document import ln
 from .registry import FEATURES, FULL, TEXT_ANIMATORS, warn_once
@@ -198,7 +197,8 @@ def _positions(rc, an, n: int) -> np.ndarray:
     if order == "edges-in":
         return (n - 1) - np.abs(i - (n - 1) / 2.0) * 2.0
     if order == "random":
-        perm = np.random.RandomState(rc.ev.seed_for(an, "order") % (2 ** 32)).permutation(n)
+        from .noise import Rng
+        perm = Rng(rc.ev.seed_for(an, "order")).permutation(n)          # D24 draws
         return perm.astype(np.float64)
     return i
 
@@ -252,16 +252,9 @@ def range_selection(rc, an, ctx, pos: np.ndarray, n: int) -> np.ndarray:
 
 
 def _noise1(seed: int, x: np.ndarray) -> np.ndarray:
-    """Smooth value noise in [-1, 1]."""
-    i0 = np.floor(x).astype(np.int64)
-    f = x - i0
-
-    def h(i):
-        v = (i * 374761393 + seed * 668265263) & 0xFFFFFFFF
-        v = ((v ^ (v >> 13)) * 1274126177) & 0xFFFFFFFF
-        return (v & 0xFFFF) / 32767.5 - 1.0
-    u = f * f * (3 - 2 * f)
-    return h(i0) * (1 - u) + h(i0 + 1) * u
+    """Smooth noise in [-1, 1]: D24's N(seed, 0, x)."""
+    from .noise import noise1
+    return noise1(seed, 0, np.asarray(x, np.float64))
 
 
 def _timing(rc, an, ctx, preset: P | None, pos: np.ndarray):
@@ -542,10 +535,10 @@ def substitutions(rc, block, A: Anim, seed: int) -> dict[int, str]:
             continue
         k = int(round(A.st[ci].get("characterOffset", 0.0)))
         if ci in A.scramble:
-            r = random.Random(hash((seed, ci, A.scramble[ci])) & 0xFFFFFFFF)
             pool = _UPPER if c.isupper() else _DIGITS if c.isdigit() else _LOWER if c.isalpha() else None
             if pool:
-                subs[a] = r.choice(pool)
+                # D24: uniform(seed, character, tick) picks the substitute.
+                subs[a] = pool[int(noise.uniform(seed, ci, int(A.scramble[ci])) * len(pool))]
         elif k:
             n = _shift_char(c, k)
             if n != c:
