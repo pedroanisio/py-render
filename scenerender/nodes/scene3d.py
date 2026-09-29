@@ -35,14 +35,18 @@ FEATURES.declare("object3D:instances", FULL, "GPU instancing; per-copy index/cou
 FEATURES.declare("project:antialias3d", FULL, "4x MSAA plus N x N supersampling of 3D passes")
 
 
-def _dome_visible(rc) -> bool:
+def _dome_visible(rc, t: float | None = None) -> bool:
+    """Whether a dome light shows its environment (at time t: environmentVisible may be animated)."""
     from ..three import lights as L3
-    return any(L.get("type") == "dome" and parse_bool(L.get("environmentVisible")) for L in L3.light_elements(rc))
+    if t is None:
+        return any(L.get("type") == "dome" and parse_bool(L.get("environmentVisible")) for L in L3.light_elements(rc))
+    ctx = Ctx(t=t, comp_t=t)
+    return any(L.get("type") == "dome" and rc.ev.bool(L, "environmentVisible", ctx, False) for L in L3.light_elements(rc))
 
 
 @NODES.register("camera", level=FULL, note="films the 3D scene and 2.5D layers; its layer is the visible dome background")
 def render_camera(rc: RenderContext, el, ctx: Ctx, M, size):
-    if rc.cache.get("pass360") or cam3d.active_camera(rc, ctx.comp_t) is not el or not _dome_visible(rc):
+    if rc.cache.get("pass360") or cam3d.active_camera(rc, ctx.comp_t) is not el or not _dome_visible(rc, ctx.comp_t):
         return None
     from ..three import scene
     if not scene.gl_ok():
@@ -55,14 +59,40 @@ def dome_backdrop(rc: RenderContext, t: float):
     """Hook `backdrop`: without an active camera the visible dome environment is still seen, through
     the implicit camera (CONVENTIONS 5.5), beneath the whole composition (what the active camera's
     layer does in its parent buffer). None when a camera is active or no dome is visible."""
-    if rc.cache.get("pass360") or rc.scene_context is not None or not _dome_visible(rc):
+    if rc.cache.get("pass360") or rc.scene_context is not None or not _dome_visible(rc, t):
         return None
     if cam3d.active_camera(rc, t) is not None:
         return None
     from ..three import scene
     if not scene.gl_ok():
         return None
-    return scene.render_background_layer(rc, t, None)
+    # Through the implicit camera, a dome whose lights are neither animated nor constrained looks the
+    # same at every time: rendered once and reused (a GPU copy lent to each frame), until the lights change.
+    from lxml import etree
+    from ..three import lights as L3
+    els = L3.light_elements(rc)
+    moving = any(isinstance(c.tag, str) for L in els for c in L)
+    key = ("dome-backdrop", rc.width, rc.height, rc.scale, rc._gpu_frame)
+    sig = None if moving else b"".join(etree.tostring(L) for L in els)
+    hit = rc.cache.get(key)
+    if sig is not None and hit is not None and hit[0] == sig:
+        return _reuse(hit[1])
+    buf = scene.render_background_layer(rc, t, None)
+    if sig is None or buf is None:
+        return buf
+    if buf.gpu is not None:
+        buf.gpu.shared = True
+    rc.cache[key] = (sig, buf)
+    return _reuse(buf)
+
+
+def _reuse(buf):
+    """A copy of a cached backdrop its user may write into (a loan of the GPU tile, see gpucomp)."""
+    from ..raster import Buf
+    if buf.gpu is not None:
+        from .. import gpucomp
+        return gpucomp.lend(buf.gpu, buf.x0, buf.y0)
+    return Buf(buf.px.copy(), buf.x0, buf.y0)
 
 
 @NODES.register("skeleton", level=FULL, note="not drawn; bones are read by deform modifier type=skin")

@@ -62,6 +62,20 @@ class Schema:
         path = os.path.splitext(self.path)[0] + ".sch"
         if not os.path.isfile(path):
             return []  # Custom schemas need not supply the scene-render rules.
+        # The result is a function of the tree and the rules alone: kept in the user cache directory,
+        # keyed by their contents (checking a large document costs about a second).
+        import hashlib
+        with open(path, "rb") as fh:
+            rules = fh.read()
+        key = hashlib.sha256(etree.tostring(tree) + b"\0" + rules + b"\0" + str(etree.LXML_VERSION).encode()).hexdigest()
+        known = _semantic_cache().get(key)
+        if known is not None:
+            return list(known)
+        errors = self._semantic_check(tree, path)
+        _semantic_cache(key, errors)
+        return errors
+
+    def _semantic_check(self, tree, path: str) -> list[str]:
         if self._semantic_validator is None:
             from lxml.isoschematron import Schematron
             self._semantic_validator = Schematron(etree.parse(path), store_report=True)
@@ -215,3 +229,30 @@ _NAMED_KIND = {
 @lru_cache(maxsize=1)
 def default_schema() -> Schema:
     return Schema()
+
+
+def _semantic_cache(key: str | None = None, errors: list[str] | None = None) -> dict:
+    """Schematron results by document and rules digest, in $XDG_CACHE_HOME/scenerender (at most 256
+    documents); with key and errors, records one."""
+    import json
+    path = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"),
+                        "scenerender", "schematron.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    if key is not None:
+        data.pop(key, None)
+        data[key] = errors
+        while len(data) > 256:
+            data.pop(next(iter(data)))
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = f"{path}.{os.getpid()}"
+            with open(tmp, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+    return data
