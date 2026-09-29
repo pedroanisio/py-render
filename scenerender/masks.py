@@ -32,7 +32,11 @@ def mask_coverage(rc, masks, rect, ctx, M, size) -> np.ndarray:
         kind, mw, mh, a = _mask_attrs(rc, m, ctx, size)
         cmds = geometry.shape_commands(kind, mw, mh, a)
         mx, my = ev.length(m, "x", ctx, size[0]), ev.length(m, "y", ctx, size[1])
-        c = Canvas(rect)
+        # D16 / CONVENTIONS 5.15: feather is a Gaussian of standard deviation `feather`. The shape is
+        # drawn 3 sigma beyond rect so the blur sees what lies just outside it.
+        feather = ev.num(m, "feather", ctx, 0.0) * rc.scale
+        pad = int(np.ceil(3 * feather)) if feather > 0 else 0
+        c = Canvas((rect[0] - pad, rect[1] - pad, rect[2] + pad, rect[3] + pad))
         c.set_matrix(M)
         cr = c.cr
         cr.translate(mx, my)
@@ -54,10 +58,11 @@ def mask_coverage(rc, masks, rect, ctx, M, size) -> np.ndarray:
         else:
             cr.fill()
         cov = c.to_buf(False).px[..., 3]
-        feather = ev.num(m, "feather", ctx, 0.0) * rc.scale
         if feather > 0:
             from .effects import gaussian
-            cov = gaussian(cov[..., None], feather / 2)[..., 0]
+            cov = gaussian(cov[..., None], feather)[..., 0]
+        if pad:
+            cov = cov[pad:pad + h, pad:pad + w]
         if ev.bool(m, "invert", ctx):
             cov = 1 - cov
         cov = cov * ev.num(m, "opacity", ctx, 1.0)

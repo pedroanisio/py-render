@@ -428,3 +428,58 @@ def test_repeat_over_data_fills_text_templates(tmp_path):
     d = load(scene(tmp_path, body, head=head))
     texts = [d.ids[d.ids[f"L#{i}"].get("asset")].get("text") for i in range(2)]
     assert texts == ["Lamp $49 #0", "Chair $129 #1"]
+
+
+# ---------------------------------------------------------------- CONVENTIONS 5.15, 5.16, 5.21, entry 17
+def test_mask_feather_sigma_and_add(tmp_path):
+    """5.15 / D16: feather is a Gaussian of standard deviation `feather`; add is a + m - a m."""
+    body = """<shape id="f" shape="rect" width="100" height="50" fill="#FFFFFFFF">
+      <mask type="rect" x="-100" y="-100" width="150" height="300" feather="3"/>
+    </shape>
+    <shape id="a" shape="rect" y="50" width="100" height="50" fill="#FFFFFFFF">
+      <mask type="rect" x="0" y="0" width="60" height="50" mode="add" opacity="0.5"/>
+      <mask type="rect" x="40" y="0" width="60" height="50" mode="add" opacity="0.5"/>
+    </shape>"""
+    r = Renderer.open(scene(tmp_path, body))
+    row = r.frame_linear(0)[25, :, 0]
+    want = np.array([0.5 * (1 - math.erf((x + 0.5 - 50) / (3 * math.sqrt(2)))) for x in range(100)])
+    np.testing.assert_allclose(row, want, atol=0.012)
+    assert px(r, 0, 20, 75)[0] == pytest.approx(128, abs=1)
+    assert px(r, 0, 50, 75)[0] == pytest.approx(191, abs=1)                 # 0.5 + 0.5 - 0.25
+
+
+def test_rect_corner_radii_and_stroke_start():
+    """Entry 17: cornerRadii (TL TR BR BL) apply to shape="rect". 5.21: a rect's outline starts at 3
+    o'clock and runs clockwise on screen, as an ellipse's does."""
+    cmds = geometry.shape_commands("rect", 40, 20, {"cornerRadii": [8, 0, 0, 0]})
+    assert cmds[0] == ("M", 40, 10)
+    assert cmds[1][0] == "L" and cmds[1][2] > 10                                # first down the right edge
+    assert any(c[0] == "C" for c in cmds)
+    first = geometry.trim(cmds, 0, 0.05)
+    assert geometry.bounds(first)[0] == pytest.approx(40, abs=1e-6)            # trimStart at 3 o'clock
+    e = geometry.shape_commands("ellipse", 40, 20, {})
+    assert e[0][1:] == (40, 10) and e[1][-2:] == (20, 20)         # ellipse: 3 o'clock, then down
+
+
+def _sequence(tmp_path, n=10):
+    from PIL import Image
+    d = tmp_path / "seq"
+    d.mkdir(exist_ok=True)
+    for i in range(1, n + 1):
+        Image.new("RGBA", (10, 10), (25 * i, 255, 0, 255)).save(d / f"f_{i:04d}.png")
+    return f'<assets><imageSequence id="seq" src="{d}/f_%04d.png" first="1" last="{n}" fps="10" width="10" height="10"/></assets>'
+
+
+def test_clip_ends_when_its_media_runs_out(tmp_path):
+    """5.16 / D9: a clip that does not loop ends when its media runs out; freezeAt holds its source
+    time for the whole window; a finite loop ends after its last play."""
+    body = """<layer id="plain" asset="seq"/>
+    <layer id="frozen" asset="seq" y="10" freezeAt="0.3"/>
+    <layer id="looped" asset="seq" y="20" loop="1"/>
+    <layer id="forever" asset="seq" y="30" loop="-1"/>"""
+    r = Renderer.open(scene(tmp_path, body, head=_sequence(tmp_path)))
+    assert px(r, 0.95, 5, 5)[1] == 255                                       # the last frame still plays
+    assert px(r, 1.0, 5, 5) == (0, 0, 0)                                      # then the clip has ended
+    assert px(r, 3.0, 5, 15) == pytest.approx((100, 255, 0), abs=1)            # frame 4 (0.3 s) held
+    assert px(r, 1.5, 5, 25)[1] == 255 and px(r, 2.0, 5, 25) == (0, 0, 0)     # two plays, then nothing
+    assert px(r, 3.5, 5, 35)[1] == 255

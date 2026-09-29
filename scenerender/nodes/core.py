@@ -190,8 +190,10 @@ def render_shape(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
 
 
 # ================================================================ layer
-def media_time(rc: RenderContext, el, ctx: Ctx, source_duration: float | None) -> float:
-    """Layer-local time -> source time: timeRemap, else clipIn + speed/timeStretch, freezeAt, loop, reverse."""
+def media_time(rc: RenderContext, el, ctx: Ctx, source_duration: float | None) -> float | None:
+    """Layer-local time -> source time: timeRemap, else clipIn + speed/timeStretch, freezeAt, loop, reverse.
+    None once a clip that does not (or no longer) loops has run out of media (D9, CONVENTIONS 5.16):
+    the layer then draws and sounds nothing. freezeAt holds its source time for the whole window."""
     ev = rc.ev
     lt = ctx.t - rc.node_ctx(el, ctx).node_start
     tr = next((c for c in el if ln(c) == "timeRemap"), None)
@@ -200,7 +202,8 @@ def media_time(rc: RenderContext, el, ctx: Ctx, source_duration: float | None) -
         from .. import anim
         v = anim.sample(keys, lt, tr.get("defaultInterpolation", "linear"))
         return float(v) if isinstance(v, float) else lt
-    if ev.get(el, "freezeAt", ctx) is not None:
+    frozen = ev.get(el, "freezeAt", ctx) is not None
+    if frozen:
         lt = ev.num(el, "freezeAt", ctx, 0.0)
     speed = ev.num(el, "speed", ctx, 1.0) / max(1e-9, ev.num(el, "timeStretch", ctx, 1.0))
     clip_in = ev.num(el, "clipIn", ctx, 0.0)
@@ -211,6 +214,8 @@ def media_time(rc: RenderContext, el, ctx: Ctx, source_duration: float | None) -
     if span and span > 0:
         if loops != 0 and (loops < 0 or u < span * (loops + 1)):
             u = u % span
+        elif u >= span and not frozen:
+            return None
         else:
             u = min(u, span)
         if ev.bool(el, "reverse", ctx):
@@ -267,6 +272,8 @@ def render_layer(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
         from ..assets.lottie import segment_duration
         src_dur = segment_duration(rc, asset, ctx)
     src_t = media_time(rc, el, ctx, src_dur)
+    if src_t is None:
+        return None
     buf = None
     if mode == "contain-blur":
         Fc = fit_matrix(rc, el, ctx, aw, ah, box, "cover")

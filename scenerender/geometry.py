@@ -155,6 +155,27 @@ def rounded_rect(x, y, w, h, radii) -> list[Cmd]:
             ("L", x, y + tl), ("C", x, y + tl * k, x + tl * k, y, x + tl, y), ("Z",)]
 
 
+def box_outline(w, h, radii=(0.0, 0.0, 0.0, 0.0)) -> list[Cmd]:
+    """A rect shape's outline (radii TL TR BR BL, capped at half the shorter side), starting at 3
+    o'clock (the middle of the right edge) and running clockwise on screen, as ellipses do: where
+    trim and dashes start (CONVENTIONS 5.21)."""
+    tl, tr, br, bl = (max(0.0, min(r, w / 2, h / 2)) for r in radii)
+    k = 1 - KAPPA
+    out = [("M", w, h / 2), ("L", w, h - br)]
+    if br:
+        out.append(("C", w, h - br * k, w - br * k, h, w - br, h))
+    out.append(("L", bl, h))
+    if bl:
+        out.append(("C", bl * k, h, 0, h - bl * k, 0, h - bl))
+    out.append(("L", 0, tl))
+    if tl:
+        out.append(("C", 0, tl * k, tl * k, 0, tl, 0))
+    out.append(("L", w - tr, 0))
+    if tr:
+        out.append(("C", w - tr * k, 0, w, tr * k, w, tr))
+    return out + [("L", w, h / 2), ("Z",)]
+
+
 def ellipse(cx, cy, rx, ry) -> list[Cmd]:
     kx, ky = rx * KAPPA, ry * KAPPA
     return [("M", cx + rx, cy), ("C", cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry),
@@ -190,13 +211,11 @@ def star(cx, cy, n, r_out, r_in, sx=1.0, sy=1.0, round_out=0.0, round_in=0.0) ->
 
 def shape_commands(kind: str, w: float, h: float, a: dict) -> list[Cmd]:
     """Geometry for shape/vector/mask kinds in the box (0,0)-(w,h). `a` holds evaluated attributes."""
-    if kind == "rect":
-        r = a.get("radius", 0.0)
-        return rounded_rect(0, 0, w, h, [r] * 4) if r else rect(0, 0, w, h)
-    if kind == "rounded-rect":
+    if kind in ("rect", "rounded-rect"):
+        # cornerRadii (TL TR BR BL) overrides radius, on rect as on rounded-rect (XSD).
         radii = a.get("cornerRadii") or [a.get("radius", 0.0)] * 4
         radii = list(radii) + [radii[-1]] * (4 - len(radii))
-        return rounded_rect(0, 0, w, h, radii[:4])
+        return box_outline(w, h, radii[:4])
     if kind == "ellipse":
         return ellipse(w / 2, h / 2, w / 2, h / 2)
     if kind in ("polygon", "star"):

@@ -937,8 +937,12 @@ class Mixer:
                     g = vcache[ctx.scope] = self.ev.num(el, "volume", ctx, 1.0)
             if self.ev.bool(el, "mute", ctx):
                 g = 0.0
+            m = media_time(rc, el, ctx, src_dur)
+            if m is None:                   # the clip has run out of media (D9): silent, position held
+                pos[i] = pos[i - 1] if i else 0.0
+                continue
             gains[i] = g * transition_weight
-            pos[i] = media_time(rc, el, ctx, src_dur)
+            pos[i] = m
         nz = np.nonzero(gains)[0]
         if len(nz) == 0:
             return None
