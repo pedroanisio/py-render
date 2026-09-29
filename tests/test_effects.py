@@ -211,8 +211,8 @@ def test_glow_is_a_thresholded_bloom(make_renderer):
 
 def test_vignette_is_d9(make_renderer):
     """CONVENTIONS 5.8: 1 - amount . smoothstep(r0, r0 + softness, r), r over the half diagonal from the
-    frame centre, r0 = radius / half diagonal; defaults amount 0.5, radius half the half diagonal,
-    softness 0.5."""
+    frame centre, r0 = radius / half diagonal; absent attributes take the schema's effect defaults
+    (amount 1, radius 4, softness 0.1)."""
     b = solid((1, 1, 1), w=64, h=48)
     half = .5 * np.hypot(64, 48)
     y, x = np.indices((48, 64)) + .5
@@ -222,7 +222,7 @@ def test_vignette_is_d9(make_renderer):
         u = np.clip((v - lo) / (hi - lo), 0, 1)
         return u * u * (3 - 2 * u)
     got = apply(make_renderer(effect("vignette")), b).px[..., 0]
-    np.testing.assert_allclose(got, 1 - .5 * ss(.5, 1, r), atol=1e-5)
+    np.testing.assert_allclose(got, 1 - 1.0 * ss(4 / half, 4 / half + .1, r), atol=1e-5)
     got = apply(make_renderer(effect("vignette", amount=.8, radius=10, softness=.2)), b).px[..., 0]
     np.testing.assert_allclose(got, 1 - .8 * ss(10 / half, 10 / half + .2, r), atol=1e-5)
 

@@ -86,20 +86,16 @@ def halation(rc, e, buf, ctx, node):
 def vignette(rc, e, buf, ctx, node):
     """D9 / CONVENTIONS 5.8: colour moves toward `color` (black: darkening) by
     amount . smoothstep(r0, r0 + softness, r), with r the distance of the pixel centre from the frame
-    centre over the half diagonal and r0 = radius (document pixels) / half diagonal. Defaults: amount
-    0.5, radius half the half diagonal, softness 0.5. centerX / centerY (frame document pixels) move
-    the centre."""
+    centre over the half diagonal and r0 = radius (document pixels) / half diagonal. Absent attributes
+    take the schema's effect defaults (amount 1, radius 4, softness 0.1). centerX / centerY (frame
+    document pixels) move the centre."""
     p = Params(rc, e, ctx)
     s = rc.scale
     half = 0.5 * math.hypot(rc.doc.width, rc.doc.height)
     cx = p.n("centerX", rc.doc.width / 2) * s - buf.x0
     cy = p.n("centerY", rc.doc.height / 2) * s - buf.y0
-    # CONVENTIONS 5.8 gives the vignette its own defaults, in place of the effectType ones the schema
-    # declares for every effect (amount 1, radius 4, softness 0.1: a degenerate vignette).
-    def own(name, default):
-        return p.n(name, default) if rc.ev.explicit(e, name, ctx) else default
-    amount, softness = own("amount", .5), max(0.0, own("softness", .5))
-    r0 = own("radius", half / 2) / half
+    amount, softness = p.n("amount", 1.0), max(0.0, p.n("softness", 0.1))
+    r0 = p.n("radius", 4.0) / half
     # The falloff depends only on geometry and three numbers: motion-blur samples and still shots reuse it.
     key = (buf.w, buf.h, cx, cy, s, half, amount, r0, softness)
     memo = rc.cache.get("vignette")
