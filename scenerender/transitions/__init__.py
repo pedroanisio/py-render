@@ -2,19 +2,22 @@
 
 a is the outgoing node rendered to a full frame (None for an in-transition),
 b the incoming one (None for an out-transition); p is the eased progress 0..1.
-For single-node transitions the missing side is transparent, except
-dip-to-color and iris, which dip from or to their colour.
+For single-node transitions the missing side is transparent (D19: a fade in
+or out).
 
-Pinned conventions (the schema leaves them open):
-  * @direction is the direction of *motion*: "left" moves content leftwards, so
+Conventions (D19, CONVENTIONS 5.17; the types D19 does not define follow the
+same geometry):
+  * @direction is the direction of travel: "left" moves content leftwards, so
     the incoming picture enters from the right and a wipe edge travels right
     to left. "angle" uses @angle in degrees, clockwise from +x (screen right).
     3D-style transitions (cube, flip, carousel, ...) snap an angle to the
     nearest axis.
-  * @softness is the edge feather as a fraction of the transition's travel
-    (frame extent along the wipe axis, maximum radius, a full turn, ...).
+  * Masked types have a coordinate s in [0, 1] and show b where s < e - w, a
+    beyond e, and blend across [e - w, e] (smoothstep), with e = p (1 + w)
+    and w = @softness, the edge width as a fraction of the travel.
   * Optional <param> children tune individual types (count, cx, cy, radius,
-    amount); they are listed with each handler.
+    amount); they are listed with each handler. D19 does not define them, and
+    their defaults are its geometry.
 
 This package holds shared helpers; the handlers live in the sibling modules,
 which registry.load_plugins() imports.
@@ -97,12 +100,11 @@ def sstep(e0: float, e1: float, x: float) -> float:
 
 
 def edge(v, p: float, soft: float):
-    """Coverage of a front at progress p sweeping a field v normalised to [0, 1].
-
-    0 everywhere at p=0, 1 everywhere v<=1 at p=1, with a feather of width soft.
-    """
+    """Share of b at a pixel whose coordinate is v (D19): 1 - smoothstep(e - w, e, v) with
+    e = p (1 + w) and w = soft, so p = 0 is all a and p = 1 all b."""
     soft = max(soft, 1e-4)
-    return np.clip((p * (1 + soft) - v) / soft, 0.0, 1.0).astype(np.float32)
+    e = p * (1 + soft)
+    return (1 - smoothstep(e - soft, e, v)).astype(np.float32)
 
 
 # ---------------------------------------------------------------- attributes
@@ -436,14 +438,9 @@ def _box(a: np.ndarray, w: int, axis: int, clamp: bool = False) -> np.ndarray:
     return (c[tuple(hi)] - c[tuple(lo)]) * np.float32(1.0 / w)
 
 
-def luma_display(rc, px: np.ndarray) -> np.ndarray:
-    """Rec. 709 luma of the display-encoded (sRGB) straight colour, times alpha."""
-    a = px[..., 3]
-    rgb = np.where(a[..., None] > 1e-6, px[..., :3] / np.maximum(a, 1e-6)[..., None], 0.0)
-    if rc.linear:
-        from ..raster import linear_to_srgb
-        rgb = linear_to_srgb(rgb)
-    return (0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]) * a
+def luma_working(px: np.ndarray) -> np.ndarray:
+    """Rec. 709 luminance of premultiplied working-space values (D19 luma), clamped to [0, 1]."""
+    return np.clip(0.2126 * px[..., 0] + 0.7152 * px[..., 1] + 0.0722 * px[..., 2], 0.0, 1.0)
 
 
 # ---------------------------------------------------------------- basic transitions

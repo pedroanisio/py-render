@@ -303,7 +303,10 @@ def transition_window(ev, tr, ctx):
     if a is None and b is None:
         return None
     duration = float(transition_value(ev, tr, "duration", ctx, .5))
-    cut = ev.window(b, ctx)[0] if b is not None else ev.window(a, ctx)[1]
+    # D19: the cut is from's end, or to's start when there is no from (or it never ends).
+    cut = ev.window(a, ctx)[1] if a is not None else None
+    if cut is None and b is not None:
+        cut = ev.window(b, ctx)[0]
     cut = ev.doc.duration if cut is None else cut
     alignment = ev.str(tr, "alignment", ctx, "center")
     start = cut - duration / 2 if alignment == "center" else cut if alignment == "start" else cut - duration

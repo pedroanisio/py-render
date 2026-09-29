@@ -116,7 +116,7 @@ def test_instance_can_introduce_sequence_transition_and_duration(tmp_path, type)
     b = scene(tmp_path, '<instance id="i" symbol="sym"/>', before=symbol(control), name="control")
     for t in (1.2, 1.4, 1.5, 1.75, 1.2):
         np.testing.assert_array_equal(a.frame_rgba(t), b.frame_rgba(t))
-    assert a.frame_rgba(1.4)[..., 3].any()
+    assert a.frame_rgba(1.2)[..., 3].any()       # D19: the window is centred on a's end, 1.0
 
 
 @pytest.mark.parametrize("prop,base,value", [("duration", ".2", ".8"), ("alignment", "center", "end"),

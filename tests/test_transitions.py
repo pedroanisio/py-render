@@ -105,7 +105,7 @@ def test_midpoint_differs_and_is_deterministic(rig, typ):
         assert np.abs(m1 - A.px).mean() > 1e-3 or np.abs(m1 - B.px).mean() > 1e-3
 
 
-@pytest.mark.parametrize("typ", ["wipe", "push", "cover", "slide", "circle-open", "clock-wipe", "blinds", "cube", "flip"])
+@pytest.mark.parametrize("typ", ["wipe", "push", "circle-open", "clock-wipe", "blinds", "cube", "flip"])
 def test_single_sided_over_transparency(rig, typ):
     rc, _, A, B = rig
     np.testing.assert_allclose(run(rig, typ, 1.0, a=False).px, B.px, atol=2e-3)
@@ -115,20 +115,67 @@ def test_single_sided_over_transparency(rig, typ):
 
 
 def test_dip_to_color_two_and_one_sided(rig):
+    """D19: a to colour over the first half, colour to b over the second; a missing side is
+    transparent (a fade in or out through the colour)."""
     rc, _, A, B = rig
     red = np.array([1.0, 0, 0, 1.0], np.float32)          # #FF0000 is 1.0 red in linear light too
     mid = run(rig, "dip-to-color", 0.5, color="#FF0000FF").px
     np.testing.assert_allclose(mid[40, 40], red, atol=1e-5)
-    np.testing.assert_allclose(run(rig, "dip-to-color", 0.0, a=False, color="#FF0000FF").px[5, 5], red, atol=1e-5)
+    assert run(rig, "dip-to-color", 0.0, a=False, color="#FF0000FF").px[..., 3].max() == 0
+    np.testing.assert_allclose(run(rig, "dip-to-color", 0.5, a=False, color="#FF0000FF").px[5, 5], red, atol=1e-5)
     np.testing.assert_allclose(run(rig, "dip-to-color", 1.0, a=False, color="#FF0000FF").px, B.px, atol=1e-5)
-    np.testing.assert_allclose(run(rig, "dip-to-color", 1.0, b=False, color="#FF0000FF").px[5, 5], red, atol=1e-5)
+    np.testing.assert_allclose(run(rig, "dip-to-color", 0.5, b=False, color="#FF0000FF").px[5, 5], red, atol=1e-5)
+    assert run(rig, "dip-to-color", 1.0, b=False, color="#FF0000FF").px[..., 3].max() == 0
     q = run(rig, "dip-to-color", 0.25).px                  # halfway to black
     np.testing.assert_allclose(q, A.px * 0.5 + np.array([0, 0, 0, 0.5], np.float32), atol=1e-5)
 
 
-def test_iris_closes_to_color(rig):
-    mid = run(rig, "iris", 0.5, color="#00FF00FF").px
-    np.testing.assert_allclose(mid[45, 80], [0, 1, 0, 1], atol=1e-4)
+def test_d19_aliases_and_one_sided_moves(rig):
+    """D19: iris is circle-open and slide is cover; cover with only a leaves a in place, reveal with
+    only b shows b from the start."""
+    rc, _, A, B = rig
+    for p in (0.3, 0.7):
+        np.testing.assert_array_equal(run(rig, "iris", p).px, run(rig, "circle-open", p).px)
+        np.testing.assert_array_equal(run(rig, "slide", p, motionBlur="false").px,
+                                      run(rig, "cover", p, motionBlur="false").px)
+        np.testing.assert_allclose(run(rig, "cover", p, b=False, motionBlur="false").px, A.px, atol=1e-6)
+        np.testing.assert_allclose(run(rig, "reveal", p, a=False, motionBlur="false").px, B.px, atol=1e-6)
+
+
+def _share_of_b(px, A, B):
+    return (px[..., 0] - A.px[..., 0]) / (B.px[..., 0] - A.px[..., 0])
+
+
+@pytest.mark.parametrize("typ", ["wipe", "barn-door", "circle-open", "circle-close", "clock-wipe", "radial-wipe"])
+def test_d19_masked_coordinates(rig, typ):
+    """D19: each masked type shows b where s < e - w, a beyond e, with e = p (1 + w), and blends by
+    smoothstep across [e - w, e]."""
+    rc, _, A, B = rig
+    H, W = rc.height, rc.width
+    y, x = np.mgrid[0:H, 0:W] + 0.5
+    cx, cy, R = W / 2, H / 2, 0.5 * np.hypot(W, H)
+    s = {"wipe": 1 - x / W,                                        # direction left: from the right edge
+         "barn-door": np.abs(x - cx) / (W / 2),
+         "circle-open": np.hypot(x - cx, y - cy) / R,
+         "circle-close": np.hypot(x - cx, y - cy) / R,
+         "clock-wipe": np.mod(np.degrees(np.arctan2(y - cy, x - cx)) + 90, 360) / 360,
+         "radial-wipe": np.mod(np.degrees(np.arctan2(y - cy, x - cx)) - 30, 360) / 360}[typ]
+    w, p = 0.2, 0.4
+
+    def share(pp, ss):
+        e = pp * (1 + w)
+        u = np.clip((ss - (e - w)) / w, 0, 1)
+        return 1 - u * u * (3 - 2 * u)
+    want = 1 - share(1 - p, s) if typ == "circle-close" else share(p, s)
+    got = _share_of_b(run(rig, typ, p, softness=str(w), angle="30").px, A, B)
+    np.testing.assert_allclose(got, want, atol=2e-4)
+
+
+def test_luma_uses_working_space_luminance(rig):
+    """D19: luma's s is the Rec. 709 luminance of the matte's working values (here 1 left, 0 right)."""
+    rc, _, A, B = rig
+    got = _share_of_b(run(rig, "luma", 0.5, softness="0").px, A, B)
+    assert np.allclose(got[:, :80], 0) and np.allclose(got[:, 80:], 1)
 
 
 def test_wipe_direction(rig):

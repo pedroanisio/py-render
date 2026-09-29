@@ -1,9 +1,10 @@
 """2D moves: slide, push, cover, reveal, whip-pan, zoom-in, zoom-out, spin, squash, shuffle, film-roll.
 
-In one-sided transitions the picture that is present does the moving (an
-out-transition of cover/slide slides the node away; an in-transition of reveal
-slides it in). Moving pictures get a box motion blur along their path when @motionBlur is true
-(the default), sized from the eased speed and a 180-degree shutter.
+push, cover (and its alias slide) and reveal are D19's: pictures travel the frame's span along
+@direction; in one-sided transitions the missing picture is transparent, so an out-transition of
+cover leaves the node in place and an in-transition of reveal shows it from the start. Moving
+pictures get a box motion blur along their path when @motionBlur is true (the default), sized from
+the eased speed and a 180-degree shutter (D19 does not define it: set motionBlur="false" to match).
 """
 from __future__ import annotations
 
@@ -33,33 +34,17 @@ def push(rc, tr, a, b, p, ctx):
     return out(over(B2, A2))
 
 
-@TRANSITIONS.register("cover", level=FULL)
+@TRANSITIONS.register("cover", "slide", level=FULL)
 def cover(rc, tr, a, b, p, ctx):
-    """The incoming picture slides in over the stationary outgoing one."""
-    if b is None:
-        return reveal(rc, tr, a, b, p, ctx)
+    """The incoming picture slides in over the stationary outgoing one (slide is an alias, D19)."""
     A, B = arrays(rc, a, b)
     d, E, bl = _move_setup(rc, tr, ctx)
     return out(over(moved(B, d[0] * E * (p - 1), d[1] * E * (p - 1), bl, d), A))
 
 
-@TRANSITIONS.register("slide", level=FULL,
-                      note="incoming slides in over the outgoing, which drifts the same way at 30% speed (<param name='parallax'>)")
-def slide(rc, tr, a, b, p, ctx):
-    if b is None:
-        return reveal(rc, tr, a, b, p, ctx)
-    A, B = arrays(rc, a, b)
-    d, E, bl = _move_setup(rc, tr, ctx)
-    k = param(tr, "parallax", 0.3)
-    A2 = moved(A, d[0] * E * p * k, d[1] * E * p * k, bl * k, d)
-    return out(over(moved(B, d[0] * E * (p - 1), d[1] * E * (p - 1), bl, d), A2))
-
-
 @TRANSITIONS.register("reveal", level=FULL)
 def reveal(rc, tr, a, b, p, ctx):
     """The outgoing picture slides away, uncovering the stationary incoming one."""
-    if a is None:
-        return cover(rc, tr, a, b, p, ctx)
     A, B = arrays(rc, a, b)
     d, E, bl = _move_setup(rc, tr, ctx)
     return out(over(moved(A, d[0] * E * p, d[1] * E * p, bl, d), B))

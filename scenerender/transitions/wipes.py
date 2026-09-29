@@ -1,13 +1,11 @@
 """Colour dips and mask-based wipes: cut, dip-to-color, wipe, barn-door, blinds, stripe,
-circle-open, circle-close, iris, clock-wipe, radial-wipe, luma."""
+circle-open, circle-close, iris, clock-wipe, radial-wipe, luma (D19 where it defines them)."""
 from __future__ import annotations
-
-import math
 
 import numpy as np
 
 from ..registry import FULL, TRANSITIONS, warn_once
-from . import (arrays, axis_field, center, color, direction, edge, grid, luma_display, max_radius,
+from . import (arrays, axis_field, center, color, direction, edge, grid, luma_working, max_radius,
                mix, out, param, softness)
 
 
@@ -17,12 +15,8 @@ def cut(rc, tr, a, b, p, ctx):
     return out(B if p >= 0.5 else A)
 
 
-def _dip(A, B, C, p, a_present, b_present):
-    """A -> C -> B; one-sided transitions dip from or to C over the whole duration."""
-    if not a_present:
-        return mix(np.broadcast_to(C, B.shape), B, p)
-    if not b_present:
-        return mix(A, np.broadcast_to(C, A.shape), p)
+def _dip(A, B, C, p):
+    """A -> C over the first half, C -> B over the second (D19; a missing side is transparent)."""
     if p < 0.5:
         return mix(A, np.broadcast_to(C, A.shape), 2 * p)
     return mix(np.broadcast_to(C, B.shape), B, 2 * p - 1)
@@ -31,7 +25,7 @@ def _dip(A, B, C, p, a_present, b_present):
 @TRANSITIONS.register("dip-to-color", level=FULL)
 def dip_to_color(rc, tr, a, b, p, ctx):
     A, B = arrays(rc, a, b)
-    return out(_dip(A, B, color(rc, tr, ctx), p, a is not None, b is not None))
+    return out(_dip(A, B, color(rc, tr, ctx), p))
 
 
 def _masked(rc, tr, a, b, p, ctx, field, soft=None):
@@ -80,74 +74,44 @@ def _radius_field(rc, tr):
     return np.hypot(xs - cx, ys - cy) / max(1e-6, max_radius(rc, cx, cy))
 
 
-@TRANSITIONS.register("circle-open", level=FULL, note="<param> cx, cy: centre as fractions of the frame")
+@TRANSITIONS.register("circle-open", "iris", level=FULL, note="<param> cx, cy: centre as fractions of the frame")
 def circle_open(rc, tr, a, b, p, ctx):
+    """D19: s = the distance from the centre over half the diagonal (iris is an alias)."""
     return _masked(rc, tr, a, b, p, ctx, _radius_field(rc, tr))
 
 
 @TRANSITIONS.register("circle-close", level=FULL, note="<param> cx, cy: centre as fractions of the frame")
 def circle_close(rc, tr, a, b, p, ctx):
-    return _masked(rc, tr, a, b, p, ctx, 1 - _radius_field(rc, tr))
-
-
-@TRANSITIONS.register("iris", level=FULL,
-                      note="six-blade aperture closes on the outgoing picture to @color, then opens on the incoming; <param name='blades'>")
-def iris(rc, tr, a, b, p, ctx):
+    """D19: circle-open's reverse on a: a shows inside a circle closing on the centre."""
     A, B = arrays(rc, a, b)
-    C = color(rc, tr, ctx)
-    n = max(3, int(param(tr, "blades", 6)))
+    return out(mix(A, B, 1 - edge(_radius_field(rc, tr), 1 - p, softness(rc, tr, ctx))))
+
+
+def _angle_field(rc, tr, start: float):
+    """Angle clockwise on screen from the ray at `start` degrees (clockwise from +x) around the
+    centre, as a fraction of a turn in [0, 1)."""
     cx, cy = center(rc, tr)
     xs, ys = grid(rc)
-    rot = math.radians(60.0 * p)
-    th = rot + 2 * math.pi * np.arange(n) / n
-    field = np.full(xs.shape, -np.inf, np.float32)
-    for t in th:
-        field = np.maximum(field, (xs - cx) * math.cos(t) + (ys - cy) * math.sin(t))
-    corner = max(max((x - cx) * math.cos(t) + (y - cy) * math.sin(t) for t in th)
-                 for x in (0, rc.width) for y in (0, rc.height))
-    v = field / max(1e-6, corner)
-    soft = softness(rc, tr, ctx) * 0.5
-    Cf = np.broadcast_to(C, A.shape)
-    if a is None:
-        return out(mix(Cf, B, edge(v, p, soft)))
-    if b is None:
-        return out(mix(Cf, A, edge(v, 1 - p, soft)))
-    if p < 0.5:
-        return out(mix(Cf, A, edge(v, 1 - 2 * p, soft)))
-    return out(mix(Cf, B, edge(v, 2 * p - 1, soft)))
+    ang = np.degrees(np.arctan2(ys - cy, xs - cx))
+    return np.mod(ang - start, 360.0) / 360.0
 
 
-def _angle_field(rc, tr, ctx):
-    """Clockwise angle from 12 o'clock around the centre, as a fraction of a turn in [0, 1)."""
-    cx, cy = center(rc, tr)
-    xs, ys = grid(rc)
-    ang = np.arctan2(xs - cx, -(ys - cy)) / (2 * math.pi)
-    start = rc.ev.num(tr, "angle", ctx, 0.0) / 360.0 if rc.ev.str(tr, "direction", ctx, "left") == "angle" else 0.0
-    f = np.mod(ang - start, 1.0)
-    if rc.ev.str(tr, "direction", ctx, "left") in ("right", "down"):
-        f = np.mod(1.0 - f, 1.0)
-    return f
-
-
-@TRANSITIONS.register("clock-wipe", level=FULL,
-                      note="clockwise sweep from 12 o'clock (direction=angle sets the start angle, right/down sweep counter-clockwise)")
+@TRANSITIONS.register("clock-wipe", level=FULL, note="clockwise sweep from 12 o'clock (D19)")
 def clock_wipe(rc, tr, a, b, p, ctx):
-    return _masked(rc, tr, a, b, p, ctx, _angle_field(rc, tr, ctx), softness(rc, tr, ctx) * 0.25)
+    return _masked(rc, tr, a, b, p, ctx, _angle_field(rc, tr, -90.0))
 
 
-@TRANSITIONS.register("radial-wipe", level=FULL,
-                      note="sweep from 12 o'clock (or @angle) in both directions at once, meeting at the opposite side")
+@TRANSITIONS.register("radial-wipe", level=FULL, note="clockwise sweep from @angle (degrees clockwise from +x, D19)")
 def radial_wipe(rc, tr, a, b, p, ctx):
-    f = _angle_field(rc, tr, ctx)
-    v = np.minimum(f, 1 - f) * 2
-    return _masked(rc, tr, a, b, p, ctx, v, softness(rc, tr, ctx) * 0.5)
+    return _masked(rc, tr, a, b, p, ctx, _angle_field(rc, tr, rc.ev.num(tr, "angle", ctx, 0.0)))
 
 
 def matte_luma(rc, tr, ctx) -> np.ndarray | None:
-    """Display-referred luma (0..1, times alpha) of the @matte node or image asset, full frame."""
+    """D19: the Rec. 709 luminance of the @matte node's (or image asset's) premultiplied working
+    values, clamped to [0, 1], full frame."""
     from . import matte_rgba
     px = matte_rgba(rc, tr, ctx)
-    return None if px is None else np.clip(luma_display(rc, px), 0.0, 1.0)
+    return None if px is None else luma_working(px)
 
 
 @TRANSITIONS.register("luma", level=FULL,
