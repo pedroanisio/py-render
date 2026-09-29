@@ -8,8 +8,9 @@
   * camera: no geometry. The active camera's layer is the visible dome environment
     (light type="dome" environmentVisible="true") when there is one, composited with blend "behind":
     the environment is infinitely far, so it is the backdrop of everything in the camera's parent
-    buffer (nodes stacked after the camera still draw over it normally). The camera drives the 2.5D
-    projection and the 3D renderer.
+    buffer (nodes stacked after the camera still draw over it normally). Without an active camera the
+    dome is seen through the implicit camera beneath the whole composition (hook `backdrop`). The
+    camera drives the 2.5D projection and the 3D renderer.
   * skeleton: not drawn; bones are read by deform modifier type=skin.
 """
 from __future__ import annotations
@@ -30,22 +31,38 @@ for _p in ("sphere", "box", "plane", "cylinder", "cone", "torus", "capsule", "te
     FEATURES.declare(f"object3D:{_p}", FULL, "tessellated, PBR-shaded, shadowed")
 FEATURES.declare("object3D:mesh", FULL, "glTF/GLB (hierarchy, skins, clips, morphs, variants), OBJ/PLY/STL, "
                                          "USD/USDZ (incl. UsdSkel), FBX (ufbx), Gaussian splats (.splat / PLY)")
-FEATURES.declare("object3D:instances", FULL, "GPU instancing; per-copy index/count variables or a default grid")
+FEATURES.declare("object3D:instances", FULL, "GPU instancing; per-copy index/count variables")
 FEATURES.declare("project:antialias3d", FULL, "4x MSAA plus N x N supersampling of 3D passes")
+
+
+def _dome_visible(rc) -> bool:
+    from ..three import lights as L3
+    return any(L.get("type") == "dome" and parse_bool(L.get("environmentVisible")) for L in L3.light_elements(rc))
 
 
 @NODES.register("camera", level=FULL, note="films the 3D scene and 2.5D layers; its layer is the visible dome background")
 def render_camera(rc: RenderContext, el, ctx: Ctx, M, size):
-    if rc.cache.get("pass360") or cam3d.active_camera(rc, ctx.comp_t) is not el:
-        return None
-    from ..three import lights as L3
-    if not any(L.get("type") == "dome" and parse_bool(L.get("environmentVisible")) for L in L3.light_elements(rc)):
+    if rc.cache.get("pass360") or cam3d.active_camera(rc, ctx.comp_t) is not el or not _dome_visible(rc):
         return None
     from ..three import scene
     if not scene.gl_ok():
         return None
     buf = scene.render_background_layer(rc, ctx.comp_t, scene.scene_root(el))
     return None if buf is None else Out(buf, "behind", 1.0)
+
+
+def dome_backdrop(rc: RenderContext, t: float):
+    """Hook `backdrop`: without an active camera the visible dome environment is still seen, through
+    the implicit camera (CONVENTIONS 5.5), beneath the whole composition (what the active camera's
+    layer does in its parent buffer). None when a camera is active or no dome is visible."""
+    if rc.cache.get("pass360") or rc.scene_context is not None or not _dome_visible(rc):
+        return None
+    if cam3d.active_camera(rc, t) is not None:
+        return None
+    from ..three import scene
+    if not scene.gl_ok():
+        return None
+    return scene.render_background_layer(rc, t, None)
 
 
 @NODES.register("skeleton", level=FULL, note="not drawn; bones are read by deform modifier type=skin")

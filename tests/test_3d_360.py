@@ -167,3 +167,17 @@ def test_viewport_mode_films_through_the_viewport_camera(tmp_path):
     a = r.rc.render_frame(0.0).px[..., 3]
     xs = np.nonzero(a.any(0))[0]
     assert xs.mean() < 160 - 30                                        # seen from 300 px right of the sphere: left of centre
+
+
+def test_dome_is_visible_without_a_camera(tmp_path):
+    """CONVENTIONS 5.5: a visible dome is seen through the implicit camera when no camera exists,
+    exactly as through an explicit camera at the implicit camera's pose."""
+    envp = smooth_env(tmp_path)
+    lights = f'<light id="d" type="dome" environment="{envp}" environmentVisible="true"/>'
+    f = 160 / math.tan(math.radians(30))
+    bare = doc(tmp_path, '<object3D id="o" primitive="sphere" radius="1" x="-999" y="-999"/>', mode="standard",
+               lights=lights, name="a.xml").rc.render_frame(0.0).px
+    cam = doc(tmp_path, f'<camera id="c" fov="60" x="160" y="90" z="{-f}"/>', mode="standard", lights=lights,
+              name="b.xml").rc.render_frame(0.0).px
+    assert bare[..., 3].min() > 0.99
+    assert np.abs(bare - cam).max() < 1e-3

@@ -168,6 +168,11 @@ class RenderContext:
         out = self._frame_target()
         self._gpu_frame = out.gpu is not None
         out = self.render_children(comp, out, ctx, self.root_matrix, (self.doc.width, self.doc.height), 1.0)
+        backdrop = self.hooks.get("backdrop")
+        if backdrop is not None:
+            b = backdrop(self, t)          # a visible dome without an active camera (nodes/scene3d.py)
+            if b is not None:
+                out = blending.composite(out, b, "behind")
         if self.doc.reframe == "fit-blur" and self.doc.layout:
             out = self._fit_blur_backdrop(out, ctx, comp)
         for name in ("captions", "finish"):
