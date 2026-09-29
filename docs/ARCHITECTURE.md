@@ -22,7 +22,7 @@ scene.xml ─ document.load ─▶ prepared lxml tree ─ RenderContext.render_f
 | Module | Role |
 |---|---|
 | `schema.py` | Reads the XSD: element type by ancestor path, attribute simple types and defaults. Defaults and value parsing come from here, not from hand-copied tables. |
-| `document.py` | Load, validate (lenient by default; `--strict` refuses invalid docs), includes, params → variant → CLI, binds, layout/variant overrides, `{{param}}` text, repeat expansion, sequence scheduling, markers + beat grids, tokens, text-style inheritance, font registration. |
+| `document.py` | Load, validate against the XSD and the shared C/Rust Schematron (strict by default, every problem reported; `--lenient` renders invalid docs anyway), includes, params → variant → CLI, binds, layout/variant overrides, `{{param}}` text, repeat expansion, sequence scheduling, markers + beat grids, tokens, text-style inheritance, font registration. |
 | `evaluator.py` | `ev.get(el, prop, ctx)`: override → attribute → schema default, then `animate` / `link` / `motionPath` / `expression` in document order. Typed helpers `num`, `length`, `color`, `bool`, `str`. |
 | `anim.py`, `curves.py` | Keyframes, all 41 curve types, extrapolation, TCB/Catmull-Rom, spring, steps, cubic-bezier handles. |
 | `expr.py` | The expression language (safe Pratt parser; seeded random/noise/wiggle). |
