@@ -165,6 +165,32 @@ def test_constraints_3d(tmp_path):
     assert C.world3d(r.rc, ids["path"], ctx())[:3, 3] == pytest.approx([0, 90, 0])   # frame (160, 0) -> world
 
 
+@pytest.mark.parametrize("rig,cam", [('x="420" y="180" z="-554.256"', ''), ('x="320" y="180" z="-554.256"', 'x="100"')])
+def test_parent_constraint_camera_is_in_the_targets_frame(tmp_path, rig, cam):
+    """CONVENTIONS 5.4: a camera parented through transformConstraint type=parent has x/y/z in the
+    rig's frame and the frame offset is applied once: the eye is at the rig (+ its own offset)."""
+    r = doc(tmp_path, f'<object3D id="rig" primitive="sphere" radius="1" visible="false" {rig}/>'
+                      f'<camera id="cam" fov="60" {cam}><transformConstraint type="parent" target="rig"/></camera>',
+            w=640, h=360)
+    c = C.camera_at(r.rc, 0.0)
+    assert c.eye == pytest.approx([100.0, 0.0, 554.256], abs=1e-6)             # scene (420, 180, -554.256)
+    s, ok = c.project(C.frame_to_world(r.rc, np.array([420.0, 180.0]), 0.0))
+    assert ok and s == pytest.approx([320, 180], abs=1e-3)
+
+
+def test_parent_constraint_replaces_the_parent_chain(tmp_path):
+    """D23: the constrained element composes onto the target's world transform instead of its
+    @parent's; influence blends the two."""
+    r = doc(tmp_path, '<object3D id="a" primitive="sphere" x="100" y="50"/><object3D id="b" primitive="sphere" x="200" y="50"/>'
+                      '<object3D id="o" primitive="box" x="10" parent="a"><transformConstraint type="parent" target="b"/></object3D>'
+                      '<object3D id="h" primitive="box" x="10" parent="a"><transformConstraint type="parent" target="b" influence="0.5"/></object3D>')
+    ids = r.doc.ids
+    wb = C.world3d(r.rc, ids["b"], ctx())[:3, 3]
+    wa = C.world3d(r.rc, ids["a"], ctx())[:3, 3]
+    assert C.world3d(r.rc, ids["o"], ctx())[:3, 3] == pytest.approx(wb + [10, 0, 0])
+    assert C.world3d(r.rc, ids["h"], ctx())[:3, 3] == pytest.approx((wa + wb) / 2 + [10, 0, 0])
+
+
 # ---------------------------------------------------------------- 2.5D
 def _expected_corners(rc, el, M, cam, size, rxd, ryd, zd, ax, ay):
     """Independent re-derivation of the documented 2.5D convention."""

@@ -440,15 +440,17 @@ def world3d(rc, el, ctx: Ctx, local_only: bool = False, _depth: int = 0) -> np.n
                 roll = rc.ev.num(el, "roll", ctx, 0.0)
                 M[:3, :3] = look_rotation(tp - M[:3, 3]) @ rz(-roll)
     pid = rc.ev.str(el, "parent", ctx)
+    base = None           # what M's local part was composed onto: the parent's world, or the frame offset
     if pid and not local_only and _depth < 32:
         par = rc.doc.ids.get(pid)
         if par is not None and par is not el:
             pc = node_clock(rc, par, ctx.comp_t) or ctx
-            M = world3d(rc, par, pc, _depth=_depth + 1) @ M
+            base = world3d(rc, par, pc, _depth=_depth + 1)
+            M = base @ M
     if not local_only:
         for c in el:
             if isinstance(c.tag, str) and ln(c) == "transformConstraint":
-                M = apply_constraint3d(rc, c, el, M, ctx, _depth)
+                M = apply_constraint3d(rc, c, el, M, ctx, _depth, base)
     rc.frame_cache[key] = M
     return M
 
@@ -475,7 +477,11 @@ def element_world_pos(rc, el, t: float) -> np.ndarray | None:
     return _frame_of_2d(rc, el, c)[:3, 3].copy()
 
 
-def apply_constraint3d(rc, c, el, M: np.ndarray, ctx: Ctx, depth: int = 0) -> np.ndarray:
+def apply_constraint3d(rc, c, el, M: np.ndarray, ctx: Ctx, depth: int = 0, base: np.ndarray | None = None) -> np.ndarray:
+    """M after the constraint c. base is what the element's local matrix was composed onto (its
+    @parent's world matrix; None: the frame offset of a rooted element), which a `parent` constraint
+    replaces by the target's world matrix (D23, CONVENTIONS 5.4: x/y/z and the angles are then in the
+    target's frame, and the frame offset is applied once, by the target's own chain)."""
     ev = rc.ev
     typ = ev.str(c, "type", ctx)
     infl = ev.num(c, "influence", ctx, 1.0)
@@ -492,7 +498,13 @@ def apply_constraint3d(rc, c, el, M: np.ndarray, ctx: Ctx, depth: int = 0) -> np
     t, R, s = decompose(M)
     out = None
     if typ == "parent" and T is not None:
-        out = T @ M
+        if base is None:
+            W, H = frame_size(rc)
+            local = M.copy()
+            local[:3, 3] -= (-W / 2, H / 2, 0.0)
+        else:
+            local = np.linalg.inv(base) @ M
+        out = T @ local
         out[:3, 3] += off
     elif typ == "look-at" and T is not None:
         axis = "+z" if ln(el) == "object3D" else "-z"
@@ -1011,6 +1023,8 @@ def install(rc) -> None:
     rc.hooks["depth_sort"] = depth_sort
     rc.hooks["is_threed"] = is_threed
     rc.hooks["shutter_angle"] = shutter_angle
+    from .nodes.scene3d import dome_backdrop
+    rc.hooks["backdrop"] = dome_backdrop
 
 
 try:
