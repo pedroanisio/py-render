@@ -151,3 +151,17 @@ def test_hook_installed_and_softbody_reported(tmp_path, caplog):
     from scenerender.evaluator import Ctx
     assert hook(r.rc, r.doc.ids["b"], Ctx(t=1.0, comp_t=1.0)) is not None
     assert hook(r.rc, r.doc.ids["f"], Ctx(t=1.0, comp_t=1.0)) is None
+
+
+def test_radial_field_attracts_with_radius_in_metres(tmp_path):
+    """5.9 / D8: positive radial strength attracts toward (x, y); radius is in metres."""
+    fields = '<forceField id="f" type="radial" x="300" y="200" strength="5" radius="3"/>'
+    p = scene(tmp_path, BOX.format(x=75, y=175, s=50, rb='linearDamping="0" angularDamping="0"'), 'bounds="none" gravityY="0"',
+              fields)
+    r = Renderer.open(p)
+    x, y, _ = centre_px(r, "b", 0.5)
+    assert x > 100 + 20 and y == pytest.approx(200, abs=0.5)                  # pulled right: 2 m away, inside 3 m
+    far = scene(tmp_path, BOX.format(x=75, y=175, s=50, rb='linearDamping="0" angularDamping="0"'),
+                'bounds="none" gravityY="0"', fields.replace('radius="3"', 'radius="1.5"'), name="far.xml")
+    x, _, _ = centre_px(Renderer.open(far), "b", 0.5)
+    assert x == pytest.approx(100, abs=0.5)                                   # 2 m away: outside 1.5 m

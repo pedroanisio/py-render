@@ -78,12 +78,13 @@ Joints (physics/constraint); anchor = (x, y) px, else b's centre (a's centre wit
     joints) exceeds it, the constraint is removed for the rest of the simulation.
 
 Force fields (physics/forceField, `field_accel`)
-  * x, y, radius, path: composition px. Accelerations are m/s^2 for bodies and px/s^2 for particles,
-    +y up for both (forceY > 0 pushes up). falloff: with radius, (1 - d/radius)^falloff inside the
-    radius and nothing outside; without, 1/(1 + d)^falloff with d in metres. start/end: active window.
+  * x, y, path: composition px; radius: metres (D8, CONVENTIONS 5.9). Accelerations are m/s^2 for
+    bodies and px/s^2 for particles, +y up for both (forceY > 0 pushes up). falloff: with radius,
+    (1 - d/radius)^falloff inside the radius and nothing outside; without, 1/(1 + d)^falloff with d in
+    metres. start/end: active window.
   * directional: (forceX, forceY). wind: the same vector as an air velocity with seeded gusts
     (+-25 %); with strength > 0 the acceleration is strength*(wind - v) (aerodynamic drag), otherwise
-    the vector itself. radial: strength away from (x, y) (negative attracts). vortex: strength,
+    the vector itself. radial: strength toward (x, y) (positive attracts, D8). vortex: strength,
     clockwise on screen. turbulence: seeded fbm noise of period @scale metres (unit RMS) times
     strength. drag: -strength*v. attractor-path: strength toward the exact closest point of @path (the
     distance to the path drives the falloff) plus forceX along the path's tangent at that point
@@ -317,7 +318,7 @@ def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float, *, affects: str | Non
     typ = ev.str(f, "type", c)
     strength = ev.num(f, "strength", c, 0.0)
     cx, cy = ev.num(f, "x", c, 0.0), ev.num(f, "y", c, 0.0)
-    radius = ev.num(f, "radius", c, 0.0)
+    radius = ev.num(f, "radius", c, 0.0) * ppm         # metres (D8) -> px
     falloff = ev.num(f, "falloff", c, 0.0)
 
     def fall(d_px):
@@ -340,7 +341,7 @@ def field_accel(rc, f, t: float, X, Y, VX, VY, ppm: float, *, affects: str | Non
             return strength * (wx - VX) * k, strength * (wy - VY) * k
         return wx * k, wy * k
     if typ == "radial":
-        k = strength * fall(d)
+        k = -strength * fall(d)                         # positive strength attracts (D8)
         return np.where(d > 1e-9, dx / ds, 0.0) * k, np.where(d > 1e-9, dy / ds, 0.0) * k
     if typ == "vortex":
         k = strength * fall(d)
