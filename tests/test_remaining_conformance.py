@@ -355,7 +355,7 @@ def test_symbol_physics_floor_uses_its_canvas(tmp_path):
     symbols = '<symbols><symbol id="sym" width="60" height="40" duration="3">' + shape + '</symbol></symbols>'
     a = open_scene(tmp_path, '<instance id="i" symbol="sym" x="10" y="15"/>', symbols, physics)
     alpha = a.frame_rgba(2)[..., 3]
-    yy, xx = np.nonzero(alpha)
+    yy, xx = np.nonzero(alpha > 1)       # the settled box turns by ~0.02 deg: a 1/255 sliver may show
     assert xx.min() == 30 and xx.max() == 39
     assert yy.min() == pytest.approx(45, abs=1)
     assert yy.max() == pytest.approx(54, abs=1)
