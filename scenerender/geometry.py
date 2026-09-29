@@ -156,12 +156,15 @@ def rounded_rect(x, y, w, h, radii) -> list[Cmd]:
 
 
 def box_outline(w, h, radii=(0.0, 0.0, 0.0, 0.0)) -> list[Cmd]:
-    """A rect shape's outline (radii TL TR BR BL, capped at half the shorter side), starting at 3
-    o'clock (the middle of the right edge) and running clockwise on screen, as ellipses do: where
+    """A rect shape's outline (radii TL TR BR BL, capped at half the shorter side), starting at the
+    top-left corner (after its rounding) and running clockwise on screen, as SVG 2 draws a rect: where
     trim and dashes start (CONVENTIONS 5.21)."""
     tl, tr, br, bl = (max(0.0, min(r, w / 2, h / 2)) for r in radii)
     k = 1 - KAPPA
-    out = [("M", w, h / 2), ("L", w, h - br)]
+    out = [("M", tl, 0), ("L", w - tr, 0)]
+    if tr:
+        out.append(("C", w - tr * k, 0, w, tr * k, w, tr))
+    out.append(("L", w, h - br))
     if br:
         out.append(("C", w, h - br * k, w - br * k, h, w - br, h))
     out.append(("L", bl, h))
@@ -170,10 +173,7 @@ def box_outline(w, h, radii=(0.0, 0.0, 0.0, 0.0)) -> list[Cmd]:
     out.append(("L", 0, tl))
     if tl:
         out.append(("C", 0, tl * k, tl * k, 0, tl, 0))
-    out.append(("L", w - tr, 0))
-    if tr:
-        out.append(("C", w - tr * k, 0, w, tr * k, w, tr))
-    return out + [("L", w, h / 2), ("Z",)]
+    return out + [("Z",)]
 
 
 def ellipse(cx, cy, rx, ry) -> list[Cmd]:

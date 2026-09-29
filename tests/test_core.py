@@ -449,14 +449,14 @@ def test_mask_feather_sigma_and_add(tmp_path):
 
 
 def test_rect_corner_radii_and_stroke_start():
-    """Entry 17: cornerRadii (TL TR BR BL) apply to shape="rect". 5.21: a rect's outline starts at 3
-    o'clock and runs clockwise on screen, as an ellipse's does."""
+    """Entry 17: cornerRadii (TL TR BR BL) apply to shape="rect". 5.21: a rect's outline starts at its
+    top-left corner (after the rounding) and runs clockwise on screen (SVG 2); an ellipse's at 3 o'clock."""
     cmds = geometry.shape_commands("rect", 40, 20, {"cornerRadii": [8, 0, 0, 0]})
-    assert cmds[0] == ("M", 40, 10)
-    assert cmds[1][0] == "L" and cmds[1][2] > 10                                # first down the right edge
+    assert cmds[0] == ("M", 8, 0)
+    assert cmds[1] == ("L", 40, 0)                                              # first along the top edge
     assert any(c[0] == "C" for c in cmds)
     first = geometry.trim(cmds, 0, 0.05)
-    assert geometry.bounds(first)[0] == pytest.approx(40, abs=1e-6)            # trimStart at 3 o'clock
+    assert geometry.bounds(first)[1] == pytest.approx(0, abs=1e-6)             # trimStart on the top edge
     e = geometry.shape_commands("ellipse", 40, 20, {})
     assert e[0][1:] == (40, 10) and e[1][-2:] == (20, 20)         # ellipse: 3 o'clock, then down
 
