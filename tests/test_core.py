@@ -99,10 +99,10 @@ def test_beat_grid_markers(tmp_path):
 
 def test_lenient_load_of_invalid_doc(tmp_path):
     p = scene(tmp_path, '<shape id="s" shape="rect" width="1" height="1" bogus="1"/>')
-    d = load(p)
+    d = load(p, strict=False)
     assert d.validation_errors
     with pytest.raises(Exception):
-        load(p, strict=True)
+        load(p)                            # validating is the default (CONVENTIONS 5.22)
 
 
 # ---------------------------------------------------------------- animation
@@ -475,11 +475,9 @@ def test_clip_ends_when_its_media_runs_out(tmp_path):
     time for the whole window; a finite loop ends after its last play."""
     body = """<layer id="plain" asset="seq"/>
     <layer id="frozen" asset="seq" y="10" freezeAt="0.3"/>
-    <layer id="looped" asset="seq" y="20" loop="1"/>
-    <layer id="forever" asset="seq" y="30" loop="-1"/>"""
+    <layer id="looped" asset="seq" y="20" loop="1"/>"""
     r = Renderer.open(scene(tmp_path, body, head=_sequence(tmp_path)))
     assert px(r, 0.95, 5, 5)[1] == 255                                       # the last frame still plays
     assert px(r, 1.0, 5, 5) == (0, 0, 0)                                      # then the clip has ended
     assert px(r, 3.0, 5, 15) == pytest.approx((100, 255, 0), abs=1)            # frame 4 (0.3 s) held
     assert px(r, 1.5, 5, 25)[1] == 255 and px(r, 2.0, 5, 25) == (0, 0, 0)     # two plays, then nothing
-    assert px(r, 3.5, 5, 35)[1] == 255

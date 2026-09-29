@@ -39,7 +39,7 @@ class Renderer:
 
     @classmethod
     def open(cls, path: str, *, scale: float = 1.0, params: dict | None = None, variant: str | None = None,
-             layout: str | None = None, strict: bool = False, motion_blur: bool | None = None,
+             layout: str | None = None, strict: bool = True, motion_blur: bool | None = None,
              representation: str | None = None, assets_dir: str | None = None) -> "Renderer":
         load_plugins()
         doc = document.load(path, params=params, variant=variant, layout=layout, strict=strict, base=assets_dir)

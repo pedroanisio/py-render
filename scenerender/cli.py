@@ -17,7 +17,9 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--variant")
     p.add_argument("--layout")
     p.add_argument("--scale", type=float, default=1.0, help="output pixels per document pixel")
-    p.add_argument("--strict", action="store_true", help="refuse documents that fail schema validation")
+    p.add_argument("--lenient", action="store_true",
+                   help="render documents that fail schema or Schematron validation (with a warning) instead of refusing them")
+    p.add_argument("--strict", action="store_true", help=argparse.SUPPRESS)   # the default; kept for old scripts
     p.add_argument("--representation", help="preferred asset representation (e.g. proxy)")
     p.add_argument("--assets-dir", help="directory asset paths resolve against (default: the scene's directory)")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -34,7 +36,7 @@ def _params(args) -> dict[str, str]:
 def _open(args):
     from .render import Renderer
     return Renderer.open(args.scene, scale=args.scale, params=_params(args), variant=args.variant,
-                         layout=args.layout, strict=args.strict, representation=args.representation,
+                         layout=args.layout, strict=not args.lenient, representation=args.representation,
                          assets_dir=args.assets_dir)
 
 
@@ -63,7 +65,7 @@ def cmd_check(args) -> int:
     from .qa import EXIT_QA, check
     findings, text = check(args.scene, scale=args.scale, t0=args.t0, t1=args.t1,
                            open_kwargs=dict(params=_params(args), variant=args.variant, layout=args.layout,
-                                            assets_dir=args.assets_dir))
+                                            assets_dir=args.assets_dir, strict=not args.lenient))
     print(text)
     return EXIT_QA if any(f.level == "error" for f in findings) else 0
 
@@ -77,7 +79,7 @@ def cmd_validate(args) -> int:
         return 3
     if doc.validation_errors:
         print(f"{args.scene}: INVALID ({len(doc.validation_errors)} errors)")
-        for e in doc.validation_errors[: args.max_errors]:
+        for e in doc.validation_errors[: args.max_errors or None]:
             print("  line", e)
         return 3
     print(f"{args.scene}: valid scene-render {doc.root.get('version')}")
@@ -126,9 +128,9 @@ def main(argv=None) -> int:
     p.add_argument("--to", dest="t1", type=float, default=None)
     p.set_defaults(fn=cmd_check)
 
-    p = sub.add_parser("validate", help="validate against the XSD")
+    p = sub.add_parser("validate", help="validate against the XSD and the Schematron")
     p.add_argument("scene")
-    p.add_argument("--max-errors", type=int, default=30)
+    p.add_argument("--max-errors", type=int, default=0, help="list at most this many problems (default 0: all)")
     p.set_defaults(fn=cmd_validate)
 
     p = sub.add_parser("coverage", help="list which features of a document the Python renderer supports")

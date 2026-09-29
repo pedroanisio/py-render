@@ -323,7 +323,7 @@ def test_alpha_modes_and_double_sided(tmp_path):
 
 def test_transmission_refracts_the_scene_behind(tmp_path):
     body = ('<object3D x="80" y="45" id="wall" primitive="box" width="400" height="300" depth="10" z="200" material="red"/>'
-            '<object3D x="80" y="45" id="glass" primitive="sphere" radius="30" material="glass" segments="64"/>')
+            '<object3D x="80" y="45" id="ball" primitive="sphere" radius="30" material="glass" segments="64"/>')
     mats = ('<material id="red" baseColor="#FF0000FF" unlit="true"/>'
             '<material id="glass" baseColor="#FFFFFFFF" transmission="1" roughness="0" ior="1.5" thickness="0.6" {x}/>')
     clear = frame(doc(tmp_path, body, materials=mats.format(x=""), name="a.xml"))
@@ -335,7 +335,7 @@ def test_transmission_refracts_the_scene_behind(tmp_path):
                      materials=mats.format(x='dispersion="1"'), name="c.xml"))
     assert disp[..., 3].sum() > 0
     # without anything behind it the glass lets the 2D backdrop through
-    alone = frame(doc(tmp_path, '<object3D x="80" y="45" id="glass" primitive="sphere" radius="30" material="glass"/>',
+    alone = frame(doc(tmp_path, '<object3D x="80" y="45" id="ball" primitive="sphere" radius="30" material="glass"/>',
                       materials=mats.format(x=""), name="d.xml"))
     assert alone[45, 80, 3] < 0.5
 

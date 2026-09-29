@@ -131,7 +131,7 @@ def test_hinge_limits_hold(tmp_path):
     # a bar hinged to the world at its left end, falling: limited to 0..30 deg clockwise
     body = '<shape id="bar" shape="rect" x="100" y="100" width="100" height="10"><rigidBody linearDamping="0"/></shape>'
     fields = '<constraint id="h" type="hinge" a="bar" x="100" y="105" minAngle="0" maxAngle="30"/>'
-    r = Renderer.open(scene(tmp_path, body, fields=fields))
+    r = Renderer.open(scene(tmp_path, body, fields=fields), strict=False)     # a world hinge has no @b (C11)
     angs = []
     for t in np.arange(0.1, 3.0, 0.05):
         _, _, b = centre(r, "bar", t)
@@ -144,11 +144,11 @@ def test_hinge_limits_hold(tmp_path):
 def test_motor_reaches_speed_and_respects_max_force(tmp_path):
     body = '<shape id="wh" shape="ellipse" x="150" y="150" width="100" height="100"><rigidBody shape="circle" angularDamping="0"/></shape>'
     fields = '<constraint id="m" type="motor" a="wh" motorSpeed="180"/>'
-    r = Renderer.open(scene(tmp_path, body, 'gravityY="0"', fields=fields, name="m1.xml"))
+    r = Renderer.open(scene(tmp_path, body, 'gravityY="0"', fields=fields, name="m1.xml"), strict=False)   # no @b (C11)
     _, _, b = centre(r, "wh", 1.0)
     assert -math.degrees(b.w) == pytest.approx(180, rel=0.01)
     fields = '<constraint id="m" type="motor" a="wh" motorSpeed="180" maxForce="0.05"/>'
-    r = Renderer.open(scene(tmp_path, body, 'gravityY="0"', fields=fields, name="m2.xml"))
+    r = Renderer.open(scene(tmp_path, body, 'gravityY="0"', fields=fields, name="m2.xml"), strict=False)
     _, _, b = centre(r, "wh", 0.5)
     I = b.inertia
     # torque-limited spin-up: w = tau/I * t until the target is reached
@@ -158,7 +158,7 @@ def test_motor_reaches_speed_and_respects_max_force(tmp_path):
 def test_slider_keeps_axis_and_limits(tmp_path):
     body = PEND.format(x=190, y=190, rb='linearDamping="0"')
     fields = '<constraint id="s" type="slider" a="p" x="200" y="200" axisAngle="45" restLength="0.5"/>'
-    r = Renderer.open(scene(tmp_path, body, fields=fields))
+    r = Renderer.open(scene(tmp_path, body, fields=fields), strict=False)     # a world slider has no @b (C11)
     x, y, b = centre(r, "p", 2.0)
     d = np.array([x - 200, y - 200])
     u = np.array([math.cos(math.radians(45)), math.sin(math.radians(45))])

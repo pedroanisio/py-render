@@ -336,8 +336,8 @@ def _sha(p):
 
 def test_generated_cache_verification(tmp_path):
     good = _sha(os.path.join(MEDIA, "gen.png"))
-    rc = make_rc(f'<generated id="ok" kind="image" provider="p" model="m" cache="gen.png" cacheSha256="{good}"/>'
-                 f'<generated id="bad" kind="image" provider="p" model="m" cache="gen.png" cacheSha256="{"0" * 64}"/>'
+    rc = make_rc(f'<generated id="ok" kind="image" provider="p" model="m" prompt="x" cache="gen.png" cacheSha256="{good}"/>'
+                 f'<generated id="bad" kind="image" provider="p" model="m" prompt="x" cache="gen.png" cacheSha256="{"0" * 64}"/>'
                  f'<generated id="badsp" kind="speech" provider="p" model="m" cache="tone.wav" cacheSha256="{"0" * 64}"/>'
                  f'<generated id="sp" kind="speech" provider="p" model="m" cache="tone.wav" cacheSha256="{_sha(os.path.join(MEDIA, "tone.wav"))}"/>',
                  '', tmp_path)

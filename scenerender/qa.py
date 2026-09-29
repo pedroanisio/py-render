@@ -475,12 +475,14 @@ def check(path: str, *, scale: float = 0.25, t0: float | None = None, t1: float 
     kw = dict(open_kwargs or {})
     kw.setdefault("path", path)
     args = argparse.Namespace(scene=path, scale=scale, param=[], variant=kw.get("variant"), layout=kw.get("layout"),
-                              strict=False, representation=None, assets_dir=kw.get("assets_dir"), out=None, output=[],
+                              lenient=not kw.get("strict", True), representation=None, assets_dir=kw.get("assets_dir"),
+                              out=None, output=[],
                               fps=None, t0=t0, t1=t1, crf=None)
     if kw.get("params"):
         args.param = [f"{k}={v}" for k, v in kw["params"].items()]
     base = open_renderer(dict(path=path, scale=scale, params=kw.get("params") or {}, variant=kw.get("variant"),
-                              layout=kw.get("layout"), strict=False, representation=None, assets_dir=kw.get("assets_dir")))
+                              layout=kw.get("layout"), strict=kw.get("strict", True), representation=None,
+                              assets_dir=kw.get("assets_dir")))
     jobs = jobs_from_args(base, args) or [Job(name="default", path="", codec="h264", fps=base.doc.fps,
                                               t0=t0 or 0.0, t1=t1 if t1 is not None else base.doc.duration,
                                               open_kwargs=dict(path=path, scale=scale))]

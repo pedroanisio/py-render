@@ -250,7 +250,7 @@ def _base_open_kwargs(args) -> dict:
     from .cli import _params
     return dict(path=args.scene, scale=float(getattr(args, "scale", 1.0) or 1.0), params=_params(args),
                 variant=getattr(args, "variant", None), layout=getattr(args, "layout", None),
-                strict=bool(getattr(args, "strict", False)), representation=getattr(args, "representation", None),
+                strict=not getattr(args, "lenient", False), representation=getattr(args, "representation", None),
                 assets_dir=getattr(args, "assets_dir", None),
                 motion_blur=False if getattr(args, "no_motion_blur", False) else None)
 

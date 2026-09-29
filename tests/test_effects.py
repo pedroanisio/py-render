@@ -17,6 +17,8 @@ from scenerender.render import Renderer
 NS = {"xs": "http://www.w3.org/2001/XMLSchema"}
 XSD = etree.parse(str(Path(__file__).parents[1]/"schema/scene-render-1.1.xsd"))
 NAMES = XSD.xpath('//xs:complexType[@name="effectType"]/xs:attribute[@name="type"]//xs:enumeration/@value', namespaces=NS)
+# Effects the Schematron requires an input for (C19): unconfigured, they must still pass through.
+NEEDS_INPUT = {"lut", "gradient-map", "displacement-map", "shader"}
 ADDITIVE = {"lens-blur", "film-grain", "white-balance", "lighting", "echo", "exposure", "bloom", "halation", "lens-flare", "light-leak", "light-sweep", "god-rays"}
 CTX = Ctx(t=0, comp_t=0)
 
@@ -30,7 +32,7 @@ def effect(kind, **attrs):
 def make_renderer(tmp_path):
     counter = 0
 
-    def make(effects, *, linear=True, scale=1, paints="", lights="", composition=""):
+    def make(effects, *, linear=True, scale=1, paints="", lights="", composition="", strict=True):
         nonlocal counter
         counter += 1
         path = tmp_path/f"scene-{counter}.xml"
@@ -38,7 +40,7 @@ def make_renderer(tmp_path):
           <project width="64" height="48" fps="24" duration="2" seed="43" linearLight="{str(linear).lower()}"/>
           {paints}<composition>{composition}</composition>{lights}
           <effects>{effects}</effects></scene>''')
-        return Renderer.open(str(path), strict=True, scale=scale)
+        return Renderer.open(str(path), strict=strict, scale=scale)
 
     return make
 
@@ -113,7 +115,8 @@ def test_every_effect_contract(make_renderer, tmp_path, tile, kind, linear, conf
               <light id="pt" type="point" x="20" y="12" range="60"/>
               <light id="spot" type="spot" x="30" y="25" range="80"/>
               <light id="sun" type="directional" yaw="30"/></lights>'''
-    r = make_renderer(effect(kind, **attrs), linear=linear, paints=paints, lights=lights, composition=composition)
+    r = make_renderer(effect(kind, **attrs), linear=linear, paints=paints, lights=lights, composition=composition,
+                      strict=not (kind in NEEDS_INPUT and not attrs.get("src") and not attrs.get("source")))
     before = tile.px.copy()
     out = apply(r, tile)
     other = apply(r, tile)
@@ -125,7 +128,7 @@ def test_every_effect_contract(make_renderer, tmp_path, tile, kind, linear, conf
 
 @pytest.mark.parametrize("kind", NAMES)
 def test_single_pixel_transparent_tiles(make_renderer, kind):
-    r = make_renderer(effect(kind, radius=0, samples=1, offsetX=0, offsetY=0))
+    r = make_renderer(effect(kind, radius=0, samples=1, offsetX=0, offsetY=0), strict=kind not in NEEDS_INPUT)
     b = solid(alpha=0, w=1, h=1)
     assert_contract(apply(r, b), b, additive=kind in ADDITIVE)
 

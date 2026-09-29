@@ -151,11 +151,13 @@ class Document:
 
 # ====================================================================== load
 def load(path: str, *, params: dict[str, str] | None = None, variant: str | None = None,
-         layout: str | None = None, strict: bool = False, schema: Schema | None = None,
+         layout: str | None = None, strict: bool = True, schema: Schema | None = None,
          base: str | None = None, _prepare_tree: bool = True,
          _include_stack: tuple[str, ...] = ()) -> Document:
     """Load and prepare a document. `base` is the directory asset paths resolve against
-    (default: the document's own directory)."""
+    (default: the document's own directory). The document is validated against the XSD and the
+    Schematron (CONVENTIONS 5.22): strict (the default) refuses an invalid one, reporting every
+    problem; strict=False (lenient) renders it anyway with a warning."""
     schema = schema or default_schema()
     canonical = os.path.realpath(path)
     if canonical in _include_stack:
@@ -172,7 +174,9 @@ def load(path: str, *, params: dict[str, str] | None = None, variant: str | None
     doc.validation_errors.extend(schema.semantic_errors(tree))
     if doc.validation_errors:
         if strict:
-            raise SceneError("schema validation failed:\n  " + "\n  ".join(doc.validation_errors[:20]))
+            n = len(doc.validation_errors)
+            raise SceneError(f"schema validation failed ({n} problem{'s' if n > 1 else ''}):\n  "
+                             + "\n  ".join(doc.validation_errors))
         log.warning("%s: %d schema errors (lenient mode, rendering anyway); first: %s",
                     os.path.basename(path), len(doc.validation_errors), doc.validation_errors[0])
     if _prepare_tree:

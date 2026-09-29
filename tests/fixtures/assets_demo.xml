@@ -90,9 +90,9 @@
     <code id="code-128" kind="code128" data="SR-2026-000123" width="300" height="120" quietZone="10"/>
     <formula id="formula-1" tex="\mathrm{frame}(t) = f(\mathrm{scene},\ \mathrm{seed},\ t)" width="300" height="80" size="22" color="#F4F6FBFF"/>
     <formula id="formula-2" tex="e^{i\pi} + 1 = 0,\quad \sum_{k=1}^{n} k = \frac{n(n+1)}{2}" width="300" height="80" size="20" color="url(#grad-brand)"/>
-    <generated id="gen-img" kind="image" provider="demo" model="none" cache="media/gen.png"
+    <generated id="gen-img" kind="image" provider="demo" model="none" prompt="demo image" cache="media/gen.png"
                cacheSha256="12ff6898d8387f0876fdc77f4ce03356ed84bc6a09c7d43b9262a62404298ba7" width="200" height="200"/>
-    <generated id="gen-bad" kind="image" provider="demo" model="none" cache="media/gen.png"
+    <generated id="gen-bad" kind="image" provider="demo" model="none" prompt="demo image" cache="media/gen.png"
                cacheSha256="0000000000000000000000000000000000000000000000000000000000000000" width="200" height="200"/>
     <generated id="gen-voice" kind="speech" provider="demo" model="none" cache="media/tone.wav"
                cacheSha256="1b3213fa30b3d02ca93b7ec755969219b088a5cc6e0fae223027eddb64803c05" duration="1"/>

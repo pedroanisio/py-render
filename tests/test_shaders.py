@@ -24,7 +24,7 @@ SH = FIX / "shaders"
 pytestmark = pytest.mark.skipif(not gl.available(), reason="no OpenGL context")
 
 
-def make_doc(tmp_path, body="", effects="", linear=True, name="doc.xml"):
+def make_doc(tmp_path, body="", effects="", linear=True, name="doc.xml", strict=True):
     path = tmp_path / name
     path.write_text(f'''<scene version="1.1">
       <project width="96" height="64" fps="24" duration="4" seed="5" linearLight="{str(linear).lower()}"/>
@@ -34,7 +34,7 @@ def make_doc(tmp_path, body="", effects="", linear=True, name="doc.xml"):
         {body}
       </composition>
       {f"<effects>{effects}</effects>" if effects else ""}</scene>''')
-    doc = document.load(str(path))
+    doc = document.load(str(path), strict=strict)
     return RenderContext(doc, Evaluator(doc))
 
 
@@ -504,7 +504,7 @@ def test_effect_compile_error_missing_file_and_no_src_pass_through(tmp_path, til
     rc = make_doc(tmp_path, effects=f'''
       <effect id="bad" type="shader" src="{SH / 'broken.glsl'}"/>
       <effect id="missing" type="shader" src="nope.glsl"/>
-      <effect id="none" type="shader"/>''')
+      <effect id="none" type="shader"/>''', strict=False)         # a shader without @src is invalid (C19)
     with caplog.at_level(logging.WARNING):
         for eid in ("bad", "missing", "none"):
             np.testing.assert_array_equal(fx(rc, eid, tile).px, tile.px)

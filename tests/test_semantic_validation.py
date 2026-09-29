@@ -1,4 +1,5 @@
-"""XSD-valid cross-field violations must be visible to strict load and validate."""
+"""XSD-valid cross-field violations must be visible to strict load and validate. The rules are the
+Schematron of the C and Rust renderers (CONVENTIONS 5.22), whose assertion ids the messages carry."""
 import hashlib
 
 from lxml import etree
@@ -18,18 +19,17 @@ def scene(tmp_path, assets="", after="", body=""):
 
 
 @pytest.mark.parametrize("assets,after,rule", [
-    ('<text id="t" width="20" height="20" size="12" text="one"><span>two</span></text>', '', 'SR-TEXT-SOURCE'),
-    ('<text id="t" width="20" height="20" size="12"/>', '', 'SR-TEXT-SOURCE'),
-    ('', '<physics><constraint id="p" type="pin" a="one" b="two"/></physics>', 'SR-PIN-BODY'),
-    ('', '<captions><captionTrack id="c" language="en" transcribe="audio"/></captions>', 'SR-TRANSCRIPTION-CACHE'),
-    ('<imageSequence id="s" src="%d.png" first="5" last="2" fps="10" width="20" height="20"/>', '', 'SR-IMAGE-SEQUENCE-RANGE'),
+    ('<text id="t" width="20" height="20" size="12" text="one"><span>two</span></text>', '', 'C12'),
+    ('<text id="t" width="20" height="20" size="12"/>', '', 'C12'),
+    ('', '<physics><constraint id="p" type="pin" a="one" b="two" x="1" y="1"/></physics>', 'C9'),
+    ('', '<captions><captionTrack id="c" language="en" transcribe="audio"/></captions>', 'C32'),
 ])
 def test_explicit_cross_field_rules(tmp_path, assets, after, rule):
     path = scene(tmp_path, assets, after)
     default_schema().validator().assertValid(etree.parse(path))
     with pytest.raises(SceneError, match=rule):
         load(path, strict=True)
-    assert any(rule in error for error in load(path).validation_errors)
+    assert any(rule in error for error in load(path, strict=False).validation_errors)
 
 
 @pytest.mark.parametrize("content", ['text=""', 'text="hello"', '><span>hello</span></text'])
@@ -43,7 +43,7 @@ def test_generated_cache_rejects_missing_and_changed_content(tmp_path):
     cache = tmp_path / "generated.png"
     Image.new("RGB", (20, 20), "red").save(cache)
     digest = hashlib.sha256(cache.read_bytes()).hexdigest()
-    path = scene(tmp_path, f'<generated id="g" kind="image" provider="fixture" model="fixture" '
+    path = scene(tmp_path, f'<generated id="g" kind="image" provider="fixture" model="fixture" prompt="fixture" '
                  f'cache="generated.png" cacheSha256="{digest}"/>', body='<layer id="l" asset="g"/>')
     renderer = Renderer.open(path, strict=True)
     assert renderer.frame_rgba(0)[5, 5, 0] == 255
@@ -62,11 +62,12 @@ def test_generated_cache_rejects_missing_and_changed_content(tmp_path):
     '<styles><token name="red" value="#ff0000"/></styles><composition/>',
 ])
 def test_new_element_families_require_version_11(tmp_path, content):
+    """V1, V3, V4: version 1.0 documents cannot use the 1.1 sections, nodes and asset kinds."""
     path = tmp_path / 'version.xml'
     xml = '<scene version="1.0"><project width="20" height="20" fps="10" duration="2"/>' + content + '</scene>'
     path.write_text(xml)
     default_schema().validator().assertValid(etree.parse(str(path)))
-    with pytest.raises(SceneError, match='SR-VERSION-GATE'):
+    with pytest.raises(SceneError, match=r': V[134]: version="1.0" documents cannot use 1.1'):
         load(str(path), strict=True)
     path.write_text(xml.replace('version="1.0"', 'version="1.1"'))
     assert not load(str(path), strict=True).validation_errors
@@ -79,3 +80,15 @@ def test_legacy_elements_accept_new_attributes(tmp_path):
                     'alignX="center" strokePosition="inside"><animate property="x">'
                     '<key time="0" value="1"/></animate></shape></composition></scene>')
     assert not load(str(path), strict=True).validation_errors
+
+
+def test_validation_is_the_default_and_reports_every_problem(tmp_path):
+    """5.22: loading and rendering validate by default and list every problem; lenient is opt-in."""
+    path = scene(tmp_path, '<text id="t" width="20" height="20" size="12"/><text id="u" width="20" height="20" size="12"/>',
+                 '<physics><constraint id="p" type="pin" a="one" b="two" x="1" y="1"/></physics>')
+    with pytest.raises(SceneError, match=r"3 problems") as e:
+        Renderer.open(path)
+    assert str(e.value).count("C12") == 2 and "C9" in str(e.value)
+    assert len(load(path, strict=False).validation_errors) == 3
+    from scenerender.cli import main
+    assert main(["validate", path]) == 3

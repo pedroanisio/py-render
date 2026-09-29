@@ -27,11 +27,11 @@ DOC = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def make_rc(tmp_path, tracks, scale=1.0):
+def make_rc(tmp_path, tracks, scale=1.0, strict=True):
     p = tmp_path / "c.xml"
     p.write_text(DOC.format(captions=f"  <captions>{tracks}</captions>" if tracks else ""), encoding="utf-8")
-    doc = document.load(str(p))
-    assert not doc.validation_errors, doc.validation_errors[:3]
+    doc = document.load(str(p), strict=strict)
+    assert not strict or not doc.validation_errors, doc.validation_errors[:3]
     rc = RenderContext(doc, Evaluator(doc), scale=scale)
     C.install(rc)
     return rc
@@ -349,7 +349,7 @@ def test_cache_word_grouping_and_sha(tmp_path):
     (tmp_path / "cache.json").write_bytes(raw)
     sha = hashlib.sha256(raw).hexdigest()
     rc = make_rc(tmp_path, f'<captionTrack id="c" language="en" cache="cache.json" cacheSha256="{sha}"/>'
-                           f'<captionTrack id="bad" language="en" cache="cache.json" cacheSha256="{"0" * 64}"/>')
+                           f'<captionTrack id="bad" language="en" cache="cache.json" cacheSha256="{"0" * 64}"/>', strict=False)      # a cache without @transcribe has no source (C31)
     assert [c.text for c in C.track_cues(rc.doc, rc.doc.ids["c"])] == ["Hello world."]
     assert C.track_cues(rc.doc, rc.doc.ids["bad"]) == []
     assert rc.render_frame(0.5).px[..., 3].sum() > 0

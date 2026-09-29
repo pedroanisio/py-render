@@ -26,7 +26,7 @@ def doc(tmp_path, body="", *, s360='layout="equirectangular" width="256" height=
   <composition>
 {textwrap.indent(body, '    ')}
   </composition>
-  <lights>{lights}</lights>
+  {f'<lights>{lights}</lights>' if lights else ''}
 </scene>"""
     p = tmp_path / name
     p.write_text(xml)
@@ -118,9 +118,9 @@ def test_two_d_frame_on_the_front_face(tmp_path):
 
 
 def test_objects_render_all_around(tmp_path):
-    body = ('<camera x="160" y="90" id="c"/><object3D x="160" y="90" id="f" primitive="sphere" radius="80" z="600" material="u"/>'
-            '<object3D x="160" y="90" id="b" primitive="sphere" radius="80" z="-600" material="u"/>'
-            '<object3D x="160" id="up" primitive="sphere" radius="80" y="-510" material="u"/>')
+    body = ('<camera x="160" y="90" id="c"/><object3D x="160" y="90" id="f" primitive="sphere" radius="80" z="600"/>'
+            '<object3D x="160" y="90" id="b" primitive="sphere" radius="80" z="-600"/>'
+            '<object3D x="160" id="up" primitive="sphere" radius="80" y="-510"/>')
     lights = ''
     xml_mat = '<material id="u" baseColor="#FFFFFFFF" unlit="true"/>'
     r = doc(tmp_path, body, lights=lights)
@@ -135,7 +135,7 @@ def test_objects_render_all_around(tmp_path):
 
 
 def test_stereo_disparity(tmp_path):
-    body = '<camera x="160" y="90" id="c"/><object3D x="160" y="90" id="n" primitive="box" width="20" height="20" depth="20" z="80" material="u"/>'
+    body = '<camera x="160" y="90" id="c"/><object3D x="160" y="90" id="n" primitive="box" width="20" height="20" depth="20" z="80"/>'
     p = tmp_path / "s.xml"
     doc(tmp_path, body, s360='layout="equirectangular" stereo="left-right" width="512" height="128" interpupillary="0.2"',
         lights="", name="s.xml")
@@ -159,7 +159,7 @@ def test_render360_hook_installed_only_in_equirect_mode(tmp_path):
 
 def test_viewport_mode_films_through_the_viewport_camera(tmp_path):
     body = ('<camera x="160" y="90" id="main" z="-800"/><camera y="90" id="vp" active="false" x="460" z="-800"/>'
-            '<object3D x="160" y="90" id="o" primitive="sphere" radius="40" material="u"/>')
+            '<object3D x="160" y="90" id="o" primitive="sphere" radius="40"/>')
     p = tmp_path / "v.xml"
     doc(tmp_path, body, s360='viewportCamera="vp"', mode="viewport", lights="", name="v.xml")
     p.write_text(p.read_text().replace("<scene360", '<materials><material id="u" baseColor="#FFFFFFFF" unlit="true"/></materials>\n  <scene360'))
