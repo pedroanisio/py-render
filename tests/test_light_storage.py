@@ -51,7 +51,9 @@ def test_many_lights_preserve_transparency_and_transmission(tmp_path, material):
     expected = image(tmp_path, '<light id="l" type="directional" pitch="-30" intensity="2.3"/>', 'control.xml', body=body, material=material)
     actual = image(tmp_path, many, 'many.xml', body=body, material=material)
     assert expected[..., :3].max() > .01
-    np.testing.assert_allclose(actual, expected, atol=2e-6)
+    # 23 x 0.1 against 1 x 2.3 differ in summation order. The specular highlight reaches ~14, where one
+    # float32 ulp is ~9.5e-7, so an absolute 2e-6 is below the resolution there; rtol 1e-6 is ~8 ulps.
+    np.testing.assert_allclose(actual, expected, atol=2e-6, rtol=1e-6)
 
 
 @pytest.mark.skipif(not gl.available(), reason='no GL')
