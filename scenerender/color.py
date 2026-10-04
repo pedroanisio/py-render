@@ -70,6 +70,11 @@ Outputs: output.py stores (colorSpace, transfer) in rc.cache["output_color"] and
 rc.cache["output_hdr"] = {"peak": cd/m^2, "black": cd/m^2}; the hook hands the core a value it will
 sRGB-encode back to exactly the output code value. Default srgb/auto without colorManagement is a
 no-op.
+
+Speed: finish evaluates the plan through a 3D LUT baked once per RenderContext (color_lut.py:
+log-shaped 65^3 lattice, tetrahedral interpolation on the GPU or in NumPy, exact per-pixel
+fallback for rough cells and out-of-range values; within 1 8-bit code value of the exact path).
+SCENERENDER_EXACT_COLOR=1 runs process_rgb on every pixel; grade_color always does.
 """
 from __future__ import annotations
 
@@ -930,9 +935,13 @@ def _hdr_key(rc):
     return (h.get("peak"), h.get("black"))
 
 
+def _plan_key(rc) -> tuple:
+    return ("color_plan", rc.cache.get("output_color"), _hdr_key(rc), working_primaries(rc))
+
+
 def _plan(rc):
     """Precompute everything per (renderer, output colour); None = nothing to do."""
-    key = ("color_plan", rc.cache.get("output_color"), _hdr_key(rc), working_primaries(rc))
+    key = _plan_key(rc)
     if key in rc.cache:
         return rc.cache[key]
     doc = rc.doc
@@ -1093,6 +1102,57 @@ def process_rgb(rc, rgb: np.ndarray, plan) -> np.ndarray:
     return _encode_final(rc, x, wp, plan, 10000.0)
 
 
+def _lut_basis(plan) -> np.ndarray:
+    """Axes of the baked lattice: the primaries the plan first clamps in (see color_lut)."""
+    if plan["ocio"] is not None:
+        return np.eye(3)
+    if plan["tone"] != "none" and not plan["raw_view"]:
+        return matrix(plan["wp"], "srgb")
+    out_p = primaries_of(plan["space"])
+    return matrix(plan["wp"], out_p) if out_p not in (None, "xyz") else np.eye(3)
+
+
+def _fingerprint(rc, plan) -> str:
+    """Everything process_rgb(rc, ., plan) depends on, as text (the LUT disk-cache key)."""
+    looks = []
+    for lk in plan["looks"]:
+        src = lk["src"]
+        stat = (os.path.getmtime(src), os.path.getsize(src)) if src and os.path.exists(src) else None
+        cdl_ = None if lk["cdl"] is None else [np.asarray(v, np.float64).tolist() for v in lk["cdl"][:3]] + [lk["cdl"][3]]
+        looks.append((lk["id"], lk["space"], lk["mix"], cdl_, src, stat))
+    oc = plan["ocio"]
+    ocio_fp = None
+    if oc is not None:
+        cid = lambda p: p.getCacheID() if p is not None else None  # noqa: E731
+        ocio_fp = (cid(oc["in"]), [(cid(p), m) for p, m in oc["looks"]], cid(oc["out"]), cid(oc["back"]),
+                   oc["mode"], oc["display"], oc["view"])
+    ver = None
+    if oc is not None or plan["tone"] == "aces2" or any(lk["src"] for lk in plan["looks"]):
+        try:
+            ver = ocio().__version__
+        except ImportError:
+            ver = "no-ocio"
+    return repr((plan["exposure"], looks, plan["tone"], plan["space"], plan["tf"], plan["wp"],
+                 sorted(plan["hdr"].items()), plan["raw_view"], ocio_fp, ver, bool(rc.linear)))
+
+
+def _lut(rc, plan):
+    """The plan baked into a 3D LUT, once per RenderContext (and on disk across processes)."""
+    from .color_lut import ColorLUT
+    key = ("color_lut", _plan_key(rc), bool(rc.linear))
+    lut = rc.cache.get(key)
+    if lut is None:
+        fn = lambda x: process_rgb(rc, x, plan)  # noqa: E731
+        fn(np.zeros((1, 3), np.float32))         # surfaces the plan's warnings even from a cached table
+        try:
+            fp = _fingerprint(rc, plan)
+        except Exception as e:  # noqa: BLE001 — no disk cache then, bake anyway
+            log.debug("colour LUT fingerprint failed: %s", e)
+            fp = None
+        lut = rc.cache[key] = ColorLUT(fn, encoded_out=bool(rc.linear), basis=_lut_basis(plan), cache_key=fp)
+    return lut
+
+
 def _finish_px(rc, px: np.ndarray, plan) -> np.ndarray:
     a = px[..., 3:4]
     safe = np.maximum(a, 1e-6)
@@ -1112,6 +1172,9 @@ def finish(rc, buf, ctx):
         return buf
     from .raster import Buf
     px = buf.px
+    from . import color_lut
+    if not color_lut.exact_forced() and px.shape[0] * px.shape[1] >= color_lut.MIN_PIXELS:
+        return Buf(_lut(rc, plan).apply(px, rc.linear), buf.x0, buf.y0)
     # The finishing transform is per pixel, so successive renders (motion-blur samples, frames of a
     # mostly still shot) only need to grade the pixels whose premultiplied value changed.
     memo = rc.cache.get("finish-memo")
