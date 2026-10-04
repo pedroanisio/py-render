@@ -180,12 +180,29 @@ class Params:
         return self.preset_at(ctx).get(key, default)
 
 
+def _birth_seed(rc: RenderContext, el, ctx: Ctx) -> int:
+    """The emitter's seed with @seed evaluated at ctx (animated, scoped or overridden). The stream is a hash
+    of the seed's text, so an evaluated number is written the way an author writes it: a literal that
+    evaluates to the same number keeps its own text, and an integral value is "42", not the float format
+    "42.0" (which would give every emitter with a plain numeric seed a different random stream)."""
+    raw, value = el.get("seed", ""), rc.ev.str(el, "seed", ctx, "")
+    try:
+        number = float(value)
+        if raw and float(raw) == number:
+            value = raw
+        elif number.is_integer():
+            value = str(int(number))
+    except ValueError:
+        pass
+    return rc.ev.seed_for_value(el, "particles", value)
+
+
 # ====================================================================== simulation
 class Emitter:
     def __init__(self, rc: RenderContext, el, ctx: Ctx, params=None):
         self.rc, self.el = rc, el
         self.P = params or Params(rc, el, ctx)
-        self.seed = rc.ev.seed_for(el, "particles", ctx)
+        self.seed = _birth_seed(rc, el, ctx)
         clock = rc.node_ctx(el, ctx)
         s, e = clock.node_start, clock.node_end
         self.start, self.end = s, e
@@ -219,7 +236,7 @@ class Emitter:
         return self.rc.ev.context_at_local(self.el, self.ctx_base, t)
 
     def seed_at(self, ctx: Ctx) -> int:
-        return self.rc.ev.seed_for(self.el, "particles", ctx) if "seed" in self.P.animated else self.seed
+        return _birth_seed(self.rc, self.el, ctx) if "seed" in self.P.animated else self.seed
 
     def L(self, t: float) -> np.ndarray:
         return self._transforms(t)[0]

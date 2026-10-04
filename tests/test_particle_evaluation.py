@@ -304,3 +304,15 @@ def test_display_drivers_follow_each_instance_clock(tmp_path, driver):
         else:
             np.testing.assert_array_equal(frame[16, 16], [1, 0, 0, 1] if t < .5 else [0, 0, 1, 1])
             np.testing.assert_array_equal(frame[16, 80], [0, 0, 1, 1])
+
+
+@pytest.mark.parametrize('text', ['0', '7', '007', '12', '20260925'])  # xs:unsignedLong
+def test_literal_seed_keeps_the_stream_of_its_attribute_text(tmp_path, text):
+    """The stream is a hash of the seed's text: evaluating a literal must not re-format it ("7" -> "7.0", "007" -> "7"),
+    or every emitter with a numeric seed would draw different particles than ev.seed_for(emitter)."""
+    import zlib
+    r = scene(tmp_path, f'seed="{text}"', '<burst time="0" count="4"/>')
+    el = r.rc.doc.ids['p']
+    assert get_emitter(r.rc, el, Ctx(0, 0)).seed == zlib.crc32(f'3:p:{text}:particles'.encode())
+    assert get_emitter(r.rc, el, Ctx(0, 0)).seed == r.rc.ev.seed_for(el, 'particles')
+

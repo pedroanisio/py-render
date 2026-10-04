@@ -640,6 +640,9 @@ class Evaluator:
     # ------------------------------------------------------------ expressions
     def seed_for(self, el, extra: str | None = None, ctx: Ctx | None = None) -> int:
         value = el.get("seed", "") if ctx is None else self.str(el, "seed", ctx, "")
+        return self.seed_for_value(el, extra, value)
+
+    def seed_for_value(self, el, extra: str | None, value: str) -> int:
         key = (self.doc.seed, el.get("id", ""), value, extra or "")
         memo = self.__dict__.setdefault("_seed_memo", {})
         hit = memo.get(key)
