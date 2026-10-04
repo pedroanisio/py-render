@@ -1,0 +1,10 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<assets><image id="img" src="i.png" width="200" height="100"/></assets><composition>
+<group id="g" width="400" height="100">
+<layer id="cv" asset="img" fit="cover" boxWidth="100" boxHeight="100" focusX="0.2" focusY="0.9"/>
+<layer id="fl" asset="img" fit="fill" boxWidth="100" boxHeight="100"/>
+<layer id="sd" asset="img" fit="scale-down" boxWidth="500" boxHeight="500"/>
+<layer id="cb" asset="img" fit="contain-blur" boxWidth="100" boxHeight="100"/>
+<layer id="cr" asset="img" cropLeft="0.25" cropRight="0.25" flipX="true"/>
+<layer id="cf" asset="img" fit="cover" boxWidth="100" boxHeight="100" cropTop="0.5" flipY="true"/>
+</group></composition></scene>

@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<assets><image id="img" src="img.png" width="100" height="50"/></assets><composition>
+<sequence id="s" transition="crossfade" transitionDuration="1">
+        <layer id="a" asset="img" end="3"/><layer id="b" asset="img" end="3"/><layer id="c" asset="img" end="3"/>
+        <transition type="wipe" from="b" to="c" duration="2" alignment="end" curve="linear"/>
+    </sequence>
+    <layer id="m" asset="img"/><layer id="u" asset="img" matte="m"/></composition></scene>

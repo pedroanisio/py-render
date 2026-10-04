@@ -1,0 +1,2 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<composition><repeat id="a" count="300"><repeat id="b" count="300"><repeat id="c" count="300"><group id="g"/></repeat></repeat></repeat></composition></scene>

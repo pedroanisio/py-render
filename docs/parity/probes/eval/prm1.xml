@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<parameters><param id="name" type="string" default="World"/><param id="size" type="number" default="10" min="1" max="100"/><param id="t" type="time" default="00:00:01:05"/><param id="l" type="list" default="a, b ,3"/><param id="req" type="string" default="x"/>
+<data id="rows" format="csv">name,size
+Ada,20
+Linus,30</data></parameters>
+<assets><image id="img" src="img.png" width="100" height="50"/></assets><composition>
+<layer id="a" asset="img"><expression property="x">param("size")+param("t")*100</expression></layer></composition></scene>

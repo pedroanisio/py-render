@@ -1,0 +1,5 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<composition>
+<group id="g" layout="row" gap="10" justify="center" alignItems="center">
+ <shape id="a" shape="rect" width="20" height="10"/><shape id="b" shape="rect" width="30" height="20"/>
+</group></composition></scene>

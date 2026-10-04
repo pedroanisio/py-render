@@ -1,0 +1,4 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<assets><image id="img" src="img.png" width="100" height="50"/></assets><composition>
+<repeat id="r" count="3" opacity="0.8" opacityStep="0.25" scaleStep="1.5" rotationStep="10" offsetX="10"><layer id="l" asset="img" x="5" scaleX="2"/></repeat>
+</composition></scene>

@@ -1,0 +1,5 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="12"/>
+<assets><image id="img" src="i.png" width="1" height="1"/></assets><markers><marker id="m" time="6"/><marker id="m2" time="7"/></markers><composition>
+<sequence id="s" start="1">
+ <layer id="a" asset="img" end="2"/><layer id="b" asset="img" startMarker="m" endMarker="m2"/><layer id="c" asset="img" end="1"/>
+</sequence></composition></scene>

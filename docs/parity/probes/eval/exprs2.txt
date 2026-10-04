@@ -1,0 +1,22 @@
+0 ?? 3
+1 < 2 < 3
+3 > 2 > 1
+"b" > "a"
+null == undefined
+null === undefined
+NaN == NaN
+1e3
+0x10
+.5
+5.
+1_000
+valueAtTime(0.5)
+loopOut()
+loopIn("pingpong")
+prop("b.x")
+prop("b.y")+1
+prop("a.x")
+markerTime("zz")
+beat()
+audioAmplitude("zz")
+geo("m",0,0)

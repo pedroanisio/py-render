@@ -1,0 +1,44 @@
+1 + /* c */ 2
+1 + 2 // trailing
+x = 3; x
+let x = 3; x **= 2; x
+let x = 3; x -= 1; x /= 2; x %= 5; x
+let x = [1,2]; x[0] = 5; x[0]
+[1,2]?.length
+undefined?.length ?? 9
+var x = 1, y = 2; x + y
+let x = 1; { let x = 2; } x
+if (1) 4
+if (time > 1) 10; else 20;
+if (time > 1) { x = 1 } else { x = 2 } x
+return 7
+let x = 3; return x*2; 99
+let x; x
+"a" "b"
+(1,2)
+[1,2,3].indexOf(2)
+"abc".toUpperCase()
+"abc".slice(1)
+[1,2,3].map(v=>v*2)
+typeof time
+time === time ? 1 : 0
+1 +
+[1,2,3][1
+Math.foo(1)
+foo(1)
+Math.sin()
+Math.sin(1,2)
+clamp(1,2)
+wiggle(1)
+markerTime(zz)
+param()
+`tpl`
+a.b.c
+2**-1
+1 <<  2
+5 & 3
+~5
+5 | 3
+void 0
+x++
+new Foo()

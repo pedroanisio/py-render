@@ -1,0 +1,9 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10" safeArea="sa"/><safeAreas><safeArea id="sa" top="0.1" right="0.1" bottom="0.1" left="0.1"/></safeAreas>
+<assets><image id="img" src="img.png" width="100" height="50"/></assets>
+<composition>
+<group id="row" x="100" y="100" width="400" height="100" layout="row" gap="10" padding="5" justify="center" alignItems="center">
+ <layer id="a" asset="img"/><layer id="b" asset="img" fit="cover" boxWidth="50" boxHeight="50"/>
+</group>
+<layer id="r" asset="img" alignX="right" alignY="bottom" alignTo="safe-area"/>
+<layer id="c" asset="img" alignX="center" alignY="middle" alignTo="frame"/>
+</composition></scene>

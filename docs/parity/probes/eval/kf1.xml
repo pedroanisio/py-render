@@ -1,0 +1,12 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10" seed="1"/>
+<assets><image id="img" src="img.png" width="100" height="50"/></assets>
+<composition>
+<layer id="l" asset="img" start="2" x="5">
+        <animate property="opacity"><key time="2" value="0"/><key time="4" value="1"/></animate>
+        <animate property="position"><key time="2" value="0,0%"/><key time="4" value="100,100%"/></animate>
+        <animate property="rotation" timeBase="local"><key time="0" value="0"/><key time="1" value="90"/></animate>
+        <animate property="scaleX" timeBase="normalized"><key time="0" value="1"/><key time="1" value="3"/></animate>
+</layer>
+<layer id="add" asset="img" x="100"><animate property="x" additive="true"><key time="0" value="0"/><key time="10" value="10"/></animate></layer>
+<layer id="bo" asset="img"><animate property="opacity" defaultInterpolation="back-out"><key time="0" value="0"/><key time="1" value="1"/></animate></layer>
+</composition></scene>

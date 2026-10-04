@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="100" height="100" fps="10" duration="10"/>
+<markers><marker id="in" time="2"/><marker id="out" time="5"/><beatGrid bpm="120" offset="1"/></markers>
+<composition>
+<shape id="a" shape="rect" width="10" height="10" startMarker="in" start="0.5" endMarker="out"/>
+<shape id="b" shape="rect" width="10" height="10" start="1" endMarker="out" end="-1"/>
+<shape id="c" shape="rect" width="10" height="10"><expression property="x">markerTime("bar.1")*10 + markerTime("beat.2")</expression><expression property="rotation">beat()</expression></shape>
+</composition></scene>

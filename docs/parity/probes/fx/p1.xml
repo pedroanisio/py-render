@@ -1,0 +1,4 @@
+<scene version="1.1"><project width="128" height="128" fps="10" duration="1" background="#202020"/>
+<assets><image id="tc" src="testcard.png" width="96" height="96"/></assets>
+<composition><layer id="a" asset="tc" x="16" y="16" effects="e"/></composition>
+<effects><effect id="e" type="blur" radius="3"/></effects></scene>

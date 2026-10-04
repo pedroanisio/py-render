@@ -1,0 +1,15 @@
+<scene version="1.1"><project width="128" height="64" fps="10" duration="2" background="#000000"/>
+<paints>
+<meshGradient id="m" rows="3" cols="3" interpolationSpace="oklab">
+<point row="0" col="0" color="#FF0000"/><point row="0" col="1" color="#FFFF00"/><point row="0" col="2" color="#00FF00"/>
+<point row="1" col="0" color="#FF00FF"/><point row="1" col="1" color="#FFFFFF"/><point row="1" col="2" color="#00FFFF"/>
+<point row="2" col="0" color="#000000"/><point row="2" col="1" color="#0000FF"/><point row="2" col="2" color="#333333"/>
+</meshGradient>
+<linearGradient id="d" dither="true"><stop offset="0" color="#303030"/><stop offset="1" color="#404040"/></linearGradient>
+<conicGradient id="c" interpolationSpace="oklch" dither="false"><stop offset="0" color="#FF0000"/><stop offset="0.5" color="#00FF00"/><stop offset="1" color="#0000FF"/></conicGradient>
+</paints>
+<composition>
+<shape id="sa" shape="rect" width="64" height="64" fill="url(#m)"/>
+<shape id="sb" shape="rect" x="64" width="64" height="24" fill="url(#d)"/>
+<shape id="sc" shape="rect" x="64" y="24" width="64" height="40" fill="url(#c)"/>
+</composition></scene>

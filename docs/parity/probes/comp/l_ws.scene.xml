@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="64" height="32" fps="10" duration="1" background="#202020" workingColorSpace="rec709"/>
+<composition>
+<shape id="a" shape="rect" width="32" height="32" fill="#FF8000"/>
+<shape id="b" shape="rect" width="32" height="32" fill="#2080FF" blend="multiply" opacity="0.8"/>
+<shape id="c" shape="rect" x="32" width="32" height="32" fill="#40C080"/>
+<shape id="d" shape="rect" x="32" width="32" height="32" fill="#C04080" blend="screen" opacity="0.6"/>
+</composition></scene>

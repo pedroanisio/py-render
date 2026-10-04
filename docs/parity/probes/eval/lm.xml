@@ -1,0 +1,1 @@
+<scene version="1.1"><project width="10" height="10" fps="10" duration="10"/><assets><image id="img" src="i.png" width="1" height="1"/></assets><composition><layer id="a" asset="img"><expression property="rotation">Math.cbrt(time*9)</expression></layer></composition></scene>

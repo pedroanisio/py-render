@@ -1,0 +1,3 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/><composition>
+        <include id="inc" src="lib.scene.xml" symbol="badge" start="1"><override target="mark" property="rotation" value="90"/></include>
+</composition></scene>

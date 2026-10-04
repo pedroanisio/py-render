@@ -1,0 +1,1 @@
+<scene version="1.1"><project width="128" height="128" fps="10" duration="1" background="#303030"/><assets><image id="tc" src="testcard.png" width="96" height="96"/></assets><composition><layer id="n" asset="tc" x="40" y="30" scaleX="0.75" scaleY="0.75" rotation="30" effects="e"/></composition><effects><effect id="e" type="rgb-split" offsetX="6" offsetY="0"/></effects></scene>

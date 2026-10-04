@@ -1,0 +1,9 @@
+<scene version="1.1"><project width="128" height="64" fps="10" duration="2" background="#000000"/>
+<composition>
+<group id="g" x="10" y="10" width="40" height="40" threeD="true" rotationY="50" isolate="true">
+  <shape id="a" shape="rect" width="40" height="40" fill="#FF8800"/>
+</group>
+<group id="h" x="70" y="10" width="40" height="40" threeD="true" rotationY="50" opacity="0.5">
+  <shape id="b" shape="rect" width="40" height="40" fill="#00FF88"/>
+</group>
+</composition></scene>

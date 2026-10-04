@@ -1,0 +1,3 @@
+<scene version="1.1"><project width="128" height="96" fps="10" duration="3" background="#303030"/><assets><image id="tc" src="testcard.png" width="96" height="96"/><image id="tc2" src="testcard.png" width="96" height="96"/></assets>
+<composition><layer id="a" asset="tc" x="16" y="0" end="2"/><layer id="b" asset="tc2" x="0" y="0" scaleX="1.3333" scaleY="1" start="2"/><shape id="lm" shape="rect" x="0" y="0" width="64" height="96" fill="#FFFFFF" visible="false"/>
+<transition type="light-leak" from="a" to="b" duration="1" /></composition></scene>

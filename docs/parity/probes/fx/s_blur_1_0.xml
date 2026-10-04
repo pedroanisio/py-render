@@ -1,0 +1,6 @@
+<scene version="1.1"><project width="128" height="128" fps="10" duration="1" background="#303030"/>
+<assets><image id="tc" src="testcard.png" width="96" height="96"/></assets>
+<paints><linearGradient id="grad"><stop offset="0" color="#000000"/><stop offset="1" color="#FF8800"/></linearGradient></paints>
+<composition><layer id="n" asset="tc" x="16" y="16" effects="e"></layer></composition>
+<lights><light id="pl" type="point" x="60" y="50"/></lights>
+<effects><effect id="e" type="blur" radius="3"/></effects></scene>

@@ -1,0 +1,21 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<assets><image id="img" src="i.png" width="1" height="1"/></assets><composition>
+<layer id="bz" asset="img"><animate property="x"><key time="0" value="0" interpolation="cubic-bezier" bezier="0.25,0.1,0.25,1"/><key time="2" value="100"/></animate></layer>
+<layer id="ae" asset="img"><animate property="x"><key time="0" value="0" interpolation="cubic-bezier" easeOut="0.5,2"/><key time="2" value="100" easeIn="0.4,0.5"/></animate></layer>
+<layer id="ae2" asset="img"><animate property="x"><key time="0" value="0" interpolation="cubic-bezier" easeOut="0.8,0"/><key time="2" value="100"/></animate></layer>
+<layer id="cr" asset="img"><animate property="x" defaultInterpolation="catmull-rom"><key time="0" value="0"/><key time="1" value="50"/><key time="4" value="20"/><key time="5" value="90"/></animate></layer>
+<layer id="tcb" asset="img"><animate property="x"><key time="0" value="0" interpolation="tcb" tension="0.5" bias="0.3"/><key time="1" value="50" interpolation="tcb" tension="0.5" bias="0.3"/><key time="4" value="20" interpolation="tcb" tension="-0.3" bias="-0.5"/><key time="5" value="90"/></animate></layer>
+<layer id="tcbc" asset="img"><animate property="x"><key time="0" value="0" interpolation="tcb"/><key time="1" value="50" interpolation="tcb" continuity="0.8"/><key time="4" value="20" interpolation="tcb"/><key time="5" value="90"/></animate></layer>
+<layer id="lin" asset="img"><animate property="x" extrapolateBefore="linear" extrapolateAfter="linear" defaultInterpolation="ease-in-out"><key time="1" value="10"/><key time="2" value="30"/><key time="3" value="35"/></animate></layer>
+<layer id="lin2" asset="img"><animate property="x" extrapolateBefore="linear" extrapolateAfter="linear"><key time="1" value="10" interpolation="hold"/><key time="2" value="30"/><key time="3" value="35" interpolation="steps" steps="4"/><key time="4" value="55"/></animate></layer>
+<layer id="lp" asset="img"><animate property="x" extrapolateBefore="loop" extrapolateAfter="loop"><key time="1" value="10"/><key time="2" value="30"/><key time="3" value="35"/></animate></layer>
+<layer id="pp" asset="img"><animate property="x" extrapolateBefore="ping-pong" extrapolateAfter="ping-pong"><key time="1" value="10"/><key time="2" value="30"/><key time="3" value="35"/></animate></layer>
+<layer id="of" asset="img"><animate property="x" extrapolateBefore="offset" extrapolateAfter="offset"><key time="1" value="10"/><key time="2" value="30"/><key time="3" value="35"/></animate></layer>
+<layer id="lo1" asset="img"><animate property="x"><key time="0" value="0"/><key time="1" value="10"/><key time="2" value="30"/></animate><expression property="x">loopOut("cycle", 1)</expression></layer>
+<layer id="lo2" asset="img"><animate property="x"><key time="0" value="0"/><key time="1" value="10"/><key time="2" value="30"/></animate><expression property="x">loopOut("pingpong")</expression></layer>
+<layer id="lo3" asset="img"><animate property="x"><key time="0" value="0"/><key time="1" value="10"/><key time="2" value="30"/></animate><expression property="x">loopOut("offset")</expression></layer>
+<layer id="lo4" asset="img"><animate property="x"><key time="0" value="0"/><key time="1" value="10"/><key time="2" value="30"/></animate><expression property="x">loopOut("continue")</expression></layer>
+<layer id="li1" asset="img"><animate property="x"><key time="1" value="0"/><key time="2" value="10"/><key time="3" value="30"/></animate><expression property="x">loopIn("cycle", 1)</expression></layer>
+<layer id="li2" asset="img"><animate property="x"><key time="1" value="0"/><key time="2" value="10"/><key time="3" value="30"/></animate><expression property="x">loopIn("offset")</expression></layer>
+<layer id="rv" asset="img"><animate property="x"><key time="0" value="0"/><key time="0.1" value="90" roving="true"/><key time="1" value="100"/></animate></layer>
+</composition></scene>

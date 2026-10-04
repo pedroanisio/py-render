@@ -1,0 +1,4 @@
+<scene version="1.1"><project width="128" height="128" fps="10" duration="1" background="#303030" motionBlur="true"/><assets><image id="tc" src="testcard.png" width="96" height="96"/></assets>
+<composition><layer id="n" asset="tc" x="16" y="16" effects="e"><animate property="x"><key time="0" value="0"/><key time="1" value="50"/></animate></layer>
+<transition type="crossfade" from="n" to="m" duration="1"/><layer id="m" asset="tc" x="0" y="0" start="1"/></composition>
+<effects><effect id="e" type="blur" radius="2"><animate property="radius"><key time="0" value="0"/><key time="1" value="8"/></animate></effect></effects></scene>

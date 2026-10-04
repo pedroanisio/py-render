@@ -1,0 +1,6 @@
+<scene version="1.1"><project width="128" height="64" fps="10" duration="2" background="#000000"/>
+<assets>
+<generator id="fg" kind="film-grain" width="64" height="64" scale="100" seed="2" contrast="0.8"/>
+<generator id="lr" kind="light-rays" width="64" height="64" scale="14" seed="5" angle="20" evolution="0.5"/>
+</assets>
+<composition><layer id="c" asset="fg"/><layer id="d" asset="lr" x="64"/></composition></scene>

@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="64" height="64" fps="10" duration="2" background="#000000"/>
+<composition>
+<group id="g" opacity="0.5" x="5" y="5" width="64" height="64">
+  <shape id="near" shape="rect" width="8" height="8" fill="#FF0000" threeD="true" zDepth="-50"/>
+  <shape id="far" shape="rect" width="8" height="8" fill="#FFFFFF" threeD="true" zDepth="100"/>
+</group>
+</composition></scene>

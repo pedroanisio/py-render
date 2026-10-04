@@ -1,0 +1,11 @@
+<scene version="1.1"><project width="128" height="64" fps="10" duration="2" background="#101820"/>
+<composition>
+<group id="k" x="10" y="8" opacity="0.6">
+  <shape id="c1" shape="rect" x="0" y="0" width="40" height="30" fill="#8888FF" threeD="true" rotationY="35" zDepth="20"/>
+  <shape id="c2" shape="rect" x="20" y="10" width="40" height="30" fill="#FF8844" threeD="true" rotationX="30" zDepth="-40"/>
+</group>
+<group id="m" x="70" y="10" opacity="0.5">
+  <shape id="d1" shape="rect" width="30" height="30" fill="#FFFFFF"/>
+  <shape id="d2" shape="rect" x="15" y="15" width="30" height="30" fill="#FFFFFF" threeD="true" zDepth="-30"/>
+</group>
+</composition></scene>

@@ -1,0 +1,12 @@
+<scene version="1.1"><project width="256" height="96" fps="10" duration="2" background="#000000"/>
+<assets>
+<image id="ramp" src="ramp.png" width="256" height="16" transfer="hlg"/>
+<image id="ramp2" src="ramp.png" width="256" height="16" transfer="pq"/>
+<image id="hf" src="hf.png" width="256" height="256"/>
+</assets>
+<composition>
+<layer id="a" asset="ramp"/><layer id="b" asset="ramp2" y="16"/>
+<layer id="c" asset="hf" x="10" y="40" scaleX="0.3" scaleY="0.3"/>
+<layer id="d" asset="hf" x="100" y="40" scaleX="0.7" scaleY="0.7"/>
+<layer id="e" asset="hf" x="190" y="40" scaleX="0.45" scaleY="0.2"/>
+</composition></scene>

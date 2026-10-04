@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="96" height="32" fps="10" duration="1" background="#102030"/>
+<composition>
+<shape id="w" shape="rect" width="96" height="32" fill="#FFFFFF"/>
+<shape id="s1" shape="rect" x="8" y="8" width="16" height="16" fill="#FF0000" blend="silhouette-alpha"/>
+<shape id="s2" shape="rect" x="40" y="8" width="16" height="16" fill="#808080" opacity="0.5" blend="silhouette-luma"/>
+<shape id="s3" shape="rect" x="72" y="8" width="16" height="16" fill="#00FF00" blend="stencil-luma"/>
+</composition></scene>

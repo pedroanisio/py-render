@@ -1,0 +1,5 @@
+<scene version="1.1"><project width="64" height="16" fps="10" duration="1" background="#000000"/>
+<composition>
+<shape id="c" shape="rect" x="4" y="0" width="4" height="4" fill="#FFFFFF" scaleX="4" scaleY="4"><mask type="rect" x="0" y="0" width="4" height="4" feather="0.5"/></shape>
+<shape id="d" shape="rect" x="30" y="0" width="4" height="4" fill="#FFFFFF" scaleX="8" scaleY="2"><mask type="ellipse" x="0" y="0" width="4" height="4" feather="0.5"/></shape>
+</composition></scene>

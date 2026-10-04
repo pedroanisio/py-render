@@ -1,0 +1,11 @@
+<scene version="1.1"><project width="128" height="64" fps="10" duration="2" background="#000000"/>
+<assets>
+<generator id="ck" kind="checkerboard" width="16" height="16" scale="4" paint="#FFFFFF" paint2="#000000"/>
+<generator id="nz" kind="fractal-noise" width="16" height="16" scale="4" seed="7"/>
+<generator id="fg" kind="film-grain" width="64" height="64" scale="100" seed="2" contrast="0.8"/>
+<generator id="lr" kind="light-rays" width="64" height="64" scale="14" seed="5" angle="20" evolution="0.5"/>
+</assets>
+<composition>
+<layer id="a" asset="ck" scaleX="3" scaleY="3"/><layer id="b" asset="nz" x="52" scaleX="3" scaleY="3"/>
+<layer id="c" asset="fg" x="64" y="0"/><layer id="d" asset="lr" x="0" y="0" opacity="0.001"/>
+</composition></scene>

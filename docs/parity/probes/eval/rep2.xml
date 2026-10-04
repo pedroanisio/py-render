@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10" seed="1"/>
+<parameters><param id="cities" type="list" default="[1,2,3,4,5,6]"/></parameters>
+<assets><text id="txt" text="i{{index}} c{{count}} v{{item}}" width="100" height="20" size="10"/></assets>
+<composition>
+<repeat id="r" count="3" from="5" step="2"><layer id="l" asset="txt"><expression property="x">index*1000 + param("item")</expression></layer></repeat>
+<repeat id="o" over="cities" from="1" step="2"><layer id="m" asset="txt"><expression property="x">index*1000 + param("item")</expression></layer></repeat>
+</composition></scene>

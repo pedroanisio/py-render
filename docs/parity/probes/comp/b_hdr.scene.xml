@@ -1,0 +1,9 @@
+<scene version="1.1"><project width="64" height="32" fps="10" duration="2" background="#000000"/>
+<composition>
+<shape id="bd" shape="rect" width="32" height="32" fill="#FF0000"/>
+<shape id="a" shape="rect" width="32" height="32" fill="#FF0000" blend="add"/>
+<shape id="m" shape="rect" width="32" height="32" fill="#BCBCBC" blend="multiply"/>
+<shape id="bd2" shape="rect" x="32" width="32" height="32" fill="#FFFFFF"/>
+<shape id="a2" shape="rect" x="32" width="32" height="32" fill="#FFFFFF" blend="add"/>
+<shape id="s2" shape="rect" x="32" width="32" height="32" fill="#808080" blend="subtract"/>
+</composition></scene>

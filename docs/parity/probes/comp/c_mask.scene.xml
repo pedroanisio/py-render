@@ -1,0 +1,9 @@
+<scene version="1.1"><project width="128" height="64" fps="10" duration="2" background="#202020"/>
+<composition>
+<shape id="a" shape="rect" x="4" y="4" width="40" height="40" fill="#FFFFFF">
+  <mask type="rect" x="0" y="0" width="40" height="40" radius="12"/>
+</shape>
+<shape id="b" shape="rect" x="56" y="32" width="40" height="40" fill="#FFAA00" scaleX="1.6" scaleY="0.6" rotation="20" anchorX="20" anchorY="20">
+  <mask type="ellipse" x="4" y="4" width="32" height="32" feather="4"/>
+</shape>
+</composition></scene>

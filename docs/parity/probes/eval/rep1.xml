@@ -1,0 +1,9 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10" seed="1"/><parameters><param id="cities" type="list" default="[{&quot;city&quot;:&quot;Lisbon&quot;},{&quot;city&quot;:&quot;Oslo&quot;}]"/></parameters><assets>
+  <image id="img" src="img.png" width="100" height="50"/>
+  <video id="vid" src="clip.mp4" width="100" height="50" fps="10" duration="4"/>
+  <text id="txt" text="Hello {{name}} #{{index}}: {{item.city}}" width="100" height="20" size="10"/>
+</assets><composition><repeat id="r" count="3" offsetX="10" opacityStep="0.25" timeStep="1">
+             <layer id="l" asset="img"><expression property="y">index * 100 + count</expression>
+               <animate property="rotation"><key time="0" value="0"/><key time="2" value="20"/></animate></layer>
+           </repeat>
+           <repeat id="c" over="cities" var="item"><layer id="t" asset="txt"/></repeat></composition></scene>

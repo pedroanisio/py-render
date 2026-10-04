@@ -1,0 +1,11 @@
+<scene version="1.1"><project width="128" height="64" fps="10" duration="2" background="#000000"/>
+<paints>
+<radialGradient id="r1" fx="0.3" fy="0.4" fr="0.15" r="0.5" dither="false"><stop offset="0" color="#FFFFFF"/><stop offset="1" color="#000000"/></radialGradient>
+<radialGradient id="r2" fx="0.8" fy="0.5" r="0.3" aspect="1.5" interpolationSpace="srgb" dither="false"><stop offset="0" color="#FF0000"/><stop offset="1" color="#0000FF"/></radialGradient>
+<linearGradient id="l3" dither="false"><stop offset="0.3" color="#FF0000"><animate property="offset"><key time="0" value="0.3"/><key time="1" value="0.9"/></animate></stop><stop offset="0.6" color="#00FF00"/><stop offset="1" color="#0000FF"/></linearGradient>
+</paints>
+<composition>
+<shape id="a" shape="rect" x="0" y="0" width="64" height="64" fill="url(#r1)"/>
+<shape id="b" shape="rect" x="64" y="0" width="64" height="32" fill="url(#r2)"/>
+<shape id="c" shape="rect" x="64" y="32" width="64" height="32" fill="url(#l3)"/>
+</composition></scene>

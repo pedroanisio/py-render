@@ -1,0 +1,6 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<assets><image id="img" src="img.png" width="100" height="50"/></assets><composition>
+<layer id="a" asset="img"><expression property="x">prop("b.x")</expression></layer>
+<layer id="b" asset="img"><expression property="x">prop("a.x") + 1</expression></layer>
+<layer id="c" asset="img"><animate property="opacty"><key time="0" value="0"/></animate></layer>
+</composition></scene>

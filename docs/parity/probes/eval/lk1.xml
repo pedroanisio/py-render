@@ -1,0 +1,8 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/><parameters><param id="p" type="number" default="4"/></parameters>
+<assets><image id="img" src="img.png" width="100" height="50"/></assets>
+<markers><marker id="m" time="5" duration="2"/></markers><composition>
+           <layer id="src" asset="img"><animate property="x"><key time="0" value="0"/><key time="10" value="100"/></animate></layer>
+           <layer id="dst" asset="img"><link property="x" source="src.x" scale="2" offset="1" max="150" delay="1"/>
+             <link property="rotation" source="param:p" scale="10"/>
+             <link property="opacity" source="marker:m"/>
+             <link property="y" source="src.x" smoothing="1"/></layer></composition></scene>

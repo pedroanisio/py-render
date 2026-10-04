@@ -1,0 +1,21 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<composition>
+<group id="g1" layout="grid" gridColumns="2" gap="10">
+ <shape id="a" shape="rect" width="20" height="10"/><shape id="b" shape="rect" width="30" height="20"/><shape id="c" shape="rect" width="10" height="5"/>
+</group>
+<group id="g2" x="0" y="100" width="200" height="100" layout="row" gap="10" padding="5" justify="space-between" alignItems="stretch">
+ <shape id="d" shape="rect" width="20" height="10"/><shape id="e" shape="rect" width="30" height="45"/>
+</group>
+<group id="g3" x="300" y="100" width="100" height="100" layout="column" gap="10" padding="5" justify="end" alignItems="end">
+ <shape id="f" shape="rect" width="20" height="10"/><shape id="g" shape="rect" width="30" height="20"/>
+</group>
+<group id="g4" x="500" y="100" width="100" height="100" layout="stack" padding="5" justify="center" alignItems="center">
+ <shape id="h" shape="rect" width="20" height="10"/><shape id="i" shape="rect" width="30" height="20"/>
+</group>
+<group id="g5" x="600" y="100" width="200" height="100" layout="row" justify="space-evenly" alignItems="start">
+ <shape id="j" shape="rect" width="20" height="10"/><shape id="k" shape="rect" width="30" height="20"/><shape id="l" shape="rect" width="30" height="20"/>
+</group>
+<group id="g6" x="0" y="300" width="200" height="100" layout="grid" gridColumns="2" gap="10" padding="5" justify="center" alignItems="center">
+ <shape id="m" shape="rect" width="20" height="10"/><shape id="n" shape="rect" width="30" height="20"/><shape id="o" shape="rect" width="10" height="5"/>
+</group>
+</composition></scene>

@@ -1,0 +1,13 @@
+<scene version="1.1"><project width="128" height="96" fps="10" duration="2" background="#000000"/>
+<assets>
+<generator id="ck" kind="checkerboard" width="64" height="32" scale="10" contrast="0.5" paint="#FFFFFF" paint2="#202020"/>
+<generator id="gr" kind="grid" width="64" height="32" scale="16" angle="15" paint="#FFFFFF" paint2="#003366"/>
+<generator id="st" kind="stripes" width="64" height="32" scale="6" angle="30" evolution="0.25" contrast="0.7" paint="#FF8800" paint2="#000000"/>
+<generator id="gd" kind="gradient" width="64" height="32" angle="30" contrast="1.5" paint="#FF0000" paint2="#0000FF"/>
+<generator id="nz" kind="fractal-noise" width="64" height="32" scale="12" octaves="3" seed="7" evolution="1.5" paint="#FFFFFF" paint2="#000000"/>
+<generator id="ce" kind="cells" width="64" height="32" scale="14" seed="3" paint="#FFFFFF" paint2="#223355"/>
+</assets>
+<composition>
+<layer id="l1" asset="ck"/><layer id="l2" asset="gr" x="64"/><layer id="l3" asset="st" y="32"/>
+<layer id="l4" asset="gd" x="64" y="32"/><layer id="l5" asset="nz" y="64"/><layer id="l6" asset="ce" x="64" y="64"/>
+</composition></scene>

@@ -1,0 +1,8 @@
+exec(open('mb.py').read().split("HDR=")[0])
+H='<scene version="1.1"><project width="128" height="128" fps="10" duration="1" background="#303030"/><assets><image id="tc" src="testcard.png" width="96" height="96"/></assets>'
+cmp('e1',H+'<composition><layer id="n" asset="tc" x="-16" y="-16" scaleX="1.5" scaleY="1.5" effects="e"/></composition><effects><effect id="e" type="blur" radius="8"/></effects></scene>',0.5)
+cmp('e2',H+'<composition><layer id="n" asset="tc" x="-16" y="-16" scaleX="1.5" scaleY="1.5" effects="e"/></composition><effects><effect id="e" type="blur" radius="8"><param name="edgeMode" value="1"/></effect></effects></scene>',0.5)
+cmp('e3',H+'<composition><layer id="n" asset="tc" x="-16" y="-16" scaleX="1.5" scaleY="1.5" effects="e"/></composition><effects><effect id="e" type="drop-shadow" radius="8" offsetX="0" offsetY="0" color="#FF0000FF"/></effects></scene>',0.5)
+cmp('e4',H+'<composition><layer id="n" asset="tc" x="20" y="20" scaleX="0.5" scaleY="0.5" rotation="30" effects="e"/></composition><effects><effect id="e" type="drop-shadow" radius="8" offsetX="10" offsetY="0" color="#FF0000FF"/></effects></scene>',0.5)
+cmp('e5',H+'<composition><layer id="n" asset="tc" x="20" y="20" scaleX="0.5" scaleY="0.5" effects="e"/></composition><effects><effect id="e" type="blur" radius="6"/></effects></scene>',0.5)
+cmp('e6',H+'<composition><layer id="n" asset="tc" x="20" y="20" scaleX="0.5" scaleY="0.5" effects="e"><mask type="ellipse" x="0" y="0" width="96" height="96"/></layer></composition><effects><effect id="e" type="glow" radius="8" threshold="0.3"/></effects></scene>',0.5)

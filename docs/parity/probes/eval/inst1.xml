@@ -1,0 +1,6 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10" seed="1"/><assets><image id="img" src="img.png" width="100" height="50"/></assets>
+<symbols><symbol id="card" width="200" height="100" duration="2">
+  <layer id="bg" asset="img" x="50%"><animate property="opacity"><key time="0" value="0"/><key time="2" value="1"/></animate></layer>
+</symbol></symbols><composition>
+<instance id="a" symbol="card" start="1"><override target="bg" property="rotation" value="30"/></instance>
+<instance id="b" symbol="card" speed="0.5" loop="1"/></composition></scene>

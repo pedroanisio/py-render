@@ -1,0 +1,7 @@
+<scene version="1.1"><project width="64" height="32" fps="10" duration="2" background="#00000000"/>
+<paints><linearGradient id="p" x1="0" y1="0" x2="1" y2="0"><stop offset="0" color="#FF0000"><animate property="color"><key time="0" value="#FF0000"/><key time="1" value="#0000FF"/></animate></stop><stop offset="1" color="#FFFFFF"/></linearGradient></paints>
+<composition>
+<group id="g" isolate="true"><shape id="s" shape="rect" width="50" height="30" fill="url(#p)"/></group>
+<shape id="m" shape="rect" x="0" y="0" width="64" height="32" fill="url(#p)" visible="false"/>
+<shape id="mover" shape="rect" width="10" height="10" fill="#00FF00"><animate property="x"><key time="0" value="0"/><key time="2" value="50"/></animate></shape>
+</composition></scene>

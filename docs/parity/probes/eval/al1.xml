@@ -1,0 +1,5 @@
+<scene version="1.1"><project width="1000" height="500" fps="10" duration="10"/>
+<assets><image id="img" src="i.png" width="100" height="50"/></assets><composition>
+<layer id="a" asset="img"><animate property="anchor"><key time="0" value="0,0"/><key time="2" value="10,20"/></animate>
+<animate property="skew"><key time="0" value="0,0"/><key time="2" value="10,20"/></animate><animate property="scale"><key time="0" value="1,1"/><key time="2" value="3,2"/></animate></layer>
+</composition></scene>
