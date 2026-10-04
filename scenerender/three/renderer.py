@@ -815,7 +815,7 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
         vao = item_vao(ctx, item, prog, buf)
         ds = bool(m.p["doubleSided"])
         if m.blend or m.transmissive:
-            ctx.depth_mask = m.transmissive and not m.blend
+            ctx.fbo.depth_mask = m.transmissive and not m.blend
             if ds and not m.transmissive and item.mode == 4:
                 ctx.enable(moderngl.CULL_FACE)
                 ctx.cull_face = "front"
@@ -829,7 +829,7 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
                     ctx.enable(moderngl.CULL_FACE)
                     ctx.cull_face = "back"
                 vao.render(item.mode, instances=k)
-            ctx.depth_mask = True
+            ctx.fbo.depth_mask = True
         else:
             if ds:
                 ctx.disable(moderngl.CULL_FACE)
@@ -1019,9 +1019,9 @@ def draw_splats(r: Res, fr: Frame3D, obj: ObjDraw, V, P) -> None:
     _set(prog, "u_vpSize", (float(fr.pw), float(fr.ph)))
     _set(prog, "u_exposure", float(2.0 ** cam.exposure))
     ctx.disable(moderngl.CULL_FACE)
-    ctx.depth_mask = False
+    ctx.fbo.depth_mask = False
     vao.render(moderngl.TRIANGLE_STRIP, vertices=4, instances=n_splats)
-    ctx.depth_mask = True
+    ctx.fbo.depth_mask = True
     vao.release()
 
 
@@ -1038,7 +1038,7 @@ def draw_background(r: Res, fr: Frame3D, V, P) -> bool:
     _set(prog, 't_env', 0)
     _set(prog, 'u_exposure', float(2.0 ** fr.cam.exposure))
     ctx.enable(moderngl.BLEND)
-    ctx.depth_mask = False
+    ctx.fbo.depth_mask = False
     for i, (texture, rotation, color) in enumerate(vis):
         (texture or r.white).use(0)
         _write(prog, 'u_rot', np.asarray(rotation, np.float32).T)
@@ -1047,7 +1047,7 @@ def draw_background(r: Res, fr: Frame3D, V, P) -> bool:
         _set(prog, 'u_first', int(i == 0))
         ctx.blend_func = (moderngl.ONE, moderngl.ONE_MINUS_SRC_ALPHA) if i == 0 else (moderngl.ONE, moderngl.ONE)
         r.bg_vao.render(moderngl.TRIANGLE_STRIP)
-    ctx.depth_mask = True
+    ctx.fbo.depth_mask = True
     ctx.blend_func = moderngl.ONE, moderngl.ONE_MINUS_SRC_ALPHA
     return True
 
