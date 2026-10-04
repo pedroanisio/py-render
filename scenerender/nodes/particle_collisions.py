@@ -1,8 +1,15 @@
 """Particle contacts with the rendered alpha of rigid-body nodes.
 
 Masks are evaluated on the composition/symbol canvas at one pixel per scene
-unit, independent of output resolution. Two samples per emitter are retained.
+unit, independent of output resolution. Three samples per emitter are retained:
+a step needs the sample at its end and the one at its start, which is the end
+of the previous step, so the newest sample never evicts the one still needed.
 Matte particles are evaluated through their normal independent histories.
+
+Collision alpha is the body node's own render: its effects, masks and mattes
+and those of its ancestors count. Adjustment layers act on the composite of the
+siblings below them, not on a body, so they (and the post-processing they
+carry: vignette, grain, chromatic aberration...) are excluded.
 """
 from __future__ import annotations
 
@@ -152,6 +159,7 @@ def snapshots(em, t):
     rc.frame_cache = {}
     rc._flat_depth, rc._raster_to_frame = 0, None
     rc._skip_effects = set()
+    rc._skip_adjustments = True
     rc.motion_blur, rc._node_mb = False, True
     sim = get_sim(rc)
     root = rc.scene_context[0] if rc.scene_context is not None else rc.doc.section('composition')
@@ -181,7 +189,7 @@ def snapshots(em, t):
             M = pos.rc.node_matrix(el, c, pos.matrix, pos.box, pos.layout)
         out[el] = Collider(a, sm, float(buf.x0), float(buf.y0), M)
     cache[ctx] = out
-    while len(cache) > 2:
+    while len(cache) > 3:
         cache.popitem(last=False)
     return out
 

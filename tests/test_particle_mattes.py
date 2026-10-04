@@ -88,7 +88,7 @@ def test_particle_matte_animation_matches_current_rendered_alpha(tmp_path, kind,
         control_mask = f'<shape id="matte" shape="rect" x="45" y="35" width="30" height="30" opacity="{alpha}"/>'
         control = scene(tmp_path, control_mask+wall(kind=kind), assets=assets, name='control')
         np.testing.assert_allclose(col.sample(xx, yy), control.frame_linear(local)[..., 3], atol=1/255)
-        assert len(em.colliders) <= 2
+        assert len(em.colliders) <= 3
 
 
 @pytest.mark.parametrize('grouped', [False, True])

@@ -87,7 +87,7 @@ def test_snapshot_matches_rendered_alpha_at_each_time(tmp_path, kind):
         actual = cols[r.doc.ids['wall']].sample(xx, yy) if cols else np.zeros_like(xx)
         expected = np.clip(r.frame_linear(t)[..., 3], 0, 1)
         np.testing.assert_allclose(actual, expected, atol=1e-7)
-        assert len(em.colliders) <= 2
+        assert len(em.colliders) <= 3
 
 
 @pytest.mark.parametrize('kind', ['static', 'kinematic', 'dynamic'])
@@ -181,3 +181,50 @@ def test_instance_collider_ignores_output_fit_and_keeps_overrides_separate(tmp_p
     for t in (.8, .2, .8):
         np.testing.assert_allclose(live(r, t, 'a/p'), live(control, t), atol=1e-8)
         np.testing.assert_allclose(live(r, t, 'b/p')[0], [30+60*t, 50, 60, 0], atol=1e-8)
+
+
+WALL = '<shape id="wall" shape="rect" x="{x}" y="10" width="4" height="80"{attrs}><rigidBody type="static"/></shape>'
+FLIGHT = '<particleEmitter id="p" rate="0" lifetime="5" collide="true" x="{x}" y="50" speed="300" direction="0" bounce="1">' \
+         '<burst time="0" count="1"/></particleEmitter>'
+
+
+def test_adjustment_layers_are_not_part_of_a_collider(tmp_path):
+    """Collision alpha is the body node's own render. An adjustment acts on the composite of the siblings
+    below it, so a finishing chromatic aberration (which magnifies the alpha of every channel about the frame
+    centre) must not move the contact."""
+    effects = '<effects><effect id="fx" type="chromatic-aberration" amount="30"/></effects>'
+    adjusted = scene(tmp_path, WALL.format(x=40, attrs='')+'<adjustment id="finish" effects="fx"/>'+FLIGHT.format(x=10), extra=effects)
+    control = scene(tmp_path, WALL.format(x=40, attrs='')+FLIGHT.format(x=10), name='control')
+    for t in (.2, .3, .2):
+        np.testing.assert_array_equal(live(adjusted, t), live(control, t))
+    assert live(control, .2)[0][2] == pytest.approx(-300)       # it did bounce off the wall
+
+
+def test_a_bodys_own_effect_still_shapes_the_collider(tmp_path):
+    """The body's own effects, masks and mattes are part of its render: a stroke grows its alpha by 8 px each
+    side, so the particle meets it 8 px earlier (a straight flight at 300 px/s and an elastic bounce)."""
+    effects = '<effects><effect id="fx" type="stroke" radius="8" color="#FFFFFFFF"/></effects>'
+    stroked = scene(tmp_path, WALL.format(x=70, attrs=' effects="fx"')+FLIGHT.format(x=40), extra=effects)
+    plain = scene(tmp_path, WALL.format(x=70, attrs='')+FLIGHT.format(x=40), name='plain')
+    em, ctx = emitter(stroked, .1)
+    assert snapshots(em, ctx.t)[stroked.doc.ids['wall']].alpha.shape[1] >= 4 + 16
+    # elastic bounce at 300 px/s: the stroked wall is met 8 px earlier, so the particle is 16 px further back
+    # along its return path (up to the fixed step of the simulation)
+    gap = live(plain, .2)[0][0]-live(stroked, .2)[0][0]
+    assert gap > 10          # the 0.5 alpha contour of an 8 px stroke lies about 6.5 px out: 2 x 6.5 = 13
+
+
+def test_each_step_renders_one_snapshot_in_steady_state(tmp_path, monkeypatch):
+    """A step needs the snapshot at its end and the one at its start (the previous step's end): three entries
+    keep both, so after the first step every step renders one (a few step boundaries differ by float noise,
+    0.1 against 0.09999999999999999, and cost an extra render). Two entries rendered every step twice."""
+    from scenerender.compositor import RenderContext
+    from scenerender.nodes import particle_collisions as pc
+    renders, steps = [], []
+    render, collide = RenderContext.render_contribution, pc.collide
+    monkeypatch.setattr(RenderContext, 'render_contribution', lambda self, *a: renders.append(1) or render(self, *a))
+    monkeypatch.setattr(pc, 'collide', lambda *a: steps.append(1) or collide(*a))
+    r = scene(tmp_path, WALL.format(x=70, attrs='')+FLIGHT.format(x=40))
+    live(r, .5)
+    assert len(steps) >= 4
+    assert len(steps)+1 <= len(renders) < 1.25*len(steps)

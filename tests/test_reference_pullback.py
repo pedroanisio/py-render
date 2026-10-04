@@ -27,7 +27,7 @@ def state(r, t, ref='i/p'):
     loc = r.rc.node_location(node, ctx)
     em = get_emitter(loc.rc, node, ctx)
     p = particles_at(loc.rc, node, ctx)
-    assert len(em.colliders) <= 2 and len(em.transforms) <= 8
+    assert len(em.colliders) <= 3 and len(em.transforms) <= 8
     return np.stack([p[k] for k in ('x', 'y', 'vx', 'vy')], axis=-1)
 
 

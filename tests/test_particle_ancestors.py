@@ -84,6 +84,10 @@ def test_ancestor_alpha_matches_independent_full_render(tmp_path, kind, instance
     tag = 'sequence' if kind == 'sequence' else 'group'
     body = f'<{tag} id="g" {attrs}>'+children+wall+f'</{tag}>'+other
     r = scene(tmp_path, body+PROBE, extra=extra, instanced=instanced)
+    if kind == 'adjustment':
+        # An adjustment layer acts on the composite of its siblings, it is not part of a body: the collider is
+        # the wall's own render, so the control is the same scene without the adjustment.
+        body = body.replace('<adjustment id="adj" effects="fx"/>', '')
     # Echo intervals are composition seconds, so speed=2 doubles the interval
     # expressed on the standalone control's symbol-local timeline.
     control_extra = extra.replace('name="interval" value=".2"', 'name="interval" value=".4"') if instanced and kind == 'echo' else extra
@@ -95,7 +99,7 @@ def test_ancestor_alpha_matches_independent_full_render(tmp_path, kind, instance
             expected[:] = 0  # No collision surface survives the contact threshold.
         np.testing.assert_allclose(collider_alpha(r, t, instanced), expected, atol=1e-7)
         em, _ = emitter(r, t, instanced)
-        assert len(em.colliders) <= 2
+        assert len(em.colliders) <= 3
 
 
 @pytest.mark.parametrize('instanced', [False, True])

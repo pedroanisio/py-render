@@ -127,7 +127,7 @@ def test_projected_collider_matte_matches_analytic_affine_source(tmp_path, movin
         loc = renderer.rc.node_location(node, ctx)
         em = get_emitter(loc.rc, node, ctx)
         out = particles_at(loc.rc, node, ctx)
-        assert len(em.colliders) <= 2
+        assert len(em.colliders) <= 3
         return np.stack([out[k] for k in ('x', 'y', 'vx', 'vy')], -1)
     for local in (.6, .2, .8, .6):
         t = local/2 if instanced else local

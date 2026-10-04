@@ -93,6 +93,7 @@ class RenderContext:
     _mb_mode: dict = field(default_factory=dict)   # node -> (undriven chain, its motionBlur mode)
     _flat_depth: int = 0
     _skip_effects: set = field(default_factory=set)
+    _skip_adjustments: bool = False                # collider renders: adjustment layers are not part of a body
     scene_context: tuple | None = None       # (symbol root, context at its entrance)
     scene_matrix: np.ndarray | None = None   # symbol canvas -> output frame
     _rcache: dict = field(default_factory=dict)    # raster cache entries, see _render_cached
@@ -1446,7 +1447,7 @@ class RenderContext:
         return True
 
     def apply_adjustment(self, el, dst: Buf, ctx, PM, box, fold_opacity) -> Buf:
-        if not self.active(el, ctx):
+        if self._skip_adjustments or not self.active(el, ctx):
             return dst
         ctx = nctx = self.enter_node(el, ctx)
         opacity = self.ev.num(el, "opacity", nctx, 1.0) * fold_opacity

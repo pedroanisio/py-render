@@ -66,11 +66,15 @@ Collision silhouettes are sampled at each simulation step through the node rende
 including current geometry, paint/asset alpha, node opacity, visibility/windows,
 masks, effects and mattes. The selected body's primary contribution traverses its
 group/sequence ancestors, including ancestor opacity, clipping, masks, effects,
-mattes, adjustments and transitions. Siblings retain their layout slots and
+mattes and transitions. Collision alpha is the body node's own render: adjustment
+layers and other post-processing (a finishing vignette, grain or chromatic
+aberration, a grade) act on the composite of the siblings below them, are not part
+of a body and are excluded. Siblings retain their layout slots and
 scheduled durations without supplying unrelated collision pixels. Referenced
 matte and effect inputs render their complete subtrees. Samples use one pixel per composition or symbol unit,
 independent of output resolution, instance fit and placement. Each emitter history
-retains at most two mask samples; temporary render caches are isolated. Sensor
+retains at most three mask samples (the end and start of a step, and the start of
+the next one); temporary render caches are isolated. Sensor
 bodies, hidden matte bodies and bodies below hidden/excluded groups do not deflect
 particles. Each body supplies a separate contribution: this is not a decomposition
 of the final composited frame when sibling effects or blends are nonlinear.
@@ -152,7 +156,7 @@ independent controls.
 
 [test_particle_ancestors.py](../tests/test_particle_ancestors.py) adds 45 cases for
 ancestor opacity, clips, masks, effects, mattes, nested clocks, sequence windows,
-echo tails, adjustments, projection alpha, transition weights, sibling isolation,
+echo tails, projection alpha, transition weights, sibling isolation, the exclusion of adjustment layers,
 all four layouts and layer colliders at three output scales. The retained opacity
 reproducer now matches its node-opacity control: both particles pass a wall with
 rendered alpha 0.2 and reach x=78, vx=60 at 0.8 seconds. Controls include independent
