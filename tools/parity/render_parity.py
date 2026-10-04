@@ -19,6 +19,12 @@ Each (scene, time) is classified:
 
 Results: OUT/results.json, OUT/SUMMARY.md and, with --sheets, OUT/sheets/<scene>_<t>.png
 (Rust | Python | difference x4). Run with PYTHONPATH pointing at the scenerender tree to test.
+
+--rs-root ROOT fills the placeholders the Rust evidence scenes use ({MEDIA}, {SHADERS},
+{FIXTURES3D}, {GEO}, as tools/evidence.py defines them): such scenes are materialised under
+OUT/scenes/ together with their sibling files, never edited in place. --extra-path DIR adds a
+directory to PATH for both renderers (e.g. one holding ffprobe, which the Rust engine needs for
+video probing).
 """
 from __future__ import annotations
 
@@ -44,6 +50,27 @@ def scenes_from(args: list[str]) -> list[Path]:
         p = Path(a)
         out.extend(sorted(p.glob("*.xml")) if p.is_dir() else [p])
     return out
+
+
+PLACEHOLDERS = {"{MEDIA}": "tests/corpus/media", "{SHADERS}": "crates/sr-gpu/tests/shaders",
+                "{FIXTURES3D}": "crates/sr-3d/tests/fixtures", "{GEO}": "crates/sr-geo/tests/fixtures"}
+
+
+def materialise(scene: Path, rs_root: Path | None, out: Path) -> Path:
+    """The scene itself, or a copy with the Rust evidence placeholders filled (siblings copied too)."""
+    text = scene.read_text(encoding="utf-8")
+    if rs_root is None or not any(k in text for k in PLACEHOLDERS):
+        return scene
+    dst_dir = out / "scenes" / scene.parent.name
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    for sib in scene.parent.iterdir():
+        if sib.is_file() and sib.suffix != ".xml" and not (dst_dir / sib.name).exists():
+            (dst_dir / sib.name).write_bytes(sib.read_bytes())
+    for k, v in PLACEHOLDERS.items():
+        text = text.replace(k, str(rs_root / v))
+    dst = dst_dir / scene.name
+    dst.write_text(text, encoding="utf-8")
+    return dst
 
 
 def project_info(path: Path) -> tuple[float, float]:
@@ -109,7 +136,7 @@ def one(rs: str, scene: Path, t: float, out: Path, timeout: float, sheets: bool,
     tag = f"{scene.stem}_{t:08.3f}"
     rs_png, py_png = out / "rs" / f"{tag}.png", out / "py" / f"{tag}.png"
     rec = {"scene": str(scene), "t": t}
-    ok_rs, msg_rs, t_rs = run([rs, "render", scene.name, "-t", f"{t:.6f}", "-o", str(rs_png)], scene.parent, timeout)
+    ok_rs, msg_rs, t_rs = run([rs, "render", scene.name, "-t", f"{t:.6f}", "-o", str(rs_png)], scene.parent, timeout, env)
     ok_py, msg_py, t_py = run([PY, "-m", "scenerender.cli", "still", scene.name, "-t", f"{t:.6f}", "-o", str(py_png),
                                "--lenient"], scene.parent, timeout, env)
     rec.update(rs_seconds=round(t_rs, 2), py_seconds=round(t_py, 2))
@@ -151,14 +178,22 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--timeout", type=float, default=300)
     ap.add_argument("--sheets", action="store_true")
+    ap.add_argument("--rs-root", help="Rust checkout: fill the evidence-scene placeholders")
+    ap.add_argument("--extra-path", action="append", default=[], help="directory prepended to PATH")
     a = ap.parse_args()
     out = Path(a.out).resolve()
     for sub in ("rs", "py", "sheets"):
         (out / sub).mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
+    if a.extra_path:
+        env["PATH"] = os.pathsep.join([*a.extra_path, env.get("PATH", "")])
+    rs_root = Path(a.rs_root).resolve() if a.rs_root else None
     jobs = []
     for s in scenes_from(a.scenes):
-        s = s.resolve()
+        if not s.is_file():
+            print(f"skip {s}: not found", file=sys.stderr)
+            continue
+        s = materialise(s.resolve(), rs_root, out)
         try:
             dur, fps = project_info(s)
         except Exception as e:  # noqa: BLE001 — unparsable scenes are reported, not fatal
