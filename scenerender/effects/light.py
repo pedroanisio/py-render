@@ -49,21 +49,34 @@ def _bloom(rc, e, buf, ctx, halation=False, alone=False):
     src = linear_pixels(rc, b.px)
     rgb, a = straight(src)
     threshold = max(0, p.n("threshold", .7))
-    strength = np.maximum(luma(rgb)-threshold, 0)/np.maximum(luma(rgb), 1e-7)
+    intensity = max(0, p.n("intensity", 1))
+    y = luma(rgb)
+    strength = np.maximum(y-threshold, 0)/np.maximum(y, 1e-7)
     bright = src*strength[..., None]
-    halo = gaussian(bright, r)*max(0, p.n("intensity", 1))
     tint = _linear_color(p, (1,.2,.04,1) if halation else (1,1,1,1))
-    halo[..., :3] *= tint[:3]
     if halation:
         # Backing scatter is transmitted through the emulsion, not the alpha
         # matte: opaque photographs must still show halation around highlights.
-        energy = bright[..., :3]
-        red = gaussian(energy, max(.01,r))
-        green = gaussian(energy, max(.01,r*.45))
-        halo[...,0] = red[...,0]*tint[0]*max(0,p.n("intensity",1))
-        halo[...,1] = green[...,1]*_linear_color(p,(1,.2,.04,1))[1]*max(0,p.n("intensity",1))
-        halo[...,2] *= .25
-        halo[..., :3] *= (1-strength)[...,None]
+        # Red scatters at radius r, green at .45 r; blue and alpha keep the radius-r halo.
+        # Blur is per channel, so only those blurred channels are computed.
+        rr = max(.01, r)
+        if rr == r:
+            wide = gaussian(bright[..., [0, 2, 3]], r)
+            red, blue, alpha = wide[..., 0], wide[..., 1], wide[..., 2]
+        else:
+            red = gaussian(bright[..., 0:1], rr)[..., 0]
+            wide = gaussian(bright[..., [2, 3]], r)
+            blue, alpha = wide[..., 0], wide[..., 1]
+        green = gaussian(bright[..., 1:2], max(.01, r*.45))
+        halo = np.empty_like(bright)
+        halo[..., 0] = red*tint[0]*intensity
+        halo[..., 1] = green[..., 0]*_linear_color(p, (1,.2,.04,1))[1]*intensity
+        halo[..., 2] = blue*intensity*tint[2]*.25
+        halo[..., 3] = alpha*intensity
+        halo[..., :3] *= (1-strength)[..., None]
+    else:
+        halo = gaussian(bright, r)*intensity
+        halo[..., :3] *= tint[:3]
     halo *= tint[3]
     if alone:
         return result(b, working_pixels(rc, halo))
