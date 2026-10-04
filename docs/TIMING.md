@@ -20,6 +20,12 @@ The latter keeps sequence attributes on the sequence's clock while children use
 the transformed clock. The schedule cache includes scope and repeat bindings,
 and retains at most 128 recent schedules.
 
+Group and sequence layout selectors, padding, gaps, alignment and justification
+use the owner's clock before its child time warp. Child dimensions, scales and
+text baselines use each child's entered clock, including scheduled sequence
+offsets. `tests/test_layout_clocks.py` compares all four layout modes with explicit
+pixel placements and verifies the same coordinates through node references.
+
 Every adjacent pair has a prepared default transition junction, even when the
 sequence initially has no transition. Runtime evaluation determines whether the
 junction is used and obtains its type and duration from the sequence. An explicit
@@ -47,8 +53,10 @@ tails test the actual past samples. Posterize-time quantizes the node's clock an
 finds a corresponding composition sample on the nearby clock branch, including
 reverse playback, loops and remaps. If a discontinuity makes the held value
 unreachable, its local clock is still held explicitly while the closest sampled
-composition context supplies references and parent transforms. The inverse search
-is bounded; it is not a proof of finding every root of an arbitrary timing
+composition context supplies references and parent transforms. Newton's clock
+derivative uses the actual representable composition interval and unshifted local
+clocks, avoiding the prior seek-dependent drift on identity clocks. The inverse
+search is bounded; it is not a proof of finding every root of an arbitrary timing
 expression. `tests/test_temporal_clocks.py` compares these operations with complete
 renders at independently calculated sample times.
 
@@ -56,12 +64,41 @@ Particle parameters and rigid-body poses replay history using the composition
 time associated with each local step. Global force fields retain composition
 time. Simulation caches include instance/repeat bindings and the replay branch;
 each binding retains at most eight branches, so loop cycles with changing global
-inputs do not reuse a different cycle's history. `tests/test_simulation_clocks.py`
+inputs do not reuse a different cycle's history. Recorded physics fingerprints
+include the prepared scene and replay branch, so changes to ancestor clocks or
+external property references invalidate stale results. `tests/test_simulation_clocks.py`
 compares particle arrays, rigid-body states and rendered frames with explicit
 clock controls across speed, reverse playback, piecewise remaps and loops.
+Particle collider masks and poses now sample those same mapped scene times;
+contact velocities include parent and body motion per emitter-local second.
+`tests/test_particle_collisions.py` adds independent retimed collision controls
+for static, kinematic and dynamic bodies.
+
+Particle histories also distinguish evaluated start/end, preroll and required
+trail storage within that eight-history bound. Birth inputs use each birth time,
+including multiple births within one step; display inputs use the render time.
+Sprites and emission masks use the consumer's context and media time since the
+emitter's start. Animated preroll/window changes, independent instance clocks and
+backward seeks have controls in `tests/test_particle_evaluation.py`. See
+[PARTICLES.md](PARTICLES.md) for scope and remaining boundaries.
+
+Particle histories retain two recently queried fixed-step states for collider
+endpoint sampling. Effective repeat bindings share the same history even when
+reference traversal carries duplicate binding entries. Recursive history queries
+through collider mattes are rejected with a cycle diagnostic; failed advances
+clear mutable state before replaying another time. These safeguards are covered
+by `tests/test_particle_mattes.py`; cyclic feedback simulation remains unsupported.
+
+`valueAtTime(t)` samples the pre-expression property at node-clock time `t`,
+reconstructing its composition time, frame number and evaluated window. Shared
+effects and assets borrow the consumer's clock. Timing properties can sample
+themselves without re-entering their expression; those intermediate windows have
+separate cache identities. Link delays and smoothing use composition seconds and
+update the sampled frame number. `loopIn` and `loopOut` follow the animation's
+`timeBase` and select the correct component of vector aliases. Numerical and
+rendered controls are in `tests/test_expression_clocks.py`.
 
 Remaining timing work includes arbitrary nonmonotonic/discontinuous clock
-expressions, simulation preroll and window changes, delay/smoothing links and
-`valueAtTime` across warped clocks. Video-layer audio still samples its control clock at 1 kHz;
+expressions and remaining rigid-body window combinations. Video-layer audio still samples its control clock at 1 kHz;
 general track transition automation is evaluated at track placement. These are
 outstanding conformance requirements, not claims of complete timing support.

@@ -25,7 +25,6 @@ from ..evaluator import Ctx
 from ..raster import Canvas
 from ..registry import FEATURES, FULL, NODES, warn_once
 from ..three import lights, materials, view360
-from ..values import parse_bool  # noqa: F401  (feature declarations; render360 hook)
 
 for _p in ("sphere", "box", "plane", "cylinder", "cone", "torus", "capsule", "text", "extrude"):
     FEATURES.declare(f"object3D:{_p}", FULL, "tessellated, PBR-shaded, shadowed")

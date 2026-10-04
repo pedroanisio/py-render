@@ -84,13 +84,14 @@ def sequence_schedule(ev, seq, ctx, *, origin=None, owner_ctx=None):
     # Contexts include scope and repeat bindings; retaining only recent schedules
     # bounds memory during long exports and audio sampling.
     canonical = replace(ctx, node_start=0., node_end=None, clock_node=None, clock_offset=0.)
-    key = (seq, origin, canonical, owner_ctx.t, owner_ctx.node_end)
+    sampling = frozenset(ev.__dict__.get("_resampling_properties", ()))
+    key = (seq, origin, canonical, owner_ctx.t, owner_ctx.node_end, sampling)
     cache = ev.__dict__.setdefault("_sequence_schedules", OrderedDict())
     if key in cache:
         cache.move_to_end(key)
         return cache[key]
     busy = ev.__dict__.setdefault("_scheduling", set())
-    guard = (seq, ctx.scope, ctx.comp_t)
+    guard = (seq, ctx.scope, ctx.comp_t, sampling)
     if guard in busy:
         # A timing expression may inspect another property of its own sequence.
         # Use the prepared window only to break this property-evaluation cycle.
@@ -140,7 +141,8 @@ def natural_duration(ev, el, ctx, *, scheduled=True):
         return _duration_once(ev, el, ctx, scheduled=scheduled)
     origin = 0. if scheduled else ctx.node_start
     canonical = replace(ctx, node_start=origin, node_end=None)
-    key = (el, canonical, scheduled)
+    sampling = frozenset(ev.__dict__.get("_resampling_properties", ()))
+    key = (el, canonical, scheduled, sampling)
     cache = ev.__dict__.setdefault("_duration_windows", OrderedDict())
     if key in cache:
         cache.move_to_end(key)
@@ -154,7 +156,7 @@ def natural_duration(ev, el, ctx, *, scheduled=True):
         current = replace(ctx, node_start=origin, node_end=origin + duration)
         return _duration_once(ev, el, current, scheduled=scheduled)
     busy = ev.__dict__.setdefault("_solving_duration", set())
-    guard = (el, ctx.scope, ctx.comp_t)
+    guard = (el, ctx.scope, ctx.comp_t, sampling)
     if guard in busy:
         return seed
     busy.add(guard)

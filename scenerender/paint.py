@@ -14,7 +14,7 @@ import numpy as np
 
 from .document import ln
 from .registry import FEATURES, FULL, PARTIAL, warn_once
-from .values import linear_to_srgb, paint_ref, parse_color, srgb_to_linear
+from .values import linear_to_srgb, paint_ref, parse_color, resolve_var, srgb_to_linear
 
 for _n in ("linearGradient", "radialGradient", "conicGradient", "pattern"):
     FEATURES.declare(f"paint:{_n}", FULL)
@@ -70,6 +70,7 @@ def set_source(rc, cr: cairo.Context, paint: str | None, w: float, h: float, ctx
     Returns False when the paint is fully transparent (nothing to draw)."""
     if paint is None:
         return False
+    paint = resolve_var(paint, rc.doc.tokens)
     ref = paint_ref(paint)
     if ref is None:
         c = parse_color(paint, rc.doc.tokens)
@@ -82,7 +83,7 @@ def set_source(rc, cr: cairo.Context, paint: str | None, w: float, h: float, ctx
         warn_once("paint", ref, "paint reference not found")
         return False
     kind = ln(el)
-    pat = (_conic(rc, el, w, h, ctx, cr.clip_extents()) if kind == "conicGradient"
+    pat = (_conic(rc, el, w, h, ctx, cr.clip_extents(), cr.get_matrix(), _device_clip(cr)) if kind == "conicGradient"
            else _PAINTERS.get(kind, _unknown)(rc, el, w, h, ctx))
     if pat is None:
         return False
@@ -95,6 +96,14 @@ def set_source(rc, cr: cairo.Context, paint: str | None, w: float, h: float, ctx
     return True
 
 
+def _device_clip(cr):
+    matrix = cr.get_matrix()
+    cr.identity_matrix()
+    extent = cr.clip_extents()
+    cr.set_matrix(matrix)
+    return extent
+
+
 def _dither_pattern(cr, pattern):
     """Quantize a floating gradient with an ordered, zero-mean pixel threshold.
 
@@ -104,12 +113,9 @@ def _dither_pattern(cr, pattern):
     The pattern is sampled in device space, so transforms retain pixel resolution.
     """
     matrix = cr.get_matrix()
-    x0, y0, x1, y1 = cr.clip_extents()
-    corners = [matrix.transform_point(x, y) for x in (x0, x1) for y in (y0, y1)]
-    left = math.floor(min(x for x, _ in corners))
-    top = math.floor(min(y for _, y in corners))
-    width = max(1, math.ceil(max(x for x, _ in corners)) - left)
-    height = max(1, math.ceil(max(y for _, y in corners)) - top)
+    x0, y0, x1, y1 = _device_clip(cr)
+    left, top = math.floor(x0), math.floor(y0)
+    width, height = max(1, math.ceil(x1)-left), max(1, math.ceil(y1)-top)
     transform = cairo.Matrix(*matrix)
     transform.x0 -= left
     transform.y0 -= top
@@ -265,42 +271,85 @@ def _radial(rc, el, w, h, ctx):
     return _with_matrix(pat, gm)
 
 
-def _conic(rc, el, w, h, ctx, extent=None):
+def _conic(rc, el, w, h, ctx, extent=None, matrix=None, device_extent=None):
     ev = rc.ev
     cx, cy = ev.num(el, "cx", ctx, 0.5), ev.num(el, "cy", ctx, 0.5)
     start = math.radians(ev.num(el, "angle", ctx, 0.0) - 90)
     space = ev.str(el, "interpolationSpace", ctx, "linear")
     stops = _stops(rc, el, ctx)
-    pat = cairo.MeshPattern()
-    n = 96
     gm = _units_matrix(rc, el, w, h, ctx)
     inv = cairo.Matrix(*gm)
     inv.invert()
     x0, y0, x1, y1 = extent or (0, 0, w, h)
-    corners = [inv.transform_point(x, y) for x in (x0, x1) for y in (y0, y1)]
-    R = 1.01 * max(math.hypot(x - cx, y - cy) for x, y in corners) + 1
-    def color_at(u):
-        if u <= stops[0][0]:
-            return stops[0][1]
-        for (o0, c0, midpoint), (o1, c1, _) in zip(stops, stops[1:]):
-            if o0 <= u <= o1:
-                fraction = (u - o0) / max(1e-9, o1 - o0)
-                if abs(midpoint - .5) > 1e-6:
-                    fraction **= math.log(.5) / math.log(max(1e-4, min(.9999, midpoint)))
-                return mix_color(c0, c1, fraction, space)
-        return stops[-1][1]
-    for i in range(n):
-        a0, a1 = start + 2 * math.pi * i / n, start + 2 * math.pi * (i + 1) / n
-        c0, c1 = color_at(i / n), color_at((i + 1) / n)
-        pat.begin_patch()
-        pat.move_to(cx, cy)
-        pat.line_to(cx + R * math.cos(a0), cy + R * math.sin(a0))
-        pat.line_to(cx + R * math.cos(a1), cy + R * math.sin(a1))
-        pat.line_to(cx, cy)
-        for k, c in enumerate((c0, c0, c1, c1)):
-            pat.set_corner_color_rgba(k, *c)
-        pat.end_patch()
-    return _with_matrix(pat, gm)
+    matrix = matrix or cairo.Matrix()
+    if device_extent is None:
+        corners = [matrix.transform_point(x, y) for x in (x0, x1) for y in (y0, y1)]
+        device_extent = (min(x for x, _ in corners), min(y for _, y in corners),
+                         max(x for x, _ in corners), max(y for _, y in corners))
+    dx0, dy0, dx1, dy1 = device_extent
+    left, top = math.floor(dx0), math.floor(dy0)
+    width, height = max(1, math.ceil(dx1)-left), max(1, math.ceil(dy1)-top)
+    device_inverse = cairo.Matrix(*matrix)
+    device_inverse.invert()
+    yy, xx = np.mgrid[top:top+height, left:left+width].astype(np.float64)
+    xx, yy = xx+.5, yy+.5
+    ux = device_inverse.xx*xx+device_inverse.xy*yy+device_inverse.x0
+    uy = device_inverse.yx*xx+device_inverse.yy*yy+device_inverse.y0
+    gx = inv.xx*ux+inv.xy*uy+inv.x0-cx
+    gy = inv.yx*ux+inv.yy*uy+inv.y0-cy
+    angle = np.remainder((np.arctan2(gy, gx)-start)/(2*math.pi), 1.)
+    # Equivalent affine factorizations can put an exact seam on opposite sides
+    # of zero through roundoff. The start stop owns that seam.
+    angle[(angle < 1e-12) | (angle > 1-1e-12)] = 0.
+    rgba = np.broadcast_to(stops[0][1], (height, width, 4)).copy()
+    for (o0, c0, midpoint), (o1, c1, _) in zip(stops, stops[1:]):
+        selected = (angle >= o0) & (angle <= o1)
+        fraction = (angle[selected]-o0)/max(1e-9, o1-o0)
+        if abs(midpoint-.5) > 1e-6:
+            fraction **= math.log(.5)/math.log(max(1e-4, min(.9999, midpoint)))
+        rgba[selected] = _mix_color_array(c0, c1, fraction, space)
+    rgba[angle > stops[-1][0]] = stops[-1][1]
+    rgba[..., :3] *= rgba[..., 3:4]
+    surface = cairo.ImageSurface(cairo.FORMAT_RGBA128F, width, height)
+    pixels = np.frombuffer(surface.get_data(), np.float32).reshape(height, surface.get_stride()//4)[:, :4*width].reshape(height, width, 4)
+    pixels[:] = rgba
+    surface.mark_dirty()
+    pattern = cairo.SurfacePattern(surface)
+    transform = cairo.Matrix(*matrix)
+    transform.x0 -= left
+    transform.y0 -= top
+    pattern.set_matrix(transform)
+    pattern.set_filter(cairo.FILTER_NEAREST)
+    return pattern
+
+
+def _mix_color_array(c0, c1, fraction, space):
+    """The same stop interpolation as mix_color, evaluated at device pixels."""
+    u = fraction[:, None]
+    if space == "srgb":
+        return np.array(c0)+(np.array(c1)-c0)*u
+    if space == "linear":
+        a = np.array([srgb_to_linear(v) for v in c0[:3]])
+        b = np.array([srgb_to_linear(v) for v in c1[:3]])
+        rgb = a+(b-a)*u
+    else:
+        a, b = np.array(_to_oklab(c0)), np.array(_to_oklab(c1))
+        lab = a+(b-a)*u
+        if space == "oklch":
+            C0, C1 = math.hypot(*a[1:]), math.hypot(*b[1:])
+            H0, H1 = math.atan2(a[2], a[1]), math.atan2(b[2], b[1])
+            C = C0+(C1-C0)*fraction
+            H = H0+((H1-H0+math.pi) % (2*math.pi)-math.pi)*fraction
+            lab[:, 1], lab[:, 2] = C*np.cos(H), C*np.sin(H)
+        L, A, B = lab.T
+        l, m, s = (L+.3963377774*A+.2158037573*B)**3, (L-.1055613458*A-.0638541728*B)**3, (L-.0894841775*A-1.2914855480*B)**3
+        rgb = np.stack([4.0767416621*l-3.3077115913*m+.2309699292*s,
+                        -1.2684380046*l+2.6097574011*m-.3413193965*s,
+                        -.0041960863*l-.7034186147*m+1.7076147010*s], axis=-1)
+    rgb = np.maximum(rgb, 0.)
+    rgb = np.where(rgb <= .0031308, rgb*12.92, 1.055*rgb**(1/2.4)-.055)
+    alpha = c0[3]+(c1[3]-c0[3])*fraction
+    return np.column_stack([np.clip(rgb, 0, 1), alpha])
 
 
 def _mesh(rc, el, w, h, ctx):
@@ -419,7 +468,7 @@ _PAINTERS = {"linearGradient": _linear, "radialGradient": _radial, "conicGradien
 
 
 def paint_color_estimate(rc, paint: str | None, ctx) -> tuple[float, float, float, float]:
-    """A representative colour for a paint (used where a flat colour is needed, e.g. particle tint)."""
+    """A representative colour for a paint (used where a flat colour is needed)."""
     if paint is None:
         return (0, 0, 0, 0)
     ref = paint_ref(paint)

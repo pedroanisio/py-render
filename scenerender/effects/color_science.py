@@ -86,9 +86,9 @@ def bradford(kelvin, tint=0):
 
 
 def temperature_rgb(kelvin):
-    from ..color import _rgb_to_xyz
-    rgb = np.linalg.solve(_rgb_to_xyz('srgb'), white_xyz(kelvin))
-    return np.maximum(rgb, 0)/max(float(np.max(rgb)), 1e-7)
+    from ..colorimetry import blackbody_rgb
+    rgb = blackbody_rgb(kelvin)
+    return rgb / float(np.max(rgb))
 
 
 def pq_encode(nits):

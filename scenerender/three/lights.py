@@ -3,8 +3,8 @@
 Pinned decisions (units follow glTF KHR_lights_punctual with camera.UNITS_PER_METRE = 100 scene
 units per metre; radiance values feed a linear HDR pipeline, the colour finish hook tone-maps):
   * Every light: radiometric colour = linear(color) x blackbody(colorTemperature) x intensity x
-    2**exposure. colorTemperature tints by the Planckian-locus chromaticity (Kang et al. 2002, valid
-    1667-25000 K; values outside are clamped to that range) normalised to unit luminance.
+    2**exposure. colorTemperature tints by Planck radiation integrated with the CIE 1931 observer
+    over the full 1000-40000 K schema range, normalised to unit luminance.
   * Orientation: position x/y/z in scene space (CONVENTIONS 2.7: origin frame top-left, +y down, +z
     away); like cameras, yaw = pitch = roll = 0 points along scene +z, and in engine space (camera.py)
     forward = local -Z of Ry(-yaw) . Rx(pitch) . Rz(-roll); @parent and transformConstraint compose
@@ -27,12 +27,14 @@ units per metre; radiance values feed a linear HDR pipeline, the colour finish h
   * dome: equirectangular HDRI (environment; the image centre looks down world -Z, u grows toward
     +X, v = 0 is +Y), rotated by yaw/pitch/roll, radiance x colour x intensity; without environment
     a uniform radiance. Several domes are summed. Diffuse = 9-coefficient SH irradiance, specular =
-    GGX prefiltered mips + split-sum LUT. environmentVisible draws it as the background (through the
-    active camera node's layer). castShadow on a dome shadows its dominant direction (the
-    luminance-weighted mean direction) with a shadow map, weighted by the dominance (|mean|).
-  * castShadow: shadow maps (directional: orthographic fit to the shadow casters; spot: perspective
-    cone; point/area/dome-dominant: cube maps) of shadowMapSize texels, PCSS soft shadows where the
-    light radius is shadowSoftness (metres; directional: degrees of angular radius) or, when 0, the
+    GGX prefiltered mips + split-sum LUT. Each dome retains its own diffuse/specular and shadow
+    settings; contributions are summed after shadowing. environmentVisible adds that dome to the
+    background (through the active camera node's layer). castShadow on a dome shadows its own
+    luminance-weighted mean direction, weighted by the dominance (|mean|). Its default angular
+    footprint follows that dominance; a positive shadowSoftness overrides it in degrees.
+  * castShadow: shadow maps (directional/dome-dominant: orthographic fit to the shadow casters;
+    spot: perspective cone; point/area: cube maps) of shadowMapSize texels, PCSS soft shadows where the
+    light radius is shadowSoftness (metres; directional/dome: degrees of angular radius) or, when 0, the
     area light's own size; shadowBias is a fraction of the shadow depth range, plus a one-texel
     normal offset.
   * affectsDiffuse / affectsSpecular gate the diffuse (incl. sheen) and specular (incl. clearcoat)
@@ -78,32 +80,17 @@ class LightState:
     map_size: int = 2048
     diffuse: bool = True
     specular: bool = True
-    ies: np.ndarray | None = None     # (n_phi, n_theta) normalised table
-    env: np.ndarray | None = None     # dome: (h, w, 3) linear radiance (already x colour x intensity)
+    ies: object = None                # IESProfile, retaining the original angle knots
+    env: np.ndarray | None = None     # dome: (h, w, 3) source linear radiance, before colour/intensity
     env_rot: np.ndarray = field(default_factory=lambda: np.eye(3))    # world-from-env rotation
     visible: bool = False
     key: tuple = ()
 
 
 def kelvin_rgb(T: float) -> np.ndarray:
-    """Linear sRGB of the Planckian locus at T kelvin, unit luminance (Kang et al. 2002)."""
-    T = min(25000.0, max(1667.0, float(T)))
-    if T <= 4000:
-        x = -0.2661239e9 / T ** 3 - 0.2343589e6 / T ** 2 + 0.8776956e3 / T + 0.179910
-    else:
-        x = -3.0258469e9 / T ** 3 + 2.1070379e6 / T ** 2 + 0.2226347e3 / T + 0.240390
-    if T <= 2222:
-        y = -1.1063814 * x ** 3 - 1.34811020 * x ** 2 + 2.18555832 * x - 0.20219683
-    elif T <= 4000:
-        y = -0.9549476 * x ** 3 - 1.37418593 * x ** 2 + 2.09137015 * x - 0.16748867
-    else:
-        y = 3.0817580 * x ** 3 - 5.87338670 * x ** 2 + 3.75112997 * x - 0.37001483
-    XYZ = np.array([x / y, 1.0, (1 - x - y) / y])
-    M = np.array([[3.2404542, -1.5371385, -0.4985314], [-0.9692660, 1.8760108, 0.0415560],
-                  [0.0556434, -0.2040259, 1.0572252]])
-    rgb = np.maximum(M @ XYZ, 0.0)
-    lum = float(np.array([0.2126, 0.7152, 0.0722]) @ rgb)
-    return rgb / max(lum, 1e-9)
+    """Linear sRGB of the Planckian locus at T kelvin, with unit luminance."""
+    from ..colorimetry import blackbody_rgb
+    return blackbody_rgb(T)
 
 
 def light_elements(rc) -> list:
@@ -153,7 +140,11 @@ def _eval(rc, el, c: Ctx) -> LightState:
     L.specular = ev.bool(el, "affectsSpecular", c, True)
     ies = ev.str(el, "ies", c)
     if ies and kind != "ambient" and kind != "dome":
-        L.ies = ies_table(rc, rc.doc.resolve_path(ies))
+        path = rc.doc.resolve_path(ies)
+        profile = ies_profile(rc, path)
+        L.ies = profile
+        if profile is not None:
+            L.color *= profile.tilt_factor(L.fwd, L.right, L.up)
     if kind == "dome":
         L.visible = ev.bool(el, "environmentVisible", c, False)
         L.env_rot = R
@@ -170,9 +161,17 @@ def _eval(rc, el, c: Ctx) -> LightState:
 def ies_table(rc, path: str) -> np.ndarray | None:
     key = ("ies", path)
     if key not in rc.cache:
+        profile = ies_profile(rc, path)
+        rc.cache[key] = profile.table(64, 64) if profile is not None else None
+    return rc.cache[key]
+
+
+def ies_profile(rc, path: str):
+    key = ("ies-profile", path)
+    if key not in rc.cache:
         try:
             from .loaders import load_ies
-            rc.cache[key] = load_ies(path).table(64, 64)
+            rc.cache[key] = load_ies(path)
         except Exception as e:  # noqa: BLE001
             warn_once("light", path, f"IES profile not loaded: {e}")
             rc.cache[key] = None

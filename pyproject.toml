@@ -18,6 +18,7 @@ gpu = ["cupy-cuda12x[ctk]>=13.4"]
 # Data Matrix and PDF417 code assets (also used by the tests to decode every barcode kind).
 codes = ["zxing-cpp>=3"]
 # 3D asset formats and materials: USD/USDZ (usd-core), FBX (ufbx), OpenEXR environments, MaterialX.
+# BasisU/KTX2 glTF textures also require the native libktx 4 library; see docs/RUNTIME.md.
 3d = ["usd-core>=24", "ufbx>=0.0.5", "OpenEXR>=3.3", "MaterialX>=1.39"]
 # OpenEXR still images, parts and channel sets (also included by the 3d extra).
 exr = ["OpenEXR>=3.3"]
@@ -33,4 +34,4 @@ build-backend = "setuptools.build_meta"
 include = ["scenerender*"]
 
 [tool.setuptools.package-data]
-scenerender = ["schema/*.xsd", "schema/*.sch", "schema/*.md", "schema/*.LICENSE"]
+scenerender = ["schema/*.xsd", "schema/*.sch", "schema/*.md", "schema/*.LICENSE", "data/*.csv", "data/*.json", "data/*.md"]

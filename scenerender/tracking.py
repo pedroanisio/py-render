@@ -141,7 +141,7 @@ mocha. Mocha's "After Effects Transform Data" and "After Effects Corner Pin Data
   AE keyframe text above (same parser); a text starting with a Nuke node/comment (mocha's "Nuke
   Corner Pin") goes to the nuke parser.
 
-fbx. Autodesk FBX 7.x, ASCII ("; FBX 7.x.x project file") and binary ("Kaydara FBX Binary  \\0";
+fbx. Autodesk FBX 6/7, ASCII ("; FBX 6/7.x.x project file") and binary ("Kaydara FBX Binary  \\0";
   32-bit record offsets below version 7500, 64-bit from 7500; property types Y C I F D L R S and
   arrays f d l i b, zlib when encoding=1). AnimationCurve (KeyTime in ticks of 1/46186158000 s,
   KeyValueFloat/KeyValueDouble) -> AnimationCurveNode (``d|X/Y/Z``, ``d|FocalLength``,
@@ -152,7 +152,14 @@ fbx. Autodesk FBX 7.x, ASCII ("; FBX 7.x.x project file") and binary ("Kaydara F
   (see rotation below), scaleX/scaleY, focal, fov. Components without a curve take the curve
   node's ``d|`` default, else the Model/attribute Properties70 value, else 0 (1 for scale). fov is
   FieldOfView verbatim (vertical in FBX's default ApertureMode) except ApertureMode=1
-  (horizontal) with FilmWidth/FilmHeight -> converted to vertical. FBX 6.x ("Takes") unsupported.
+  (horizontal) with FilmWidth/FilmHeight -> converted to vertical.
+  - FBX 6 Takes use ufbx (the optional 3d extra), evaluated at each requested time rather than
+    baked to a fixed rate. The first Take is selected, raw scene units and local transforms are
+    retained, and Properties60/channel defaults supply unkeyed components. Linear, constant
+    previous/next and explicit weighted cubic keys have analytic regression controls. Older
+    KeyVer 4002/4003/4004 default-weight spellings are translated when the backend needs it.
+    Other legacy tangent modes inherit the backend's approximations or rejection; independent
+    exporter/SDK evidence for those modes remains outstanding. See docs/TRACKING.md.
   - Key evaluation (FbxAnimCurveDef): KeyAttrFlags/KeyAttrDataFloat/KeyAttrRefCount are expanded
     per key (RefCount = number of consecutive keys sharing an attribute). Interpolation 0x2
     constant (holds key i; with 0x100 "constant next" holds key i+1 - the key itself keeps its own
@@ -198,7 +205,7 @@ from typing import Callable
 
 import numpy as np
 
-from .registry import FEATURES, FULL, warn_once
+from .registry import FEATURES, FULL, PARTIAL, warn_once
 
 log = logging.getLogger("scenerender")
 
@@ -1124,7 +1131,8 @@ class _FNode:
 def _fbx_binary(b: bytes) -> list[_FNode]:
     ver = struct.unpack_from("<I", b, 23)[0]
     hdr = struct.Struct("<QQQ" if ver >= 7500 else "<III")
-    scal = {"Y": "<h", "C": "<?", "I": "<i", "F": "<f", "D": "<d", "L": "<q"}
+    # Pre-7000 Takes use byte properties for bare interpolation letters too.
+    scal = {"Y": "<h", "C": "<B" if ver < 7000 else "<?", "I": "<i", "F": "<f", "D": "<d", "L": "<q"}
     arrs = {"f": "<f4", "d": "<f8", "l": "<i8", "i": "<i4", "b": "u1"}
 
     def prop(pos: int):
@@ -1146,25 +1154,34 @@ def _fbx_binary(b: bytes) -> list[_FNode]:
         raise TrackError(f"fbx: unknown property type {t!r} at byte {pos - 1}")
 
     def node(pos: int) -> tuple[_FNode | None, int]:
-        end, nprops, _plen = hdr.unpack_from(b, pos)
+        end, nprops, plen = hdr.unpack_from(b, pos)
         pos += hdr.size
         if end == 0:
             return None, pos + 1
+        if end <= pos or end > len(b):
+            raise TrackError('fbx: invalid or truncated record offset')
         nl = b[pos]
         name = b[pos + 1:pos + 1 + nl].decode("ascii", "replace")
         pos += 1 + nl
+        props_end = pos + plen
+        if props_end > end:
+            raise TrackError('fbx: truncated record properties')
         props = []
         for _ in range(nprops):
+            if pos >= props_end:
+                raise TrackError('fbx: truncated property list')
             v, pos = prop(pos)
             props.append(v)
+        if pos != props_end:
+            raise TrackError('fbx: inconsistent property list length')
         children = []
         while pos < end:
             c, pos = node(pos)
+            if pos > end:
+                raise TrackError('fbx: child outside parent record')
             if c is None:
                 break
             children.append(c)
-        if end > len(b):
-            raise TrackError("fbx: truncated file")
         return _FNode(name, props, children), end
 
     out, pos = [], 27
@@ -1383,18 +1400,24 @@ def parse_fbx(data: bytes | str, ctx: Ctx | None = None) -> dict[str, Channel]:
         data = data.encode("utf-8")
     if data.startswith(_FBX_MAGIC):
         try:
+            if struct.unpack_from('<I', data, 23)[0] < 7000:
+                from .tracking_fbx import parse_legacy
+                return parse_legacy(data)
             tree = _fbx_binary(data)
         except (struct.error, IndexError) as e:
             raise TrackError(f"fbx: truncated or corrupt binary ({e})") from None
     else:
         text = _text(data)
+        if re.match(r'\s*;\s*FBX\s+6(?:\.|\s)', text):
+            from .tracking_fbx import parse_legacy
+            return parse_legacy(text.encode('utf-8'))
         if not re.match(r"\s*;\s*FBX\s+7", text):
-            raise TrackError("fbx: not an FBX 7.x file (binary magic or '; FBX 7.x' ASCII header expected)")
+            raise TrackError("fbx: not an FBX 6/7 file (binary magic or '; FBX 6/7.x' ASCII header expected)")
         tree = _fbx_ascii(text)
     top = {n.name: n for n in tree}
     objs, conns = top.get("Objects"), top.get("Connections")
     if objs is None or conns is None:
-        raise TrackError("fbx: no Objects/Connections (the FBX 6 'Takes' layout is not supported)")
+        raise TrackError("fbx: no Objects/Connections")
     by_id = {o.props[0]: o for o in objs.children if o.props}
     curves = {o.props[0]: c for o in objs.children if o.name == "AnimationCurve" and (c := _fbx_curve(o))}
     stacks = [o.props[0] for o in objs.children if o.name == "AnimationStack" and o.props]
@@ -1644,10 +1667,10 @@ _FMT_NOTES = {
                    "curve(expr) time remaps need Nuke's TCL engine: skipped with a warning"),
     "after-effects": (FULL, "keyframe-data paste: tracker feature center, transform, camera zoom, corner pins"),
     "mocha": (FULL, "AE transform / corner-pin keyframe data, Nuke corner pin"),
-    "fbx": (FULL, "FBX 7 ASCII/binary; KeyAttrFlags constant/linear/cubic (user/auto/TCB tangents, weights), "
+    "fbx": (PARTIAL, "FBX 6 Takes via ufbx and FBX 7 ASCII/binary; constant/linear/weighted cubic keys, "
                   "first AnimationStack with layer blending, RotationOrder/Pre/PostRotation -> XYZ Euler; "
-                  "Lcl T/R/S + camera FocalLength/FieldOfView. Key velocity (unpublished SDK semantics) and "
-                  "FBX 6 'Takes' files are not supported"),
+                  "Lcl T/R/S + camera FocalLength/FieldOfView. Other legacy tangent modes retain backend "
+                  "limits; FBX 7 key-velocity fidelity remains unverified. See docs/TRACKING.md"),
 }
 for _f, (_lvl, _note) in _FMT_NOTES.items():
     FEATURES.declare(f"trackData:{_f}", _lvl, _note)

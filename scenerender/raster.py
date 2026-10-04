@@ -335,9 +335,42 @@ def projected_scale(H: np.ndarray, w: float, h: float, limit: float = 4.0) -> fl
     return min(limit, best) if best > 0 else 0.0
 
 
+def sample_projective(src: Buf, frame_to_source: np.ndarray, rect) -> Buf:
+    """Sample a tile with a forward pixel lookup, including rank-deficient maps.
+
+    The map takes destination pixel centres to source coordinates; it need not
+    have an inverse. Samples outside the source tile or behind a projective pole
+    are transparent. Interpolation operates on premultiplied working pixels.
+    """
+    Hi = frame_to_source
+    gy, gx = np.mgrid[rect[1]:rect[3], rect[0]:rect[2]].astype(np.float64)
+    gx += 0.5
+    gy += 0.5
+    d = Hi[2, 0] * gx + Hi[2, 1] * gy + Hi[2, 2]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        sx = (Hi[0, 0] * gx + Hi[0, 1] * gy + Hi[0, 2]) / d - src.x0 - 0.5
+        sy = (Hi[1, 0] * gx + Hi[1, 1] * gy + Hi[1, 2]) / d - src.y0 - 0.5
+    valid = np.isfinite(sx) & np.isfinite(sy) & (d > 1e-9)
+    # Also bound indices before conversion, including finite but enormous maps.
+    valid &= (sx > -1) & (sx < src.w) & (sy > -1) & (sy < src.h)
+    sx, sy = np.where(valid, sx, -1.), np.where(valid, sy, -1.)
+    ix, iy = np.floor(sx).astype(np.int64), np.floor(sy).astype(np.int64)
+    fx, fy = (sx - ix).astype(np.float32), (sy - iy).astype(np.float32)
+    out = np.zeros(gx.shape + (4,), np.float32)
+    if not src.is_null:
+        for dx, dy, wt in ((0, 0, (1-fx)*(1-fy)), (1, 0, fx*(1-fy)), (0, 1, (1-fx)*fy), (1, 1, fx*fy)):
+            jx, jy = ix+dx, iy+dy
+            inside = valid & (jx >= 0) & (jx < src.w) & (jy >= 0) & (jy < src.h)
+            v = src.px[np.clip(jy, 0, src.h-1), np.clip(jx, 0, src.w-1)]
+            out += v * (wt*inside)[..., None]
+    return Buf(out, rect[0], rect[1])
+
+
 def warp_projective(src: Buf, H: np.ndarray, frame_rect, margin: int = 64) -> Buf | None:
     """Warp a premultiplied tile by the projective map H (tile-space pixels -> frame pixels),
     bilinear, points behind the projection centre dropped."""
+    if src.is_null:
+        return None
     x0, y0 = src.x0, src.y0
     corners = np.array([[x0, y0, 1], [x0 + src.w, y0, 1], [x0, y0 + src.h, 1], [x0 + src.w, y0 + src.h, 1]], np.float64)
     q = corners @ H.T

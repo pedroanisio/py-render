@@ -2,6 +2,8 @@
 
 The layout places each child's box; the child's own x/y then act as offsets
 from that place (relative positioning). Children are taken in document order.
+Layout properties use the owning group/sequence clock; child dimensions and
+baselines use each child's entered clock, including sequence offsets.
 """
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ import math
 from .document import ln
 
 
-def flex_layout(rc, group, ctx, box, mode: str) -> dict:
+def flex_layout(rc, group, ctx, box, mode: str, *, child_ctx=None) -> dict:
     ev = rc.ev
     kids = [c for c in rc.doc.nodes(group) if ln(c) not in ("transition", "adjustment")]
     if not kids:
@@ -20,10 +22,11 @@ def flex_layout(rc, group, ctx, box, mode: str) -> dict:
     pad = ev.length(group, "padding", ctx, min(gw, gh))
     justify = ev.str(group, "justify", ctx, "start")
     align = ev.str(group, "alignItems", ctx, "start")
+    clocks = [rc.enter_node(k, ctx if child_ctx is None else child_ctx) for k in kids]
     sizes = []
-    for k in kids:
-        w, h = rc.node_size(k, ctx, box)
-        sx, sy = abs(ev.num(k, "scaleX", ctx, 1.0)), abs(ev.num(k, "scaleY", ctx, 1.0))
+    for k, clock in zip(kids, clocks):
+        w, h = rc.node_size(k, clock, box)
+        sx, sy = abs(ev.num(k, "scaleX", clock, 1.0)), abs(ev.num(k, "scaleY", clock, 1.0))
         sizes.append((w * sx, h * sy))
     inner_w, inner_h = max(0.0, gw - 2 * pad), max(0.0, gh - 2 * pad)
     out = {}
@@ -62,7 +65,7 @@ def flex_layout(rc, group, ctx, box, mode: str) -> dict:
         elif justify == "space-evenly":
             lead, between = free / (n + 1), gap + free / (n + 1)
     pos = pad + lead
-    baselines = [_baseline(rc, k, ctx, box, c) for k, c in zip(kids, cross)] if align == "baseline" and horizontal else None
+    baselines = [_baseline(rc, k, clock, box, c) for k, clock, c in zip(kids, clocks, cross)] if align == "baseline" and horizontal else None
     top = max(baselines) if baselines else 0.0
     for i, (k, m, c) in enumerate(zip(kids, main, cross)):
         if baselines:

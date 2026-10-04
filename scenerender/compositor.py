@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import math
+from copy import copy
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -78,6 +79,9 @@ class RenderContext:
     working_primaries: str = "srgb"                    # primaries the frame is composited in (colour management)
     threed_routing: bool = True                        # every node of a collapsed 3D group goes through is_threed
     exclude: frozenset = frozenset()                   # nodes left out of this frame (QA before/after renders)
+    _render_selection: dict = field(default_factory=dict)  # (scope path, parent) -> one primary child
+    _render_matrices: dict | None = None   # requested (node, scope path, composition time) -> rendered matrix
+    _raster_to_frame: np.ndarray | None = None  # current projective intermediate -> frame
     _node_mb: bool = False
     mb_interval: tuple | None = None         # (first, last) shutter sample times of the frame being supersampled
     _mb_nodes: dict | None = None            # node outputs reusable across this frame's shutter samples
@@ -95,6 +99,8 @@ class RenderContext:
     _rc_ok: dict = field(default_factory=dict)     # (node, window) -> content provably static
     _rc_inside: int = 0                            # > 0 while rendering a raster-cache entry
     _gpu_frame: bool = False                       # this frame composites on the GPU (see gpucomp)
+    coordinate_root: tuple | None = None    # (symbol, entrance context) defining root_matrix's domain
+    _reference_bounds: tuple | None = None  # additional raster region needed by a reference pullback
 
     def __post_init__(self):
         import cairo
@@ -234,6 +240,7 @@ class RenderContext:
         active_tr = self.active_transitions(parent, ctx)
         done_tr = set()
         hidden_mattes = self.hidden_mattes(ctx)
+        selected = self._render_selection.get((ctx.scope.path, parent))
         order = self.child_order(parent, ctx)
         ds = self.hooks.get("depth_sort")
         if ds is not None and self.ev.bool(parent, "collapse", ctx):
@@ -267,12 +274,14 @@ class RenderContext:
                 skip.difference_update(run[1:])
             if child in hidden_mattes or child in self.exclude:
                 continue
+            if selected is not None and child is not selected and ln(child) != "adjustment":
+                continue
             tr = next((tr for tr in active_tr if child in tr[1:3]), None)
             if tr is not None:
                 if tr[0] in done_tr:
                     continue
                 done_tr.add(tr[0])
-                out = self.render_transition(tr, ctx, M, box, layout)
+                out = self.render_transition(tr, ctx, M, box, layout, selected=selected)
             else:
                 if ln(child) == "object3D" and "3d-backdrop" not in self.frame_cache and self._transmissive():
                     # What transmissive 3D surfaces refract: the composite at the first object3D's paint
@@ -561,6 +570,83 @@ class RenderContext:
         from .references import locate
         return locate(self, el, ctx)
 
+    def rendered_matrix(self, el, ctx: Ctx) -> np.ndarray | None:
+        from .references import rendered_matrix
+        return rendered_matrix(self, el, ctx)
+
+    def render_reference(self, el, ctx: Ctx, *, force=False, rect=None) -> Out | None:
+        """Render a dependency in its own place, including its entire subtree."""
+        from .references import SingularCanvasReference
+        try:
+            loc = self.node_location(el, ctx)
+        except SingularCanvasReference as ref:
+            if ref.node is not el or ref.ctx != ctx:
+                raise  # A transform dependency inside the source has no inverse.
+            basis = ref.basis
+            # Rendering the source is independent of the consumer's flat tile,
+            # selection and canvas dimensions. Retain the shared scene clock.
+            basis._flat_depth, basis._raster_to_frame = 0, None
+            root, clock = (basis.coordinate_root if basis.coordinate_root is not None
+                           else (basis.doc.section('composition'), Ctx(ctx.comp_t, ctx.comp_t)))
+            basis.scene_context = basis.coordinate_root
+            basis.scene_matrix = np.eye(3) if basis.coordinate_root is not None else None
+            basis.width = max(1, round(basis.ev.num(root, 'width', clock, basis.doc.width)))
+            basis.height = max(1, round(basis.ev.num(root, 'height', clock, basis.doc.height)))
+            basis.scale = 1.
+            basis.frame_rect = (0, 0, basis.width, basis.height)
+            lookup = ref.canvas @ np.linalg.inv(self.root_matrix)
+            if self._raster_to_frame is not None:
+                lookup = lookup @ self._raster_to_frame
+            return self._sample_reference(basis, lookup, el, ctx, force, rect)
+        if self._raster_to_frame is not None:
+            # Dependency pixels live in the output frame, while a projected
+            # consumer applies its matte/effects in a flat intermediate tile.
+            basis = copy(self)
+            basis._flat_depth, basis._raster_to_frame = 0, None
+            return self._sample_reference(basis, self._raster_to_frame, el, ctx, force, rect)
+        from .references import render_source
+        return render_source(self, el, ctx, force=force)
+
+    def _sample_reference(self, basis, lookup, el, ctx, force, rect):
+        from .raster import sample_projective
+        rect = rect if rect is not None else self.frame_rect
+        corners = np.array([[rect[0], rect[1], 1], [rect[2], rect[1], 1],
+                            [rect[0], rect[3], 1], [rect[2], rect[3], 1]]) @ lookup.T
+        if np.isfinite(corners).all() and (corners[:, 2] > 1e-9).all():
+            points = corners[:, :2]/corners[:, 2:]
+            lo, hi = np.floor(points.min(axis=0)-2), np.ceil(points.max(axis=0)+2)
+            basis._reference_bounds = tuple(map(int, (*lo, *hi)))
+        else:
+            basis._reference_bounds = None
+        out = basis.render_reference(el, ctx, force=force, rect=basis._reference_bounds)
+        if out is None:
+            return None
+        return Out(sample_projective(out.buf, lookup, rect), out.blend, out.opacity)
+
+    def render_contribution(self, el, ctx: Ctx, root) -> tuple[Buf, np.ndarray | None]:
+        """Render one primary node through its ancestors on the current scene canvas.
+
+        Siblings still participate in layout, scheduling and reference lookup.
+        Only this branch supplies primary pixels; ancestor masks/effects and
+        adjustments operate on those pixels normally. Dependencies render their
+        complete subtree via render_reference, independent of this selection.
+        Also return the selected node's actual local-to-frame matrix, including
+        camera projection and any ancestor projective intermediate buffers.
+        """
+        branch = []
+        child = el
+        while child is not root:
+            parent = child.getparent()
+            branch.append((parent, child))
+            child = parent
+        loc = self.node_location(branch[-1][1], ctx)
+        loc.rc._render_selection = {(loc.ctx.scope.path, p): c for p, c in branch}
+        key = (el, ctx.scope.path, ctx.comp_t)
+        loc.rc._render_matrices = {key: None}
+        loc.rc._raster_to_frame = None
+        buf = loc.rc.render_children(root, Buf.null(), loc.ctx, loc.matrix, loc.box, 1.0)
+        return buf, loc.rc._render_matrices[key]
+
     def node_matrix(self, el, ctx, PM, box, layout_pos) -> np.ndarray:
         nctx = self.node_ctx(el, ctx)
         size = self.node_size(el, nctx, box, layout_pos)
@@ -793,6 +879,10 @@ class RenderContext:
             M = self.hooks["camera"](self, el, M, nctx)
             if M is None:
                 return None
+        if self._render_matrices is not None:
+            key = (el, nctx.scope.path, nctx.comp_t)
+            if key in self._render_matrices:
+                self._render_matrices[key] = M if self._raster_to_frame is None else self._raster_to_frame @ M
         if temporal:
             # Temporal effects combine renders from several times, so each carries its own opacity
             # (and a node past its window contributes only its tail): fold opacity into the pixels.
@@ -1188,15 +1278,23 @@ class RenderContext:
             hit = self.base().cache[("pointwise-shader", e.get("src"))] = _pointwise_glsl(self, e)
         return hit
 
+    def projective_flat_matrix(self, H, size) -> np.ndarray | None:
+        """Resolution of the flat buffer used for a projective node."""
+        from .raster import projected_scale
+        w, h = max(1.0, size[0]), max(1.0, size[1])
+        k = projected_scale(H, w, h)
+        return scale(k, k) if k > 0 else None
+
     def _render_projective(self, el, handler, ctx, H, size, PM, box) -> Buf | None:
         """Perspective: draw the node flat at a resolution matching its projected size, run its
         deform/masks/effects there, then warp the tile through the homography into the frame."""
-        from .raster import projected_scale, warp_projective
-        w, h = max(1.0, size[0]), max(1.0, size[1])
-        k = projected_scale(H, w, h)
-        if k <= 0:
+        from .raster import warp_projective
+        A = self.projective_flat_matrix(H, size)
+        if A is None:
             return None
-        A = scale(k, k)
+        warp = H @ np.linalg.inv(A)
+        outer = self._raster_to_frame
+        self._raster_to_frame = warp if outer is None else outer @ warp
         self._flat_depth += 1
         try:
             flat = handler(self, el, ctx, A, size)
@@ -1206,9 +1304,10 @@ class RenderContext:
                 flat = self.finish_node(el, flat, ctx, A, size, PM, box)
         finally:
             self._flat_depth -= 1
+            self._raster_to_frame = outer
         if flat is None:
             return None
-        out = warp_projective(flat, H @ np.linalg.inv(A), self.frame_rect)
+        out = warp_projective(flat, warp, self.raster_bounds(margin=0))
         post = self.hooks.get("camera_post")
         if post is not None and out is not None and not self._flat_depth:
             out = post(self, el, out, ctx)   # lens distortion of the active camera
@@ -1382,11 +1481,16 @@ class RenderContext:
 
     # ------------------------------------------------------------ layout
     def layout_positions(self, parent, ctx: Ctx, box) -> dict:
-        mode = self.ev.str(parent, "layout", ctx, "none") if ln(parent) in ("group", "sequence") else "none"
+        if ln(parent) not in ("group", "sequence") or not self.ev.explicit(parent, "layout", ctx):
+            return {}
+        # Traversal supplies the warped child clock. Layout belongs to the
+        # group's own clock, while each child's dimensions use its entered clock.
+        owner = self.ev.context_at(parent, ctx, ctx.comp_t)
+        mode = self.ev.str(parent, "layout", owner, "none")
         if mode == "none":
             return {}
         from .layout import flex_layout
-        return flex_layout(self, parent, ctx, box, mode)
+        return flex_layout(self, parent, owner, box, mode, child_ctx=ctx)
 
     # ------------------------------------------------------------ transitions
     def transition_value(self, tr, prop, ctx, default=None):
@@ -1414,12 +1518,17 @@ class RenderContext:
                 out.append((tr, a, b, s0, s1))
         return out
 
-    def render_transition(self, tr_info, ctx, PM, box, layout) -> Out | None:
+    def render_transition(self, tr_info, ctx, PM, box, layout, *, selected=None) -> Out | None:
         from . import curves
         tr, a, b, s0, s1 = tr_info
         u = (ctx.t - s0) / max(1e-9, s1 - s0)
         p = curves.get(self.ev.str(tr, "curve", ctx, "ease-in-out"))(min(1.0, max(0.0, u)))
-        full = lambda n: None if n is None else self._full(self.render_node(n, ctx, PM, box, layout.get(n), force=True))  # noqa: E731
+        def full(n):
+            if n is None:
+                return None
+            if n in self.exclude or (selected is not None and n is not selected):
+                return self._full(None)
+            return self._full(self.render_node(n, ctx, PM, box, layout.get(n), force=True))
         A, B = full(a), full(b)
         typ = self.transition_value(tr, "type", ctx)
         fn = TRANSITIONS.get(typ)
@@ -1439,17 +1548,23 @@ class RenderContext:
         return blending.composite(base, out.buf, "normal", out.opacity, grow=False)
 
     # ------------------------------------------------------------ helpers for handlers
+    def raster_bounds(self, margin=64):
+        """Clip in the current raster space, including off-frame references."""
+        if self._flat_depth:
+            return (-8192, -8192, 8192, 8192)
+        bounds = self._reference_bounds or (0, 0, self.width, self.height)
+        return (bounds[0]-margin, bounds[1]-margin, bounds[2]+margin, bounds[3]+margin)
+
     def canvas_for(self, M, w, h, pad: float = 2.0, clip_to_frame: bool = True):
         from .raster import transformed_rect
         r = transformed_rect(M, 0, 0, w, h, pad)
         if self._flat_depth:
             # Flat (pre-perspective) tiles are not frame-aligned; cap their size instead of clipping.
-            r = intersect(r, (-8192, -8192, 8192, 8192))
+            r = intersect(r, self.raster_bounds())
             if r is None:
                 return None
         elif clip_to_frame:
-            margin = 64
-            r = intersect(r, (-margin, -margin, self.width + margin, self.height + margin))
+            r = intersect(r, self.raster_bounds())
             if r is None:
                 return None
         c = Canvas(r)

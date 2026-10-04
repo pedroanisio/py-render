@@ -3,7 +3,8 @@
 Pinned decisions (glTF 2.0 semantics for every source format):
   * Matrices are float64 4x4 for column vectors (p' = M @ [p, 1]); `Node.matrix` is stored in that
     math layout (a glTF column-major list reshaped to (4, 4) and transposed). A node with an explicit
-    matrix is not animated (glTF forbids TRS channels on matrix nodes); channels on it are ignored.
+    matrix ignores ordinary TRS channels. An explicit glTF animation pointer may replace its
+    translation column while preserving the rest of the matrix; rotation/scale pointers are invalid.
   * world(node) = world(parent) @ local(node); nodes not reachable from `model.roots` still get a
     world matrix (joints may live outside the scene roots) but never emit draw items.
   * Sampling clamps to the first/last key. LINEAR rotation = shortest-path slerp, normalised;
@@ -118,7 +119,18 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
     touched: set[int] = set()
     for ch in clip.channels if clip is not None else ():
         if 0 <= ch.node < len(nodes) and len(ch.times):
-            anim[(ch.node, ch.path)] = sample_channel(ch, t)
+            value = sample_channel(ch, t)
+            if ch.component is not None:
+                node = nodes[ch.node]
+                count = max((len(p.morph_positions) for p in model.meshes[node.mesh]), default=0)
+                weights = anim.get((ch.node, 'weights'))
+                if weights is None:
+                    weights = np.zeros(count)
+                    if node.weights is not None:
+                        weights[:min(count, len(node.weights))] = node.weights[:count]
+                weights[ch.component] = value[0]
+                value = weights
+            anim[(ch.node, ch.path)] = value
             if ch.path != "weights":
                 touched.add(ch.node)
     parent = [-1] * len(nodes)
@@ -136,12 +148,15 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
                 local = nd.matrix_sampler(t)
             elif nd.matrix is not None:
                 local = np.asarray(nd.matrix, dtype=np.float64)
+                if (i, 'matrixTranslation') in anim:
+                    local = local.copy()
+                    local[:3, 3] = anim[(i, 'matrixTranslation')]
             else:
                 local = trs_matrix(anim.get((i, "translation"), nd.translation),
                                    anim.get((i, "rotation"), nd.rotation), anim.get((i, "scale"), nd.scale))
             p = parent[i]
             world[i] = local if p < 0 else world_of(p) @ local
-            dynamic[i] = sampled or (i in touched and nd.matrix is None) or (p >= 0 and dynamic[p])
+            dynamic[i] = sampled or (i in touched and nd.matrix is None) or (i, 'matrixTranslation') in anim or (p >= 0 and dynamic[p])
         return world[i]
 
     reachable: list[int] = []
@@ -211,6 +226,13 @@ def pose_model(model: Model, clip: Clip | None, t: float, morph_override: list |
             if tan is not None:
                 tan[:, :3] = _unit(tan[:, :3])
             mat = prim.variants.get(variant, prim.material) if variant is not None else prim.material
+            material_key = (mat.animation_key or id(mat)) if mat is not None else None
+            if mat is not None and clip is not None and material_key in clip.material_samplers:
+                mat = clip.material_samplers[material_key](t, mat)
+                dyn = True  # Animated texture coordinates also change uploaded geometry.
+            if mat is not None and mat.sampler is not None and clip is not None:
+                mat = mat.sampler(t)
+                dyn = True  # UV/displacement inputs may change along with shading.
             items.append(DrawItem(
                 positions=pos.astype(np.float32), normals=_unit(nrm).astype(np.float32),
                 indices=np.asarray(prim.indices, dtype=np.uint32), uvs=prim.uvs,

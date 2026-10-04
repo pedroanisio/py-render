@@ -22,7 +22,8 @@ MAGIC = b"Kaydara FBX Binary  \x00\x1a\x00"
 def _prop(p, compress: bool) -> bytes:
     code, v = p
     if code in "YCIFDL":
-        fmt = {"Y": "<h", "C": "<?", "I": "<i", "F": "<f", "D": "<d", "L": "<q"}[code]
+        # Legacy Takes store bare interpolation letters in byte properties.
+        fmt = {"Y": "<h", "C": "<B", "I": "<i", "F": "<f", "D": "<d", "L": "<q"}[code]
         return code.encode() + struct.pack(fmt, v)
     if code in "SR":
         raw = v.encode("utf-8") if isinstance(v, str) else v

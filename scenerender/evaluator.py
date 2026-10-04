@@ -232,7 +232,11 @@ class Evaluator:
             if abs(residual) < 1e-9:
                 return replace(current, t=time)
             h = 1e-5 * max(1., abs(t))
-            derivative = (sample(t + h)[1] - sample(t - h)[1]) / (2 * h)
+            left, right = t-h, t+h
+            # Use the actual representable interval and clocks. Subtracting the
+            # requested time first, or dividing by a rounded nominal 2*h, adds
+            # seek-dependent drift even to the identity clock.
+            derivative = (sample(right)[0].t - sample(left)[0].t) / (right-left)
             if not math.isfinite(derivative) or abs(derivative) < 1e-9:
                 break
             step = max(-limit, min(limit, residual / derivative))
@@ -499,7 +503,8 @@ class Evaluator:
                 pt = self._motion_path(el, a, ctx)
                 if pt is not None:
                     value = pt[0] if prop == "x" else pt[1] if prop == "y" else value
-            elif tag == "expression" and parse_bool(a.get("enabled", "true"), True):
+            elif (tag == "expression" and parse_bool(a.get("enabled", "true"), True)
+                  and (el, prop) not in self.__dict__.get("_resampling_properties", ())):
                 try:
                     v = self.run_expression(a.text or "", el, prop, ctx, value, seed=a.get("seed"))
                 except Exception as e:  # noqa: BLE001
@@ -533,6 +538,12 @@ class Evaluator:
 
     def _sample_animate(self, el, a, prop: str, ctx: Ctx):
         keys = self.keys(el, a, prop)
+        t = self._animation_time(a, ctx)
+        return anim.sample(keys, t, a.get("defaultInterpolation", "linear"),
+                           a.get("extrapolateBefore", "hold"), a.get("extrapolateAfter", "hold"))
+
+    @staticmethod
+    def _animation_time(a, ctx: Ctx):
         base = a.get("timeBase", "composition")
         t = ctx.t
         if base == "local":
@@ -540,8 +551,7 @@ class Evaluator:
         elif base == "normalized":
             span = (ctx.node_end - ctx.node_start) if ctx.node_end is not None else 0.0
             t = (ctx.t - ctx.node_start) / span if span > 0 else 0.0
-        return anim.sample(keys, t, a.get("defaultInterpolation", "linear"),
-                           a.get("extrapolateBefore", "hold"), a.get("extrapolateAfter", "hold"))
+        return t
 
     def _link(self, el, a, ctx: Ctx):
         src = a.get("source", "")
@@ -551,7 +561,10 @@ class Evaluator:
         vals = []
         for i in range(n):
             dt = delay + (smoothing * i / (n - 1) if n > 1 else 0.0)
-            v = self._link_source(src, ctx.at(ctx.t - dt), el)
+            sampled = replace(ctx, t=ctx.t - dt, comp_t=ctx.comp_t - dt)
+            if dt:
+                sampled = replace(sampled, frame=round(sampled.comp_t * float(self.doc.fps)))
+            v = self._link_source(src, sampled, el)
             if v is None:
                 return None
             vals.append(v)
@@ -671,7 +684,20 @@ class Evaluator:
             return _jsval(self.get(node, p, source_ctx))
 
         def value_at(t: float):
-            return _jsval(self._pre_expression(el, prop, ctx.at(float(t))))
+            # Shared effects/assets borrow their consumer's clock. Reconstruct
+            # that clock, including the sampled window and composition frame.
+            owner = ctx.clock_node if ctx.clock_node is not None else el
+            # Rebuilding a clock can inspect this very property (start/end,
+            # speed, or a property referenced by a parent's timing expression).
+            # valueAtTime samples its pre-expression value in that dependency
+            # as well, rather than recursively running the expression again.
+            busy = self.__dict__.setdefault("_resampling_properties", set())
+            busy.add((el, prop))
+            try:
+                sampled = self.context_at_local(owner, ctx, float(t))
+            finally:
+                busy.remove((el, prop))
+            return _jsval(self._pre_expression(el, prop, sampled))
 
         def loop(kind: str = "cycle", n: int = 0, *, after: bool):
             mode = {"cycle": "loop", "pingpong": "ping-pong", "offset": "offset", "continue": "linear"}.get(kind, "loop")
@@ -680,8 +706,11 @@ class Evaluator:
                     keys = self.keys(el, a, prop)
                     if n and len(keys) > n:
                         keys = keys[-(n + 1):] if after else keys[:n + 1]
-                    return _jsval(anim.sample(keys, ctx.t, a.get("defaultInterpolation", "linear"),
-                                              mode if not after else "hold", mode if after else "hold"))
+                    result = anim.sample(keys, self._animation_time(a, ctx), a.get("defaultInterpolation", "linear"),
+                                         mode if not after else "hold", mode if after else "hold")
+                    if a.get("property") != prop and prop in ALIASES:
+                        result = _component(result, ALIASES[prop][1])
+                    return _jsval(result)
             return _jsval(value)
 
         def beat():

@@ -15,6 +15,8 @@ uv pip install -e '.[3d,test,codes]'
 
 The `3d` extra provides USD/USDZ, FBX, OpenEXR and MaterialX libraries. The smaller
 `exr` extra installs OpenEXR 3.3 or later for still-image parts and channel sets.
+FBX 6 tracking Takes also use the `ufbx` dependency from `3d`; the FBX 7 tracking
+reader works without it. See [TRACKING.md](TRACKING.md) for interpolation scope.
 PNG precision, TIFF decoding and PSD compositing dependencies are included in the
 base package. See [IMAGE-INPUTS.md](IMAGE-INPUTS.md) for input behavior and limits.
 OpenGL 4.1
@@ -94,6 +96,30 @@ sleeps instead of spinning while it waits for the GPU (`__GL_YIELD=USLEEP` unles
 otherwise spin-wait and multiply CPU time without making frames faster. The NVENC probe result is
 kept in the user cache directory (`$XDG_CACHE_HOME/scenerender`), keyed by the ffmpeg builds and the
 NVIDIA driver.
+
+glTF `KHR_texture_basisu` textures additionally need **libktx 4**, from the
+[Khronos KTX-Software releases](https://github.com/KhronosGroup/KTX-Software/releases).
+This is a native library, not a dependency installed by the Python `3d` extra.
+Install the package for the host platform, or unpack it and point the renderer
+at its shared library:
+
+```sh
+export SCENERENDER_LIBKTX=/absolute/path/to/libktx.so.4
+```
+
+Use the corresponding `.dylib` or `ktx.dll` path on macOS or Windows. Without an
+explicit path, discovery checks the virtual environment's `lib` directory
+(also `Library/bin` on Windows), then the system library loader. An ordinary
+Linux virtual environment can keep `libktx.so.4` in `.venv/lib`; no system-wide
+installation is needed. KTX-Software 4.4.2 supplies the regression decoder and
+fixture-generation tools. The renderer loads its public C API directly and does
+not require the Python-version-specific `pyktx` binding.
+
+If this decoder is absent, an optional BasisU texture uses its PNG/JPEG/WebP
+fallback with a warning. A required BasisU extension, or a texture without a
+fallback, raises an installation error. Invalid KTX2 content raises an input
+error even when a fallback exists. See [GLTF.md](GLTF.md) for decoding and mipmap
+behavior.
 
 The 2026-09-27 regression environment uses Python 3.12.3, Pycairo 1.25.1, Cairo
 1.18.0 and Mesa llvmpipe. Local HTTP delivery tests require permission to bind

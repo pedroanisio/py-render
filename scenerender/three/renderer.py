@@ -15,6 +15,9 @@ Frame model (pinned):
     by the transmitted fraction), since node handlers do not see the compositor's backdrop.
   * Anti-aliasing: 4x MSAA always; project/@antialias3d = N additionally supersamples N x N (box
     filtered), capped at 32 Mpx per pass. Shadow map sizes scale with the render scale.
+  * Lighting: direct-light and shadow metadata use dynamically sized textures. Original-resolution
+    shadow faces are packed into a texture array; GPU capacity errors are explicit, never truncation
+    of the light list. The world owns these uploads and shares them across its objects/cameras.
   * Instancing: object3D/@instances = N draws N GPU instances. Copy i evaluates the transform with
     the expression variables index = i and count = N (as <repeat> does); there is no implicit layout,
     so copies whose transforms are equal coincide (CONVENTIONS 5.2).
@@ -31,7 +34,8 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from collections import OrderedDict
 
 import numpy as np
 
@@ -40,11 +44,14 @@ from ..camera import UNITS_PER_METRE, Camera
 from . import shaders
 from .lights import LightState, dominant_direction, sh9_irradiance, world_environment
 from .materials import Material
+from .texture_atlas import SCALAR_MAP_KEYS, pack_scalar_maps
+from .material_atlas import ATLAS_MAP_KEYS, EXTENSION_MAP_KEYS, pack_material_maps
 
 log = logging.getLogger("scenerender")
 
-VFMT = "3f 3f 2f 4f 4f 2f 2f 2f 2f"
-VATTR = ("in_pos", "in_nrm", "in_uv", "in_tan", "in_col", "in_nrmuv", "in_mruv", "in_occuv", "in_emisuv")
+VFMT = "3f 3f 4f 4f 4f 4f 4f 4f 4f 2f"
+VATTR = ("in_pos", "in_nrm", "in_tan", "in_col", "in_baseNrmUV", "in_mrOccUV", "in_emisRoughUV",
+         "in_metalOpacityUV", "in_iorCoatUV", "in_coatRoughUV")
 IFMT = "4f 4f 4f 4f/i"
 IATTR = ("in_m0", "in_m1", "in_m2", "in_m3")
 MSAA = 4
@@ -63,8 +70,8 @@ class Res:
         self.splat = ctx.program(vertex_shader=shaders.SPLAT_VS, fragment_shader=shaders.SPLAT_FS)
         self.lut = _tex(ctx, brdf_lut(), mip=False)
         self.white = _tex(ctx, np.ones((1, 1, 4), np.float32), mip=False)
-        self.far = _tex(ctx, np.full((1, 1, 4), 1e30, np.float32), mip=False, nearest=True)
-        self.env_black = _tex(ctx, np.zeros((LEVELS, 1, 4), np.float32), mip=False)
+        self.far_array = ctx.texture_array((1, 1, 1), 1, np.array([1e30], np.float32).tobytes(), dtype='f4')
+        self.env_black = ctx.texture_array((1, LEVELS, 1), 4, np.zeros((LEVELS, 4), np.float32).tobytes(), dtype='f4')
         quad = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], np.float32).tobytes())
         self.bg_vao = ctx.vertex_array(self.bg, [(quad, "2f", "in_pos")])
         self.pf_vao = ctx.vertex_array(self.prefilter, [(quad, "2f", "in_pos")])
@@ -73,6 +80,8 @@ class Res:
         self.down_targets: dict = {}
         corners = ctx.buffer(np.array([-1, -1, 1, -1, -1, 1, 1, 1], np.float32).tobytes())
         self.splat_corners = corners
+        self.ies_textures = OrderedDict()
+        self.environments = OrderedDict()
 
 
 _RES: dict = {}
@@ -100,6 +109,11 @@ def _tex(ctx, arr: np.ndarray, mip: bool = True, nearest: bool = False, repeat: 
         t.filter = (moderngl.NEAREST, moderngl.NEAREST)
     elif mip:
         t.build_mipmaps()
+        from .texture_image import TextureImage, mip_chain
+        if isinstance(arr, TextureImage):
+            for level, pixels in enumerate(mip_chain(arr)):
+                if level:
+                    t.write(np.ascontiguousarray(pixels, np.float32).tobytes(), level=level)
         t.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
         t.anisotropy = 8.0
     else:
@@ -120,19 +134,77 @@ def _material_texture(ctx, material: Material, key: str, cache: dict):
             tex = _tex(ctx, arr, mip=minimum >= 9984)
             tex.filter = (minimum, maximum)
             tex.anisotropy = 1.0
-            # Mirrored coordinates are folded in mapSample; clamping at the
-            # folded edge gives the same filter footprint as mirrored repeat.
+            # Explicit samplers use texelFetch in mapSample. Keep the native
+            # sampler coherent for LOD queries and diagnostic texture reads.
             tex.repeat_x = sampler.get("wrapS", 10497) == 10497
             tex.repeat_y = sampler.get("wrapT", 10497) == 10497
         else:
             tex = _tex(ctx, arr)
         hit = cache[ck] = (arr, tex)
+    else:
+        del cache[ck]
+        cache[ck] = hit
+    _trim_texture_cache(cache)
     return hit[1]
 
 
-def _mirror_axes(material, key):
-    sampler = material.p.get("mapSamplers", {}).get(key, {})
-    return tuple(int(sampler.get(axis) == 33648) for axis in ("wrapS", "wrapT"))
+def _trim_texture_cache(cache):
+    # At most eight material textures can be bound in one draw. Retain those even
+    # when they alone exceed the byte budget; older draws can upload again.
+    while len(cache) > 8 and (len(cache) > 128 or sum(a.nbytes for a, _ in cache.values()) > 128*1024**2):
+        oldest = next(iter(cache))
+        _, texture = cache.pop(oldest)
+        texture.release()
+
+
+def _scalar_material_texture(ctx, material, cache):
+    images = tuple(material.maps.get(key) for key in SCALAR_MAP_KEYS)
+    key = ('scalar-atlas', *(id(a) if a is not None else None for a in images))
+    hit = cache.pop(key, None)
+    if hit is None:
+        atlas = pack_scalar_maps(images, ctx.info['GL_MAX_TEXTURE_SIZE'])
+        hit = atlas, _tex(ctx, atlas.pixels, mip=False, nearest=True, repeat=False)
+    cache[key] = hit
+    _trim_texture_cache(cache)
+    return hit
+
+
+def _extension_material_texture(ctx, material, cache):
+    images = tuple(material.maps.get(key) for key in ATLAS_MAP_KEYS)
+    samplers = tuple(material.p.get('mapSamplers', {}).get(key, {}) for key in ATLAS_MAP_KEYS)
+    key = ('extension-atlas', *(id(a) if a is not None else None for a in images), repr(samplers))
+    hit = cache.pop(key, None)
+    if hit is None:
+        atlas = pack_material_maps(images, samplers, ctx.info['GL_MAX_TEXTURE_SIZE'])
+        hit = atlas, _tex(ctx, atlas.pixels, mip=False, nearest=True, repeat=False)
+    cache[key] = hit
+    _trim_texture_cache(cache)
+    return hit
+
+
+def _scalar_uniforms(prog, material, atlas):
+    prog['u_scalarInfo'].write(atlas.info.tobytes())
+    prog['u_scalarLevels'].write(atlas.levels.tobytes())
+    samplers = material.p.get('mapSamplers', {})
+    wraps, borders = [], []
+    for key in SCALAR_MAP_KEYS:
+        s = samplers.get(key, {})
+        wraps.append((s.get('wrapS', 10497), s.get('wrapT', 10497), s.get('minFilter', 9987), s.get('magFilter', 9729)))
+        borders.append(s.get('border', (0.,))[0])
+    prog['u_scalarSampler'].write(np.asarray(wraps, np.int32).tobytes())
+    prog['u_scalarBorder'] = tuple(borders)+(0.,)
+
+
+def _map_sampler(material, key):
+    sampler = material.p.get("mapSamplers", {}).get(key)
+    if not sampler:
+        return (10497, 10497, 0, 0)  # Native anisotropic sampling.
+    return tuple(sampler.get(name, default) for name, default in
+                 (("wrapS", 10497), ("wrapT", 10497), ("minFilter", 9987), ("magFilter", 9729)))
+
+
+def _map_border(material, key):
+    return tuple(material.p.get('mapSamplers', {}).get(key, {}).get('border', (0., 0., 0., 0.)))
 
 
 def brdf_lut(n: int = 32, samples: int = 256) -> np.ndarray:
@@ -212,12 +284,15 @@ class GPUItem:
     tangents: bool
     vaos: dict = field(default_factory=dict)
     mode: int = 4
+    extension_uv: object = None
 
     def release(self):
         for v in self.vaos.values():
             v.release()
         self.vbo.release()
         self.ibo.release()
+        if self.extension_uv is not None:
+            self.extension_uv.release()
 
 
 def upload(ctx, positions, normals, uvs, tangents, colors, indices, map_uvs=None, mode=4) -> GPUItem:
@@ -228,14 +303,25 @@ def upload(ctx, positions, normals, uvs, tangents, colors, indices, map_uvs=None
     if col.shape[1] == 3:
         col = np.c_[col, np.ones(n, np.float32)]
     maps = map_uvs or {}
+    metal_or_specular = 'metallicMap' if 'metallicMap' in maps else 'specularColorMap'
+    extension_uv = None
+    if any(key in maps for key in EXTENSION_MAP_KEYS):
+        coordinates = np.stack([maps.get(key, uv) for key in EXTENSION_MAP_KEYS], axis=1).reshape(-1, 2)
+        maximum = ctx.info['GL_MAX_TEXTURE_SIZE']
+        if len(coordinates) > maximum*maximum:
+            raise ValueError('Material UV table exceeds GPU texture capacity')
+        width = min(maximum, max(1, math.ceil(math.sqrt(len(coordinates)))))
+        pixels = np.zeros((max(1, math.ceil(len(coordinates)/width)), width, 2), np.float32)
+        pixels.reshape(-1, 2)[:len(coordinates)] = coordinates
+        extension_uv = _tex(ctx, pixels, mip=False, nearest=True, repeat=False)
     data = np.concatenate([np.asarray(positions, np.float32), np.asarray(normals, np.float32),
-                           np.asarray(maps.get("baseColorMap", uv), np.float32),
                            np.asarray(tan, np.float32), np.asarray(col, np.float32)] +
                           [np.asarray(maps.get(k, uv), np.float32) for k in
-                           ("normalMap", "metallicRoughnessMap", "occlusionMap", "emissiveMap")], 1)
+                           ("baseColorMap", "normalMap", "metallicRoughnessMap", "occlusionMap", "emissiveMap",
+                            "roughnessMap", metal_or_specular, "opacityMap", *SCALAR_MAP_KEYS)], 1)
     idx = np.ascontiguousarray(np.asarray(indices).reshape(-1), np.uint32)
     return GPUItem(ctx.buffer(np.ascontiguousarray(data, np.float32).tobytes()), ctx.buffer(idx.tobytes()), len(idx),
-                   tangents is not None, mode=mode)
+                   tangents is not None, mode=mode, extension_uv=extension_uv)
 
 
 def item_vao(ctx, item: GPUItem, prog, inst) -> object:
@@ -279,8 +365,8 @@ class ObjDraw:
 
 @dataclass
 class ShadowMap:
-    tex: object
-    kind: int                  # 0 ortho, 1 perspective, 2 cube atlas
+    faces: tuple               # one planar map or six square cube faces
+    kind: int                  # 0 ortho, 1 perspective, 2 cube
     mat: np.ndarray
     params: tuple              # bias (world), light radius, near, far
     q: tuple                   # texel (uv), world per uv, size, 0
@@ -289,16 +375,49 @@ class ShadowMap:
 
 
 @dataclass
-class EnvGPU:
+class DomeRadiance:
+    source: object             # retain the source image, preventing recycled cache identities
     atlas: object | None
     sh9: np.ndarray
+    shadow_dir: np.ndarray
+    dominance: float
+    background: object = None
+    users: int = 0
+    cached: bool = False
+
+    @property
+    def nbytes(self):
+        return sum(t.width*t.height*t.components*4 for t in (self.atlas, self.background) if t is not None)
+
+    def discard_if_unused(self):
+        if not self.cached and self.users == 0:
+            for texture in (self.atlas, self.background):
+                if texture is not None:
+                    texture.release()
+
+
+@dataclass
+class EnvGPU:
+    atlas: object | None
     amb_d: np.ndarray
     amb_s: np.ndarray
-    spec_on: float
-    diff_on: float
-    visible: list              # [(texture or None, rot, colour)]
-    shadow_dir: np.ndarray | None = None
-    dominance: float = 0.0
+    domes: list                # [(original light index, LightState, DomeRadiance, array layer)]
+    maps: list                 # unique acquired DomeRadiance entries
+    visible: list              # [(texture or None, rot, colour)], evaluated each frame
+    released: bool = False
+
+    def release(self):
+        if self.released:
+            return
+        self.released = True
+        if self.atlas is not None:
+            self.atlas.release()
+        for entry in self.maps:
+            entry.users -= 1
+            entry.discard_if_unused()
+
+    def __del__(self):
+        self.release()
 
 
 @dataclass
@@ -306,9 +425,10 @@ class World3D:
     """Camera-independent part of a frame: objects, lights, environment and shadow maps."""
     objects: dict
     lights: list
-    shadows: dict              # light index -> ShadowMap (plus "env")
+    shadows: dict              # original light index -> ShadowMap (including individual domes)
     env: EnvGPU
     released: bool = False
+    lighting: object = None    # LightingGPU, shared by the world's cameras/objects
 
     def release(self):
         if self.released:
@@ -320,7 +440,14 @@ class World3D:
             if o.inst_buf is not None:
                 o.inst_buf.release()
         for s in self.shadows.values():
-            release_shadow_texture(s.tex)
+            for face in s.faces:
+                release_shadow_texture(face)
+        if self.lighting is not None:
+            self.lighting.release()
+        self.env.release()
+
+    def __del__(self):
+        self.release()
 
 
 @dataclass
@@ -364,6 +491,13 @@ class Frame3D:
 def _material_uniforms(r: Res, prog, m: Material, tex_cache: dict, unit0: int = 0) -> int:
     ctx = r.ctx
     p = m.p
+    usd = p.get('surfaceModel') == 'usdPreviewSurface'
+    _set(prog, 'u_usdSurface', int(usd))
+    _set(prog, 'u_specularWorkflow', int(usd and p.get('useSpecularWorkflow', False)))
+    _set(prog, 'u_usdTransparent', int(m.usd_transparent))
+    _set(prog, 'u_normalWorld', int(p.get('normalSpace') == 'world'))
+    _set(prog, 'u_mxNormalMap', int('normalMapScale' in p))
+    _set(prog, 'u_mxNormalScale', tuple(p.get('normalMapScale', (1., 1.))))
     base = p["baseColor"]
     _set(prog, "u_base", (base[0], base[1], base[2], base[3] * p["opacity"]))
     _set(prog, "u_metal", float(p["metallic"]))
@@ -378,7 +512,7 @@ def _material_uniforms(r: Res, prog, m: Material, tex_cache: dict, unit0: int = 
     _set(prog, "u_cc", float(p["clearcoat"]))
     _set(prog, "u_ccRough", float(p["clearcoatRoughness"]))
     _set(prog, "u_trans", float(p["transmission"]))
-    _set(prog, "u_ior", float(max(1.0, p["ior"])))
+    _set(prog, "u_ior", float(max(1e-6 if usd else 1.0, p["ior"])))
     _set(prog, "u_thick", float(p["thickness"]))
     _set(prog, "u_attCol", tuple(p["attenuationColor"][:3]))
     ad = p["attenuationDistance"]
@@ -389,142 +523,257 @@ def _material_uniforms(r: Res, prog, m: Material, tex_cache: dict, unit0: int = 
     _set(prog, "u_specCol", tuple(p["specularColor"][:3]))
     _set(prog, "u_irid", float(p["iridescence"]))
     _set(prog, "u_iridIor", float(p["iridescenceIor"]))
-    _set(prog, "u_iridThick", 400.0)
+    _set(prog, "u_iridThick", float(p.get('iridescenceThicknessMaximum', 400.0)))
+    _set(prog, "u_iridThickMin", float(p.get('iridescenceThicknessMinimum', 100.0)))
+    _set(prog, "u_ccNormalScale", float(p.get('clearcoatNormalScale', 1.0)))
     _set(prog, "u_aniso", float(p["anisotropy"]))
     _set(prog, "u_anisoRot", math.radians(float(p["anisotropyRotation"])))
     _set(prog, "u_disp", float(p["dispersion"]))
     _set(prog, "u_nScale", float(p["normalScale"]))
     _set(prog, "u_occStrength", float(p.get("occlusionStrength", 1.0)))
+    _set(prog, "u_occlusion", float(p.get('occlusion', 1.0)))
     _set(prog, "u_uvScale", (float(p["uvScaleX"]), float(p["uvScaleY"])))
     unit = unit0
+    scalar_maps = usd and any(key in m.maps for key in SCALAR_MAP_KEYS)
+    extension_maps = not usd and any(key in m.maps for key in SCALAR_MAP_KEYS + EXTENSION_MAP_KEYS)
+    _set(prog, 'u_hasScalarMaps', int(scalar_maps))
+    _set(prog, 'u_hasExtensionMaps', int(extension_maps))
+    metal_or_specular = 'specularColorMap' if usd and 'specularColorMap' in m.maps else 'metallicMap'
     for name, key, flag in (("t_base", "baseColorMap", "u_hasBase"), ("t_nrm", "normalMap", "u_hasNrm"),
                             ("t_mr", "metallicRoughnessMap", "u_hasMR"), ("t_occ", "occlusionMap", "u_hasOcc"),
-                            ("t_emis", "emissiveMap", "u_hasEmis")):
+                            ("t_emis", "emissiveMap", "u_hasEmis"),
+                            ("t_rough", "roughnessMap", "u_hasRough"),
+                            ("t_metal", metal_or_specular, "u_hasMetal"),
+                            ("t_opacity", "opacityMap", "u_hasOpacity")):
         arr = m.maps.get(key)
         t = r.white
-        if arr is not None:
+        if key == 'metallicRoughnessMap' and extension_maps:
+            _, t = _extension_material_texture(ctx, m, tex_cache)
+        elif key == 'metallicRoughnessMap' and scalar_maps:
+            atlas, t = _scalar_material_texture(ctx, m, tex_cache)
+            _scalar_uniforms(prog, m, atlas)
+            arr = None  # The slot holds independent scalar pyramids, not a G/B map.
+        elif arr is not None:
             t = _material_texture(ctx, m, key, tex_cache)
         t.use(unit)
         _set(prog, name, unit)
         _set(prog, flag, int(arr is not None))
-        _set(prog, "u_" + name[2:] + "Mirror", _mirror_axes(m, key))
+        _set(prog, "u_" + name[2:] + "Sampler", _map_sampler(m, key))
+        _set(prog, "u_" + name[2:] + "Border", _map_border(m, key))
         unit += 1
     return unit
 
 
 def _lights_uniforms(r: Res, prog, fr: Frame3D, unit: int) -> int:
-    ML, MS = shaders.MAXL, shaders.MAXS
-    lt = np.zeros(ML, np.int32)
-    lc = np.zeros((ML, 3), np.float32)
-    lp, ld, lr, lu = (np.zeros((ML, 3), np.float32) for _ in range(4))
-    ls = np.zeros((ML, 2), np.float32)
-    lparam = np.zeros((ML, 4), np.float32)
-    laff = np.ones((ML, 2), np.float32)
-    lies = np.full(ML, -1, np.int32)
-    lsh = np.full(ML, -1, np.int32)
-    ies_tex = []
-    n = 0
-    shadow_slots: list[ShadowMap] = []
-    kinds = {"directional": 1, "point": 2, "spot": 3, "rect-area": 4, "disk-area": 5, "sphere-area": 6}
-    for i, L in enumerate(fr.lights):
-        if L.kind not in kinds or n >= ML:
-            continue
-        lt[n] = kinds[L.kind]
-        lc[n] = L.color
-        lp[n], ld[n], lr[n], lu[n] = L.pos, L.fwd, L.right, L.up
-        ls[n] = L.size
-        lparam[n] = (L.range, L.falloff, L.cos_inner, L.cos_outer)
-        laff[n] = (float(L.diffuse), float(L.specular))
-        if L.ies is not None and len(ies_tex) < 4:
-            key = ("ies", id(L.ies))
-            t = fr_cache_get(r, key, L.ies)
-            lies[n] = len(ies_tex)
-            ies_tex.append(t)
-        sm = fr.shadows.get(i)
-        if sm is not None and len(shadow_slots) < MS - 1:
-            lsh[n] = len(shadow_slots)
-            shadow_slots.append(sm)
-        n += 1
-    _set(prog, "u_nl", n)
-    _write(prog, "u_lt", lt, np.int32)
-    _write(prog, "u_lc", lc)
-    _write(prog, "u_lp", lp)
-    _write(prog, "u_ld", ld)
-    _write(prog, "u_lr", lr)
-    _write(prog, "u_lu", lu)
-    _write(prog, "u_ls", ls)
-    _write(prog, "u_lparam", lparam)
-    _write(prog, "u_laff", laff)
-    _write(prog, "u_lies", lies, np.int32)
-    _write(prog, "u_lsh", lsh, np.int32)
-    ies_units = []
-    for k in range(4):
-        t = ies_tex[k] if k < len(ies_tex) else r.white
-        t.use(unit)
-        ies_units.append(unit)
+    lighting = fr.world.lighting
+    if lighting is None:
+        lighting = fr.world.lighting = _build_lighting(r, fr.world)
+    ies_texture, _ = _ies_texture(r, lighting.profiles)
+    for name, texture in [('t_lights', lighting.lights), ('t_shadowData', lighting.shadows),
+                          ('t_sh', lighting.pixels or r.far_array), ('t_ies', ies_texture)]:
+        texture.use(unit)
+        _set(prog, name, unit)
         unit += 1
-    _set(prog, "t_ies", ies_units)
-    env_sm = fr.shadows.get("env")
-    env_idx = -1
-    if env_sm is not None:
-        env_idx = len(shadow_slots)
-        shadow_slots.append(env_sm)
-    _set(prog, "u_envShIdx", env_idx)
-    _set(prog, "u_envShadow", float(fr.env.dominance) if env_sm is not None else 0.0)
-    mats = np.zeros((MS, 4, 4), np.float32)
-    kind = np.zeros(MS, np.int32)
-    P = np.zeros((MS, 4), np.float32)
-    Q = np.zeros((MS, 4), np.float32)
-    pos = np.zeros((MS, 3), np.float32)
-    dirs = np.zeros((MS, 3), np.float32)
-    sh_units = []
-    for k in range(MS):
-        if k < len(shadow_slots):
-            s = shadow_slots[k]
-            mats[k] = s.mat.T
-            kind[k] = s.kind
-            P[k] = s.params
-            Q[k] = s.q
-            pos[k] = s.pos
-            dirs[k] = s.dir
-            s.tex.use(unit)
-        else:
-            r.far.use(unit)
-        sh_units.append(unit)
-        unit += 1
-    _set(prog, "t_sh", sh_units)
-    _write(prog, "u_shMat", mats)
-    _write(prog, "u_shKind", kind, np.int32)
-    _write(prog, "u_shP", P)
-    _write(prog, "u_shQ", Q)
-    _write(prog, "u_shPos", pos)
-    _write(prog, "u_shDir", dirs)
+    _set(prog, 'u_nl', lighting.count)
     e = fr.env
+    lighting.environments.use(unit)
+    _set(prog, 't_envData', unit)
+    unit += 1
     (e.atlas or r.env_black).use(unit)
     _set(prog, "t_env", unit)
     unit += 1
-    _set(prog, "u_hasEnv", int(e.atlas is not None))
+    _set(prog, 'u_ne', len(e.domes))
     _set(prog, "u_envLevels", LEVELS)
-    _write(prog, "u_sh9", e.sh9)
     _set(prog, "u_ambD", tuple(float(v) for v in e.amb_d))
     _set(prog, "u_ambS", tuple(float(v) for v in e.amb_s))
-    _set(prog, "u_envSpecOn", float(e.spec_on))
-    _set(prog, "u_envDiffOn", float(e.diff_on))
     r.lut.use(unit)
     _set(prog, "t_lut", unit)
     unit += 1
     return unit
 
 
-_IES_TEX: dict = {}
+@dataclass
+class LightingGPU:
+    lights: object
+    shadows: object
+    pixels: object | None
+    count: int
+    environments: object
+    profiles: tuple
+
+    def release(self):
+        for texture in (self.lights, self.shadows, self.pixels, self.environments):
+            if texture is not None:
+                texture.release()
 
 
-def fr_cache_get(r: Res, key, arr):
-    hit = _IES_TEX.get(key)
-    if hit is None or hit[0] is not arr:
-        hit = (arr, _tex(r.ctx, arr[..., None], mip=False, repeat=False))
-        _IES_TEX[key] = hit
-    return hit[1]
+def _record_texture(ctx, records):
+    """Float4 records, addressed linearly without a fixed uniform-array count."""
+    data = np.asarray(records, np.float32).reshape(-1, 4)
+    size = len(data)
+    limit = int(ctx.info['GL_MAX_TEXTURE_SIZE'])
+    if size > limit**2:
+        raise ValueError(f'Light/shadow metadata exceeds GPU texture capacity ({size} records)')
+    width = max(1, min(size, limit, max(min(1024, limit), (size+limit-1)//limit)))
+    height = max(1, (size+width-1)//width)
+    padded = np.zeros((width*height, 4), np.float32)
+    padded[:size] = data
+    return _tex(ctx, padded.reshape(height, width, 4), mip=False, nearest=True, repeat=False)
+
+
+def _shadow_atlas(ctx, shadows):
+    """Pack original-resolution faces into array pages; copy through GPU buffers.
+
+    Sorting squares by size permits shelf packing of different map resolutions.
+    No face is resampled, and each lookup clamps to its own face's pixel bounds.
+    """
+    import moderngl
+    faces = [(i, f, tex) for i, s in enumerate(shadows) for f, tex in enumerate(s.faces)]
+    placements = np.zeros((len(shadows), 6, 4), np.float32)
+    if not faces:
+        return None, placements
+    maximum = max(t.width for _, _, t in faces)
+    area = sum(t.width*t.height for _, _, t in faces)
+    side = max(maximum, min(2048, 1 << (math.isqrt(area-1)).bit_length()))
+    limit = int(ctx.info['GL_MAX_TEXTURE_SIZE'])
+    side = min(side, limit)
+    if maximum > limit:
+        raise ValueError(f'Shadow map size {maximum} exceeds GPU texture size {limit}')
+    x = y = row_height = layer = 0
+    for i, f, tex in sorted(faces, key=lambda face: -face[2].width):
+        size = tex.width
+        if x + size > side:
+            x, y, row_height = 0, y+row_height, 0
+        if y + size > side:
+            x = y = row_height = 0
+            layer += 1
+        placements[i, f] = x, y, layer, size
+        x += size
+        row_height = max(row_height, size)
+    if layer+1 > ctx.info['GL_MAX_ARRAY_TEXTURE_LAYERS']:
+        raise ValueError(f'Shadow maps exceed GPU array capacity ({layer+1} pages)')
+    atlas = ctx.texture_array((side, side, layer+1), 1, dtype='f4')
+    atlas.filter = moderngl.NEAREST, moderngl.NEAREST
+    buffers = {}
+    try:
+        for i, f, tex in faces:
+            size = tex.width
+            if size not in buffers:
+                buffers[size] = ctx.buffer(reserve=size*size*4)
+            buffer = buffers[size]
+            tex.read_into(buffer)
+            tx, ty, page, _ = placements[i, f].astype(int)
+            atlas.write(buffer, viewport=(int(tx), int(ty), int(page), size, size, 1))
+    except Exception:
+        atlas.release()
+        raise
+    finally:
+        for buffer in buffers.values():
+            buffer.release()
+    return atlas, placements
+
+
+def _build_lighting(r, world):
+    kinds = {'directional': 1, 'point': 2, 'spot': 3, 'rect-area': 4, 'disk-area': 5, 'sphere-area': 6}
+    direct = [(i, light) for i, light in enumerate(world.lights) if light.kind in kinds]
+    profiles = tuple(light.ies for _, light in direct)
+    _, offsets = _ies_texture(r, profiles)
+    records = np.zeros((len(direct), 8, 4), np.float32)
+    shadows = []
+    for n, (i, light) in enumerate(direct):
+        shadow = world.shadows.get(i)
+        # Split IES offsets into exact 16-bit halves; float32 alone loses integer
+        # precision for large profile collections.
+        offset = offsets[n]
+        records[n, 0] = kinds[light.kind], len(shadows) if shadow is not None else -1, offset & 65535, offset >> 16
+        records[n, 1, :3] = light.color
+        records[n, 2, :3] = light.pos
+        records[n, 3, :3] = light.fwd
+        records[n, 4, :3] = light.right
+        records[n, 5, :3] = light.up
+        records[n, 6] = *light.size, float(light.diffuse), float(light.specular)
+        records[n, 7] = light.range, light.falloff, light.cos_inner, light.cos_outer
+        if shadow is not None:
+            shadows.append(shadow)
+    env_records = np.zeros((len(world.env.domes), 11, 4), np.float32)
+    for n, (i, light, entry, layer) in enumerate(world.env.domes):
+        shadow = world.shadows.get(i)
+        env_records[n, 0] = layer, len(shadows) if shadow is not None else -1, float(light.diffuse), float(light.specular)
+        env_records[n, 1] = *light.color, entry.dominance
+        env_records[n, 2:, :3] = entry.sh9
+        if shadow is not None:
+            shadows.append(shadow)
+    pixels = lights = data = environments = None
+    try:
+        pixels, placements = _shadow_atlas(r.ctx, shadows)
+        shadow_records = np.zeros((len(shadows), 14, 4), np.float32)
+        for i, shadow in enumerate(shadows):
+            shadow_records[i, :4] = shadow.mat.T
+            shadow_records[i, 4] = shadow.params
+            shadow_records[i, 5] = shadow.q
+            shadow_records[i, 6] = *shadow.pos, shadow.kind
+            shadow_records[i, 7, :3] = shadow.dir
+            shadow_records[i, 8:] = placements[i]
+        lights = _record_texture(r.ctx, records)
+        data = _record_texture(r.ctx, shadow_records)
+        environments = _record_texture(r.ctx, env_records)
+    except Exception:
+        for resource in (pixels, lights, data, environments):
+            if resource is not None:
+                resource.release()
+        raise
+    # The world owns the packed textures; temporary face targets can now go.
+    for shadow in shadows:
+        for face in shadow.faces:
+            release_shadow_texture(face)
+        shadow.faces = ()
+    return LightingGPU(lights, data, pixels, len(direct), environments, profiles)
+
+
+def _ies_texture(r: Res, profiles):
+    """Pack original angle knots and candela into one texture for all direct lights.
+
+    Retain profile objects with the upload, preventing recycled object identities
+    from reusing stale data. The bounded cache belongs to the GL context.
+    """
+    profiles = tuple(profiles)
+    if not any(p is not None for p in profiles):
+        return r.white, [-1] * len(profiles)
+    key = tuple(id(p) if p is not None else None for p in profiles)
+    hit = r.ies_textures.get(key)
+    if hit is not None:
+        r.ies_textures.move_to_end(key)
+        return hit[1], hit[2]
+    offsets, chunks, seen, size = [], [], {}, 0
+    for p in profiles:
+        if p is None:
+            offsets.append(-1)
+            continue
+        if id(p) not in seen:
+            seen[id(p)] = size
+            v, h, cd = p.vertical_angles, p.horizontal_angles, p.candela
+            # A full-circle C profile may omit its duplicate final meridian.
+            if p.photometric_type == 1 and h[-1] > 180. and not (h[0] >= 90. and h[-1] <= 270.) and h[-1] < h[0]+360.:
+                h, cd = np.r_[h, h[0]+360.], np.vstack([cd, cd[:1]])
+            chunk = np.concatenate(([len(v), len(h), p.photometric_type], v, h,
+                                    (cd / (p.max_candela or 1.)).ravel())).astype(np.float32)
+            chunks.append(chunk)
+            size += chunk.size
+        offsets.append(seen[id(p)])
+    limit = int(r.ctx.info['GL_MAX_TEXTURE_SIZE'])
+    if size > limit * limit:
+        raise ValueError(f'IES angle/candela data exceeds GPU texture capacity ({size} values)')
+    width = min(size, limit, max(min(1024, limit), (size + limit - 1) // limit))
+    height = (size + width - 1) // width
+    data = np.zeros(width * height, np.float32)
+    data[:size] = np.concatenate(chunks)
+    texture = _tex(r.ctx, data.reshape(height, width), mip=False, nearest=True, repeat=False)
+    r.ies_textures[key] = (profiles, texture, offsets, data.nbytes)
+    while len(r.ies_textures) > 1 and (len(r.ies_textures) > 8 or
+            sum(item[3] for item in r.ies_textures.values()) > 128 * 1024**2):
+        _, old = r.ies_textures.popitem(last=False)
+        old[1].release()
+    return texture, offsets
 
 
 def _camera_uniforms(prog, fr: Frame3D, V: np.ndarray, P: np.ndarray, exposure: float = 1.0) -> None:
@@ -559,6 +808,9 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
             r.white.use(unit)
             _set(prog, "t_opaque", unit)
             _set(prog, "u_hasOpaque", 0)
+        (item.extension_uv or r.white).use(unit+1)
+        _set(prog, 't_extensionUV', unit+1)
+        _set(prog, 'u_hasExtensionUV', int(item.extension_uv is not None))
         buf, k = obj.inst_of(i)
         vao = item_vao(ctx, item, prog, buf)
         ds = bool(m.p["doubleSided"])
@@ -571,8 +823,11 @@ def draw_object(r: Res, fr: Frame3D, obj: ObjDraw, V, P, tex_cache: dict, opaque
                 ctx.cull_face = "back"
                 vao.render(item.mode, instances=k)
             else:
-                ctx.enable(moderngl.CULL_FACE)
-                ctx.cull_face = "back"
+                if ds and m.usd_transparent:
+                    ctx.disable(moderngl.CULL_FACE)
+                else:
+                    ctx.enable(moderngl.CULL_FACE)
+                    ctx.cull_face = "back"
                 vao.render(item.mode, instances=k)
             ctx.depth_mask = True
         else:
@@ -595,18 +850,21 @@ def draw_depth(r: Res, obj: ObjDraw, VP: np.ndarray, mode: int, lp=(0, 0, 0), ld
     _set(prog, "u_lp", tuple(float(v) for v in lp))
     _set(prog, "u_ldir", tuple(float(v) for v in ldir))
     for i, (item, m) in enumerate(obj.items):
-        _set(prog, "u_alphaMode", 1 if m.p["alphaMode"] == "mask" else 0)
-        _set(prog, "u_cutoff", float(m.p["alphaCutoff"]))
+        # Raster shadows use a binary opacity test for translucent USD maps.
+        usd_blend = mode != 0 and m.p.get('surfaceModel') == 'usdPreviewSurface' and m.blend
+        masked = m.p['alphaMode'] == 'mask' or usd_blend
+        _set(prog, "u_alphaMode", int(masked))
+        _set(prog, "u_cutoff", .5 if usd_blend else float(m.p["alphaCutoff"]))
         _set(prog, "u_alpha", float(m.p["baseColor"][3] * m.p["opacity"]))
         _set(prog, "u_uvScale", (float(m.p["uvScaleX"]), float(m.p["uvScaleY"])))
-        arr = m.maps.get("baseColorMap")
-        if arr is not None and tex_cache is not None and m.p["alphaMode"] == "mask":
-            _material_texture(ctx, m, "baseColorMap", tex_cache).use(0)
-            _set(prog, "u_hasBase", 1)
-        else:
-            _set(prog, "u_hasBase", 0)
-        _set(prog, "t_base", 0)
-        _set(prog, "u_baseMirror", _mirror_axes(m, "baseColorMap"))
+        for unit, (name, key, flag) in enumerate((('base', 'baseColorMap', 'u_hasBase'),
+                                                ('opacity', 'opacityMap', 'u_hasOpacity'))):
+            active = key in m.maps and tex_cache is not None and masked
+            (_material_texture(ctx, m, key, tex_cache) if active else r.white).use(unit)
+            _set(prog, flag, int(active))
+            _set(prog, 't_'+name, unit)
+            _set(prog, 'u_'+name+'Sampler', _map_sampler(m, key))
+            _set(prog, 'u_'+name+'Border', _map_border(m, key))
         if m.p["doubleSided"] or mode != 0:
             ctx.disable(moderngl.CULL_FACE)
         else:
@@ -775,18 +1033,22 @@ def draw_background(r: Res, fr: Frame3D, V, P) -> bool:
     _write(prog, "u_invViewProj", np.linalg.inv(P @ V).T)
     _set(prog, "u_ortho", int(fr.cam.ortho))
     _set(prog, "u_fwd", tuple(float(v) for v in fr.cam.fwd))
-    _set(prog, "u_n", min(2, len(vis)))
-    for k in range(2):
-        t, rot, col = vis[k] if k < len(vis) else (None, np.eye(3), np.zeros(3))
-        (t or r.white).use(k)
-        _set(prog, f"t_env{k}", k)
-        _write(prog, f"u_rot{k}", np.asarray(rot, np.float32).T)
-        _set(prog, f"u_col{k}", tuple(float(v) for v in col))
-        _set(prog, f"u_img{k}", int(t is not None))
-    _set(prog, "u_exposure", float(2.0 ** fr.cam.exposure))
-    r.ctx.depth_mask = False
-    r.bg_vao.render(5)       # TRIANGLE_STRIP
-    r.ctx.depth_mask = True
+    import moderngl
+    ctx = r.ctx
+    _set(prog, 't_env', 0)
+    _set(prog, 'u_exposure', float(2.0 ** fr.cam.exposure))
+    ctx.enable(moderngl.BLEND)
+    ctx.depth_mask = False
+    for i, (texture, rotation, color) in enumerate(vis):
+        (texture or r.white).use(0)
+        _write(prog, 'u_rot', np.asarray(rotation, np.float32).T)
+        _set(prog, 'u_col', tuple(float(v) for v in color))
+        _set(prog, 'u_img', int(texture is not None))
+        _set(prog, 'u_first', int(i == 0))
+        ctx.blend_func = (moderngl.ONE, moderngl.ONE_MINUS_SRC_ALPHA) if i == 0 else (moderngl.ONE, moderngl.ONE)
+        r.bg_vao.render(moderngl.TRIANGLE_STRIP)
+    ctx.depth_mask = True
+    ctx.blend_func = moderngl.ONE, moderngl.ONE_MINUS_SRC_ALPHA
     return True
 
 
@@ -885,57 +1147,66 @@ def render_shadow(r: Res, fr_objs: list, L: LightState, bounds, scale: float, te
         kind = 1
     else:
         kind = 2
-    if kind == 2:
-        size = min(size, 2730)
-        W, H = size * 3, size * 2
-    else:
-        W = H = size
-    tex, fbo = _shadow_target(ctx, W, H)
-    fbo.use()
-    fbo.clear(1e30, 0, 0, 0, depth=1.0)
-    ctx.enable(moderngl.DEPTH_TEST)
-    ctx.disable(moderngl.BLEND)
-    up = L.up if np.linalg.norm(L.up) > 0.5 else np.array([0.0, 1.0, 0.0])
-    if kind == 0:
-        d = L.fwd / np.linalg.norm(L.fwd)
-        eye = c - d * rad * 2
-        V = look_view(eye, d, up)
-        Pm = ortho(rad, rad, 0.01, rad * 4)
-        VP = Pm @ V
-        ctx.viewport = (0, 0, W, H)
-        for o in casters:
-            draw_depth(r, o, VP, 1, eye, d, tex_cache)
-        if L.kind == "dome":
-            lr = 0.5 * math.tan(math.acos(min(1.0, max(0.0, L.softness))))
+    limit = int(ctx.info['GL_MAX_TEXTURE_SIZE'])
+    if size > limit:
+        raise ValueError(f'Shadow map size {size} exceeds GPU texture size {limit}')
+    faces = []
+
+    def render_face(vp, mode, position, direction):
+        # Each face takes a pooled target (see _shadow_target); the packed lighting textures copy it
+        # and release_shadow_texture returns it for the next frame.
+        tex, fbo = _shadow_target(ctx, size, size)
+        faces.append(tex)
+        fbo.use()
+        fbo.depth_mask = True
+        ctx.viewport = (0, 0, size, size)
+        fbo.clear(1e30, 0, 0, 0, depth=1.)
+        ctx.enable(moderngl.DEPTH_TEST)
+        ctx.disable(moderngl.BLEND)
+        for obj in casters:
+            draw_depth(r, obj, vp, mode, position, direction, tex_cache)
+
+    try:
+        up = L.up if np.linalg.norm(L.up) > 0.5 else np.array([0.0, 1.0, 0.0])
+        if kind == 0:
+            d = L.fwd / np.linalg.norm(L.fwd)
+            eye = c - d * rad * 2
+            V = look_view(eye, d, up)
+            Pm = ortho(rad, rad, 0.01, rad * 4)
+            VP = Pm @ V
+            render_face(VP, 1, eye, d)
+            if L.kind == "dome":
+                lr = 0.5 * math.tan(math.acos(min(1.0, max(0.0, L.softness))))
+            else:
+                lr = math.tan(math.radians(L.softness))
+            sm = ShadowMap(tuple(faces), 0, VP, (L.bias * rad * 4, lr, 0.01, rad * 4), (1.0 / size, rad * 2, size, 0), eye, d)
+        elif kind == 1:
+            dist = float(np.linalg.norm(c - L.pos)) + rad
+            far = L.range if L.range > 0 else max(dist, 1.0)
+            near = max(0.5, far * 1e-4)
+            fov = min(170.0, 2 * math.degrees(math.acos(max(-1.0, min(1.0, L.cos_outer)))) + 2.0)
+            V = look_view(L.pos, L.fwd, up)
+            Pm = persp(fov, 1.0, near, far)
+            VP = Pm @ V
+            render_face(VP, 2, L.pos, L.fwd)
+            sm = ShadowMap(tuple(faces), 1, VP, (L.bias * (far - near), _light_radius(L), near, far),
+                           (1.0 / size, 2 * math.tan(math.radians(fov) / 2), size, 0), L.pos.copy(), L.fwd.copy())
         else:
-            lr = math.tan(math.radians(L.softness))
-        sm = ShadowMap(tex, 0, VP, (L.bias * rad * 4, lr, 0.01, rad * 4), (1.0 / size, rad * 2, size, 0), eye, d)
-    elif kind == 1:
-        dist = float(np.linalg.norm(c - L.pos)) + rad
-        far = L.range if L.range > 0 else max(dist, 1.0)
-        near = max(0.5, far * 1e-4)
-        fov = min(170.0, 2 * math.degrees(math.acos(max(-1.0, min(1.0, L.cos_outer)))) + 2.0)
-        V = look_view(L.pos, L.fwd, up)
-        Pm = persp(fov, 1.0, near, far)
-        VP = Pm @ V
-        ctx.viewport = (0, 0, W, H)
-        for o in casters:
-            draw_depth(r, o, VP, 2, L.pos, L.fwd, tex_cache)
-        sm = ShadowMap(tex, 1, VP, (L.bias * (far - near), _light_radius(L), near, far),
-                       (1.0 / size, 2 * math.tan(math.radians(fov) / 2), size, 0), L.pos.copy(), L.fwd.copy())
-    else:
-        dist = float(np.linalg.norm(c - L.pos)) + rad
-        far = L.range if L.range > 0 else max(dist, 1.0)
-        near = max(0.5, far * 1e-4)
-        Pm = persp(90.0, 1.0, near, far)
-        for f in range(6):
-            ctx.viewport = ((f % 3) * size, (f // 3) * size, size, size)
-            VP = Pm @ _cube_view(L.pos, f)
-            for o in casters:
-                draw_depth(r, o, VP, 2, L.pos, L.fwd, tex_cache)
-        sm = ShadowMap(tex, 2, np.eye(4), (L.bias * (far - near), _light_radius(L), near, far),
-                       (1.0 / size, 2.0, size, 0), L.pos.copy(), L.fwd.copy())
-    restore_state(r)          # the framebuffer stays with the texture (see release_shadow_texture)
+            dist = float(np.linalg.norm(c - L.pos)) + rad
+            far = L.range if L.range > 0 else max(dist, 1.0)
+            near = max(0.5, far * 1e-4)
+            Pm = persp(90.0, 1.0, near, far)
+            for f in range(6):
+                VP = Pm @ _cube_view(L.pos, f)
+                render_face(VP, 2, L.pos, L.fwd)
+            sm = ShadowMap(tuple(faces), 2, np.eye(4), (L.bias * (far - near), _light_radius(L), near, far),
+                           (1.0 / size, 2.0, size, 0), L.pos.copy(), L.fwd.copy())
+    except Exception:
+        for face in faces:
+            release_shadow_texture(face)
+        raise
+    finally:
+        restore_state(r)          # the framebuffer stays with the texture (see release_shadow_texture)
     return sm
 
 
@@ -949,66 +1220,116 @@ def _light_radius(L: LightState) -> float:
     return 0.0
 
 
-_ENV_CACHE: dict = {}
+def _dome_radiance(r, light):
+    """Acquire one color/rotation-specific radiance map, independently of light flags."""
+    import moderngl
+    if light.env is None:
+        return DomeRadiance(None, None, np.zeros((9, 3), np.float32), np.array([0., 1., 0.]), 0., users=1)
+    key = (id(light.env), light.env_rot.tobytes(), light.color.tobytes())
+    hit = r.environments.get(key)
+    if hit is not None:
+        r.environments.move_to_end(key)
+        hit.users += 1
+        return hit
+    radiance = replace(light, diffuse=True, specular=True)
+    spec_env = world_environment([radiance], 512, 256)
+    diff_env = world_environment([radiance], 128, 64)
+    ctx = r.ctx
+    src = atlas = fbo = None
+    try:
+        src = _tex(ctx, np.concatenate([spec_env, np.ones((256, 512, 1), np.float32)], axis=2))
+        src.repeat_y = False
+        lw, lh = 256, 128
+        atlas = ctx.texture((lw, lh*LEVELS), 4, dtype='f4')
+        atlas.filter = moderngl.LINEAR, moderngl.LINEAR
+        atlas.repeat_x, atlas.repeat_y = True, False
+        fbo = ctx.framebuffer([atlas])
+        fbo.use()
+        ctx.disable(moderngl.DEPTH_TEST | moderngl.BLEND)
+        src.use(0)
+        _set(r.prefilter, 't_src', 0)
+        _set(r.prefilter, 'u_srcW', 512.)
+        for level in range(LEVELS):
+            ctx.viewport = (0, level*lh, lw, lh)
+            _set(r.prefilter, 'u_rough', level/(LEVELS-1))
+            r.pf_vao.render(moderngl.TRIANGLE_STRIP)
+        direction, dominance = dominant_direction(diff_env)
+        hit = DomeRadiance(light.env, atlas, sh9_irradiance(diff_env), direction, dominance, users=1, cached=True)
+        r.environments[key] = hit
+        return hit
+    except Exception:
+        if atlas is not None:
+            atlas.release()
+        raise
+    finally:
+        if fbo is not None:
+            fbo.release()
+        if src is not None:
+            src.release()
+        restore_state(r)
+
+
+def _trim_environments(r):
+    while r.environments and (len(r.environments) > 8 or
+            sum(entry.nbytes for entry in r.environments.values()) > 128*1024**2):
+        _, entry = r.environments.popitem(last=False)
+        entry.cached = False
+        entry.discard_if_unused()
 
 
 def build_env(r: Res, lights: list[LightState]) -> EnvGPU:
+    """Keep each dome's radiance independent; active worlds pin their cache entries."""
     import moderngl
-    ctx = r.ctx
-    domes = [L for L in lights if L.kind == "dome"]
-    amb = [L for L in lights if L.kind == "ambient"]
-    amb_d = sum((L.color * np.pi for L in amb if L.diffuse), np.zeros(3))
-    amb_s = sum((L.color for L in amb if L.specular), np.zeros(3))
-    if not domes:
-        return EnvGPU(None, np.zeros((9, 3), np.float32), amb_d, amb_s, 0.0, 0.0, [])
-    key = tuple((id(L.env) if L.env is not None else None, tuple(np.round(L.env_rot, 6).ravel()),
-                 tuple(np.round(L.color, 6)), L.diffuse, L.specular) for L in domes)
-    hit = _ENV_CACHE.get(key)
-    if hit is None or any(h is not L.env for h, L in zip(hit[0], domes)):
-        spec_env = world_environment(domes, 512, 256, specular=True)
-        diff_env = world_environment(domes, 128, 64, specular=False)
-        # texture row 0 = image top (+Y): shader lookups use t = v_equirect directly
-        src = _tex(ctx, np.c_[spec_env.reshape(-1, 3), np.ones(512 * 256)].reshape(256, 512, 4), mip=True)
-        src.repeat_y = False                          # equirect: wrap in longitude, clamp at the poles
-        lw, lh = 256, 128
-        atlas = ctx.texture((lw, lh * LEVELS), 4, dtype="f4")
-        atlas.filter = (moderngl.LINEAR, moderngl.LINEAR)
-        atlas.repeat_x = True
-        atlas.repeat_y = False
-        fbo = ctx.framebuffer([atlas])
-        fbo.use()
-        ctx.disable(moderngl.DEPTH_TEST)
-        ctx.disable(moderngl.BLEND)
-        src.use(0)
-        _set(r.prefilter, "t_src", 0)
-        _set(r.prefilter, "u_srcW", 512.0)
-        for lvl in range(LEVELS):
-            # level lvl fills texture t in [lvl, lvl + 1) / LEVELS; inside it t grows with v_equirect
-            ctx.viewport = (0, lvl * lh, lw, lh)
-            _set(r.prefilter, "u_rough", lvl / (LEVELS - 1))
-            r.pf_vao.render(5)
-        fbo.release()
-        src.release()
-        sh = sh9_irradiance(diff_env)
-        dom, dn = dominant_direction(diff_env)
-        vis = []
-        for L in domes:
-            if L.visible:
-                t = None
-                if L.env is not None:
-                    img = L.env
-                    t = _tex(ctx, np.c_[img.reshape(-1, 3), np.ones(img.shape[0] * img.shape[1])]
-                             .reshape(img.shape[0], img.shape[1], 4), mip=False)
-                    t.repeat_y = False
-                vis.append((t, L.env_rot, L.color))
-        hit = ([L.env for L in domes], atlas, sh, vis, dom, dn)
-        for old in list(_ENV_CACHE):
-            _ENV_CACHE.pop(old)[1].release()
-        _ENV_CACHE[key] = hit
-    _, atlas, sh, vis, dom, dn = hit
-    spec_on = 1.0 if any(L.specular for L in domes) else 0.0
-    diff_on = 1.0 if any(L.diffuse for L in domes) else 0.0
-    return EnvGPU(atlas, sh, amb_d, amb_s, spec_on, diff_on, vis, dom, dn)
+    ambient = [light for light in lights if light.kind == 'ambient']
+    amb_d = sum((light.color*np.pi for light in ambient if light.diffuse), np.zeros(3))
+    amb_s = sum((light.color for light in ambient if light.specular), np.zeros(3))
+    domes, maps, visible, seen = [], [], [], {}
+    atlas = None
+    try:
+        for i, light in enumerate(lights):
+            if light.kind != 'dome':
+                continue
+            key = (id(light.env), light.env_rot.tobytes(), light.color.tobytes())
+            if key not in seen:
+                entry = _dome_radiance(r, light)
+                seen[key] = entry
+                maps.append(entry)
+            entry = seen[key]
+            domes.append((i, light, entry))
+            if light.visible:
+                if light.env is not None and entry.background is None:
+                    rgb = light.env
+                    rgba = np.concatenate([rgb, np.ones((*rgb.shape[:2], 1), np.float32)], axis=2)
+                    entry.background = _tex(r.ctx, rgba, mip=False)
+                    entry.background.repeat_y = False
+                visible.append((entry.background, light.env_rot, light.color))
+        textured = [entry for entry in maps if entry.atlas is not None]
+        layers = {id(entry): i for i, entry in enumerate(textured)}
+        if textured:
+            if len(textured) > r.ctx.info['GL_MAX_ARRAY_TEXTURE_LAYERS']:
+                raise ValueError(f'Dome maps exceed GPU array capacity ({len(textured)} layers)')
+            width, height = textured[0].atlas.size
+            atlas = r.ctx.texture_array((width, height, len(textured)), 4, dtype='f4')
+            atlas.filter = moderngl.LINEAR, moderngl.LINEAR
+            atlas.repeat_x, atlas.repeat_y = True, False
+            buffer = r.ctx.buffer(reserve=width*height*16)
+            try:
+                for layer, entry in enumerate(textured):
+                    entry.atlas.read_into(buffer)
+                    atlas.write(buffer, viewport=(0, 0, layer, width, height, 1))
+            finally:
+                buffer.release()
+        return EnvGPU(atlas, amb_d, amb_s,
+                      [(i, light, entry, layers.get(id(entry), -1)) for i, light, entry in domes], maps, visible)
+    except Exception:
+        if atlas is not None:
+            atlas.release()
+        for entry in maps:
+            entry.users -= 1
+            entry.discard_if_unused()
+        raise
+    finally:
+        _trim_environments(r)
 
 
 # ------------------------------------------------------------------ targets
@@ -1053,6 +1374,7 @@ def _begin(r: Res, t: Target):
     import moderngl
     ctx = r.ctx
     t.fbo.use()
+    t.fbo.depth_mask = True
     ctx.viewport = (0, 0, t.w, t.h)
     t.fbo.color_mask = ((True, True, True, True), (True, True, True, True))
     t.fbo.clear(0.0, 0.0, 0.0, 0.0, depth=1.0)
@@ -1069,7 +1391,6 @@ def restore_state(r: Res) -> None:
     import moderngl
     ctx = r.ctx
     ctx.disable(moderngl.DEPTH_TEST | moderngl.CULL_FACE | moderngl.BLEND)
-    ctx.depth_mask = True
     ctx.blend_func = moderngl.DEFAULT_BLENDING
 
 

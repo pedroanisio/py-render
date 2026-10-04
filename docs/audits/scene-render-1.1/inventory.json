@@ -42889,7 +42889,7 @@
     "additive": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 476,
+        "line": 480,
         "method": "get",
         "expression": "a.get('additive')"
       }
@@ -42911,7 +42911,7 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 150,
+        "line": 137,
         "method": "bool",
         "expression": "ev.bool(el, 'affectsDiffuse', c, True)"
       }
@@ -42919,7 +42919,7 @@
     "affectsSpecular": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 151,
+        "line": 138,
         "method": "bool",
         "expression": "ev.bool(el, 'affectsSpecular', c, True)"
       }
@@ -42935,7 +42935,7 @@
     "alignItems": [
       {
         "file": "scenerender/layout.py",
-        "line": 22,
+        "line": 24,
         "method": "str",
         "expression": "ev.str(group, 'alignItems', ctx, 'start')"
       }
@@ -42943,7 +42943,7 @@
     "alignTo": [
       {
         "file": "scenerender/compositor.py",
-        "line": 304,
+        "line": 313,
         "method": "str",
         "expression": "self.ev.str(el, 'alignTo', ctx, 'parent')"
       }
@@ -42951,13 +42951,13 @@
     "alignX": [
       {
         "file": "scenerender/compositor.py",
-        "line": 313,
+        "line": 322,
         "method": "str",
         "expression": "self.ev.str(el, 'alignX', ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 294,
+        "line": 303,
         "method": "str",
         "expression": "ev.str(el, 'alignX', ctx)"
       },
@@ -42971,13 +42971,13 @@
     "alignY": [
       {
         "file": "scenerender/compositor.py",
-        "line": 313,
+        "line": 322,
         "method": "str",
         "expression": "self.ev.str(el, 'alignY', ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 294,
+        "line": 303,
         "method": "str",
         "expression": "ev.str(el, 'alignY', ctx)"
       },
@@ -42991,7 +42991,7 @@
     "alignment": [
       {
         "file": "scenerender/scheduling.py",
-        "line": 292,
+        "line": 294,
         "method": "str",
         "expression": "ev.str(tr, 'alignment', ctx, 'center')"
       }
@@ -43020,7 +43020,7 @@
     "alphaMode": [
       {
         "file": "scenerender/three/materials.py",
-        "line": 136,
+        "line": 157,
         "method": "str",
         "expression": "ev.str(mat_el, 'alphaMode', ctx, p['alphaMode'])"
       }
@@ -43098,7 +43098,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 275,
+        "line": 284,
         "method": "length",
         "expression": "ev.length(el, 'anchorX', ctx, w)"
       },
@@ -43136,7 +43136,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 276,
+        "line": 285,
         "method": "length",
         "expression": "ev.length(el, 'anchorY', ctx, h)"
       },
@@ -43174,13 +43174,13 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 224,
+        "line": 230,
         "method": "num",
         "expression": "ev.num(el, 'angle', ctx, 0.0)"
       },
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 127,
+        "line": 126,
         "method": "num",
         "expression": "rc.ev.num(tr, 'angle', ctx, 0.0)"
       },
@@ -43231,7 +43231,7 @@
     "animationClip": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 179,
+        "line": 213,
         "method": "str",
         "expression": "rc.ev.str(el, 'animationClip', ctx, None)"
       }
@@ -43239,7 +43239,7 @@
     "animationOffset": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 142,
+        "line": 176,
         "method": "num",
         "expression": "ev.num(el, 'animationOffset', ctx, 0.0)"
       }
@@ -43247,7 +43247,7 @@
     "animationSpeed": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 142,
+        "line": 176,
         "method": "num",
         "expression": "ev.num(el, 'animationSpeed', ctx, 1.0)"
       }
@@ -43256,7 +43256,7 @@
     "anisotropyRotation": [
       {
         "file": "scenerender/three/loaders.py",
-        "line": 565,
+        "line": 700,
         "method": "get",
         "expression": "ext['KHR_materials_anisotropy'].get('anisotropyRotation', 0.0)"
       }
@@ -43264,7 +43264,7 @@
     "antialias3d": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 342,
+        "line": 376,
         "method": "get",
         "expression": "rc.doc.project.get('antialias3d', 1)"
       }
@@ -43280,7 +43280,7 @@
     "aspect": [
       {
         "file": "scenerender/paint.py",
-        "line": 211,
+        "line": 217,
         "method": "num",
         "expression": "ev.num(el, 'aspect', ctx, 1.0)"
       }
@@ -43324,7 +43324,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 406,
+        "line": 415,
         "method": "str",
         "expression": "self.ev.str(el, 'asset', ctx)"
       },
@@ -43360,7 +43360,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 352,
+        "line": 401,
         "method": "str",
         "expression": "ev.str(el, 'asset', ctx)"
       },
@@ -43393,7 +43393,7 @@
     "attenuationColor": [
       {
         "file": "scenerender/three/loaders.py",
-        "line": 557,
+        "line": 692,
         "method": "get",
         "expression": "v.get('attenuationColor', [1.0, 1.0, 1.0])"
       }
@@ -43401,7 +43401,7 @@
     "attenuationDistance": [
       {
         "file": "scenerender/three/materials.py",
-        "line": 138,
+        "line": 159,
         "method": "get",
         "expression": "p.get('attenuationDistance', float('inf'))"
       }
@@ -43481,7 +43481,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 601,
+        "line": 614,
         "method": "get",
         "expression": "mp.get('autoOrient')"
       }
@@ -43567,20 +43567,7 @@
       }
     ],
     "baseColor": [],
-    "baseColorMap": [
-      {
-        "file": "scenerender/three/renderer.py",
-        "line": 591,
-        "method": "get",
-        "expression": "m.maps.get('baseColorMap')"
-      },
-      {
-        "file": "scenerender/three/renderer.py",
-        "line": 229,
-        "method": "get",
-        "expression": "maps.get('baseColorMap', uv)"
-      }
-    ],
+    "baseColorMap": [],
     "basedOn": [
       {
         "file": "scenerender/document.py",
@@ -43640,7 +43627,7 @@
     "bevel": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 66,
+        "line": 67,
         "method": "num",
         "expression": "ev.num(el, 'bevel', ctx, 0.0)"
       }
@@ -43666,25 +43653,25 @@
     "blend": [
       {
         "file": "scenerender/compositor.py",
-        "line": 668,
+        "line": 767,
         "method": "str",
         "expression": "self.ev.str(el, 'blend', nctx, 'normal')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 573,
+        "line": 663,
         "method": "str",
         "expression": "self.ev.str(el, 'blend', nctx, 'normal')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 723,
+        "line": 832,
         "method": "str",
         "expression": "self.ev.str(lead, 'blend', self.enter_node(lead, ctx), 'normal')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 562,
+        "line": 652,
         "method": "str",
         "expression": "self.ev.str(el, 'blend', nctx, 'normal')"
       },
@@ -43726,13 +43713,7 @@
     "bounce": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 433,
-        "method": "get",
-        "expression": "P.get('bounce', c)"
-      },
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 434,
+        "line": 479,
         "method": "get",
         "expression": "P.get('bounce', c)"
       }
@@ -43748,13 +43729,13 @@
     "boxHeight": [
       {
         "file": "scenerender/compositor.py",
-        "line": 386,
+        "line": 395,
         "method": "get",
         "expression": "ev.get(el, 'boxHeight', ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 391,
+        "line": 400,
         "method": "length",
         "expression": "ev.length(el, 'boxHeight', ctx, parent[1])"
       },
@@ -43768,13 +43749,13 @@
     "boxWidth": [
       {
         "file": "scenerender/compositor.py",
-        "line": 386,
+        "line": 395,
         "method": "get",
         "expression": "ev.get(el, 'boxWidth', ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 390,
+        "line": 399,
         "method": "length",
         "expression": "ev.length(el, 'boxWidth', ctx, parent[0])"
       },
@@ -43914,13 +43895,13 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 146,
+        "line": 133,
         "method": "bool",
         "expression": "ev.bool(el, 'castShadow', c, False)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 307,
+        "line": 341,
         "method": "bool",
         "expression": "ev.bool(el, 'castShadow', ctx, True)"
       }
@@ -44039,7 +44020,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 232,
+        "line": 234,
         "method": "num",
         "expression": "ev.num(el, 'clipIn', ctx, 0.0)"
       }
@@ -44083,7 +44064,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 232,
+        "line": 234,
         "method": "num",
         "expression": "ev.num(el, 'clipOut', ctx, duration)"
       }
@@ -44111,7 +44092,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 276,
+        "line": 325,
         "method": "num",
         "expression": "ev.num(p, 'col', ctx)"
       }
@@ -44137,7 +44118,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 190,
+        "line": 197,
         "method": "bool",
         "expression": "self.ev.bool(parent, 'collapse', ctx)"
       },
@@ -44177,7 +44158,7 @@
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 424,
+        "line": 468,
         "method": "get",
         "expression": "P.get('collide', c)"
       }
@@ -44290,20 +44271,14 @@
         "expression": "rc.ev.color(light, 'color', ctx, (1, 1, 1, 1))"
       },
       {
-        "file": "scenerender/nodes/particles.py",
-        "line": 730,
-        "method": "get",
-        "expression": "P.get('color')"
-      },
-      {
         "file": "scenerender/paint.py",
-        "line": 151,
+        "line": 157,
         "method": "color",
         "expression": "ev.color(s, 'color', ctx, (0, 0, 0, 1))"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 283,
+        "line": 332,
         "method": "color",
         "expression": "ev.color(p, 'color', ctx, (0, 0, 0, 1))"
       },
@@ -44315,13 +44290,13 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 128,
+        "line": 115,
         "method": "color",
         "expression": "ev.color(el, 'color', c, (1, 1, 1, 1))"
       },
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 142,
+        "line": 141,
         "method": "color",
         "expression": "rc.ev.color(tr, 'color', ctx, default)"
       },
@@ -44338,22 +44313,8 @@
         "expression": "rc.ev.color(tr, 'color', ctx, (1, 0.6, 0.2, 1))"
       }
     ],
-    "colorCurve": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 732,
-        "method": "get",
-        "expression": "P.get('colorCurve')"
-      }
-    ],
-    "colorEnd": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 731,
-        "method": "get",
-        "expression": "P.get('colorEnd')"
-      }
-    ],
+    "colorCurve": [],
+    "colorEnd": [],
     "colorRange": [],
     "colorSpace": [
       {
@@ -44378,7 +44339,7 @@
     "colorTemperature": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 130,
+        "line": 117,
         "method": "num",
         "expression": "ev.num(el, 'colorTemperature', c, 6500.0)"
       }
@@ -44392,7 +44353,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 265,
+        "line": 314,
         "method": "num",
         "expression": "ev.num(el, 'cols', ctx, 2)"
       },
@@ -44435,7 +44396,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 441,
+        "line": 445,
         "method": "base",
         "expression": "self.base(el, 'condition', ctx)"
       },
@@ -44449,7 +44410,7 @@
     "constantSpeed": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 585,
+        "line": 598,
         "method": "get",
         "expression": "mp.get('constantSpeed', 'true')"
       }
@@ -44537,7 +44498,7 @@
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 204,
+        "line": 201,
         "method": "get",
         "expression": "b.get('count', 0)"
       }
@@ -44588,13 +44549,13 @@
     "curve": [
       {
         "file": "scenerender/compositor.py",
-        "line": 713,
+        "line": 817,
         "method": "str",
         "expression": "self.ev.str(tr, 'curve', ctx, 'ease-in-out')"
       },
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 164,
+        "line": 163,
         "method": "str",
         "expression": "rc.ev.str(tr, 'curve', ctx, 'ease-in-out')"
       }
@@ -44602,13 +44563,13 @@
     "cx": [
       {
         "file": "scenerender/paint.py",
-        "line": 208,
+        "line": 214,
         "method": "num",
         "expression": "ev.num(el, 'cx', ctx, 0.5)"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 223,
+        "line": 229,
         "method": "num",
         "expression": "ev.num(el, 'cx', ctx, 0.5)"
       }
@@ -44616,13 +44577,13 @@
     "cy": [
       {
         "file": "scenerender/paint.py",
-        "line": 208,
+        "line": 214,
         "method": "num",
         "expression": "ev.num(el, 'cy', ctx, 0.5)"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 223,
+        "line": 229,
         "method": "num",
         "expression": "ev.num(el, 'cy', ctx, 0.5)"
       }
@@ -44708,7 +44669,7 @@
     "defaultInterpolation": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 528,
+        "line": 527,
         "method": "get",
         "expression": "a.get('defaultInterpolation', 'linear')"
       },
@@ -44720,7 +44681,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 642,
+        "line": 668,
         "method": "get",
         "expression": "a.get('defaultInterpolation', 'linear')"
       },
@@ -44734,7 +44695,7 @@
     "delay": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 533,
+        "line": 543,
         "method": "get",
         "expression": "a.get('delay', 0)"
       }
@@ -44742,7 +44703,7 @@
     "depth": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 67,
+        "line": 68,
         "method": "num",
         "expression": "ev.num(el, 'depth', ctx, 10.0)"
       }
@@ -44779,7 +44740,7 @@
       },
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 125,
+        "line": 124,
         "method": "str",
         "expression": "rc.ev.str(tr, 'direction', ctx, 'left')"
       },
@@ -44806,24 +44767,61 @@
     "displacementMap": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 121,
+        "line": 122,
         "method": "get",
         "expression": "mat.maps.get('displacementMap')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 193,
+        "line": 127,
+        "method": "get",
+        "expression": "mat.p.get('mapSamplers', {}).get('displacementMap')"
+      },
+      {
+        "file": "scenerender/three/scene.py",
+        "line": 227,
         "method": "get",
         "expression": "uvs.get('displacementMap')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 277,
+        "line": 308,
+        "method": "get",
+        "expression": "uvs.get('displacementMap')"
+      },
+      {
+        "file": "scenerender/three/scene.py",
+        "line": 582,
+        "method": "get",
+        "expression": "uvs.get('displacementMap')"
+      },
+      {
+        "file": "scenerender/three/scene.py",
+        "line": 312,
         "method": "get",
         "expression": "m.maps.get('displacementMap')"
+      },
+      {
+        "file": "scenerender/three/scene.py",
+        "line": 313,
+        "method": "get",
+        "expression": "m.p.get('mapSamplers', {}).get('displacementMap')"
       }
     ],
-    "displacementScale": [],
+    "displacementScale": [
+      {
+        "file": "scenerender/three/materials.py",
+        "line": 507,
+        "method": "get",
+        "expression": "params.get('displacementScale', 0.0)"
+      },
+      {
+        "file": "scenerender/three/usd_materials.py",
+        "line": 227,
+        "method": "get",
+        "expression": "p.get('displacementScale', 0.0)"
+      }
+    ],
     "display": [
       {
         "file": "scenerender/captions.py",
@@ -44859,7 +44857,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 90,
+        "line": 91,
         "method": "bool",
         "expression": "rc.ev.bool(el, 'dither', ctx, True)"
       }
@@ -44868,7 +44866,7 @@
     "drag": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 427,
+        "line": 471,
         "method": "get",
         "expression": "P.get('drag', c)"
       }
@@ -44954,7 +44952,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 227,
+        "line": 229,
         "method": "num",
         "expression": "ev.num(asset, 'duration', ctx, 0.0)"
       }
@@ -44994,19 +44992,19 @@
     "effects": [
       {
         "file": "scenerender/compositor.py",
-        "line": 613,
+        "line": 712,
         "method": "str",
         "expression": "self.ev.str(el, 'effects', ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 449,
+        "line": 535,
         "method": "str",
         "expression": "self.ev.str(el, 'effects', ctx, '')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 656,
+        "line": 755,
         "method": "str",
         "expression": "self.ev.str(el, 'effects', nctx)"
       },
@@ -45030,7 +45028,7 @@
     "emissiveStrength": [
       {
         "file": "scenerender/three/loaders.py",
-        "line": 536,
+        "line": 671,
         "method": "get",
         "expression": "e.get('emissiveStrength', 1.0)"
       }
@@ -45038,7 +45036,7 @@
     "emitterAsset": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 279,
+        "line": 326,
         "method": "get",
         "expression": "P.get('emitterAsset', c)"
       }
@@ -45046,13 +45044,13 @@
     "emitterHeight": [
       {
         "file": "scenerender/compositor.py",
-        "line": 381,
+        "line": 390,
         "method": "num",
         "expression": "ev.num(el, 'emitterHeight', ctx, 0.0)"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 261,
+        "line": 302,
         "method": "get",
         "expression": "P.get('emitterHeight', c)"
       }
@@ -45060,7 +45058,7 @@
     "emitterPath": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 275,
+        "line": 316,
         "method": "get",
         "expression": "P.get('emitterPath', c)"
       }
@@ -45074,7 +45072,7 @@
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 260,
+        "line": 301,
         "method": "get",
         "expression": "P.get('emitterShape', c)"
       }
@@ -45082,13 +45080,13 @@
     "emitterWidth": [
       {
         "file": "scenerender/compositor.py",
-        "line": 381,
+        "line": 390,
         "method": "num",
         "expression": "ev.num(el, 'emitterWidth', ctx, 0.0)"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 261,
+        "line": 302,
         "method": "get",
         "expression": "P.get('emitterWidth', c)"
       }
@@ -45124,13 +45122,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 627,
+        "line": 726,
         "method": "bool",
         "expression": "self.ev.bool(e, 'enabled', ctx, True)"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 487,
+        "line": 491,
         "method": "get",
         "expression": "a.get('enabled', 'true')"
       },
@@ -45216,13 +45214,13 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 592,
+        "line": 605,
         "method": "get",
         "expression": "mp.get('end')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 592,
+        "line": 605,
         "method": "get",
         "expression": "mp.get('end')"
       },
@@ -45326,21 +45324,15 @@
     "environment": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 158,
+        "line": 149,
         "method": "str",
         "expression": "ev.str(el, 'environment', c)"
       }
     ],
     "environmentVisible": [
       {
-        "file": "scenerender/nodes/scene3d.py",
-        "line": 42,
-        "method": "get",
-        "expression": "L.get('environmentVisible')"
-      },
-      {
         "file": "scenerender/three/lights.py",
-        "line": 156,
+        "line": 147,
         "method": "bool",
         "expression": "ev.bool(el, 'environmentVisible', c, False)"
       }
@@ -45390,7 +45382,7 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 131,
+        "line": 118,
         "method": "num",
         "expression": "ev.num(el, 'exposure', c, 0.0)"
       }
@@ -45398,7 +45390,7 @@
     "extrapolateAfter": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 529,
+        "line": 528,
         "method": "get",
         "expression": "a.get('extrapolateAfter', 'hold')"
       },
@@ -45412,7 +45404,7 @@
     "extrapolateBefore": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 529,
+        "line": 528,
         "method": "get",
         "expression": "a.get('extrapolateBefore', 'hold')"
       },
@@ -45441,7 +45433,14 @@
     ],
     "fadeIn": [],
     "fadeOut": [],
-    "fallback": [],
+    "fallback": [
+      {
+        "file": "scenerender/three/materials.py",
+        "line": 114,
+        "method": "get",
+        "expression": "spec.get('fallback')"
+      }
+    ],
     "falloff": [
       {
         "file": "scenerender/physics.py",
@@ -45451,7 +45450,7 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 142,
+        "line": 129,
         "method": "num",
         "expression": "ev.num(el, 'falloff', c, 2.0)"
       }
@@ -45477,7 +45476,7 @@
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 54,
+        "line": 55,
         "method": "get",
         "expression": "a.get('family')"
       }
@@ -45575,7 +45574,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 230,
+        "line": 232,
         "method": "num",
         "expression": "ev.num(asset, 'first', ctx)"
       }
@@ -45591,7 +45590,7 @@
     "fit": [
       {
         "file": "scenerender/compositor.py",
-        "line": 388,
+        "line": 397,
         "method": "str",
         "expression": "ev.str(el, 'fit', ctx, 'none')"
       },
@@ -45609,9 +45608,15 @@
       },
       {
         "file": "scenerender/references.py",
-        "line": 70,
+        "line": 132,
         "method": "str",
         "expression": "rc.ev.str(instance, 'fit', entered, 'none')"
+      },
+      {
+        "file": "scenerender/references.py",
+        "line": 211,
+        "method": "str",
+        "expression": "local.ev.str(instance, 'fit', entered, 'none')"
       }
     ],
     "fitToDuration": [
@@ -45701,7 +45706,7 @@
     "focusX": [
       {
         "file": "scenerender/compositor.py",
-        "line": 134,
+        "line": 140,
         "method": "get",
         "expression": "lay.get('focusX', 0.5)"
       },
@@ -45715,7 +45720,7 @@
     "focusY": [
       {
         "file": "scenerender/compositor.py",
-        "line": 134,
+        "line": 140,
         "method": "get",
         "expression": "lay.get('focusY', 0.5)"
       },
@@ -45729,7 +45734,7 @@
     "font": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 81,
+        "line": 82,
         "method": "str",
         "expression": "ev.str(el, 'font', ctx, None)"
       }
@@ -45783,13 +45788,13 @@
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 52,
+        "line": 53,
         "method": "get",
         "expression": "a.get('fontStyle')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 52,
+        "line": 53,
         "method": "get",
         "expression": "a.get('fontStyle')"
       }
@@ -45819,13 +45824,13 @@
     "forceFields": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 238,
+        "line": 279,
         "method": "get",
         "expression": "self.P.get('forceFields')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 404,
+        "line": 448,
         "method": "get",
         "expression": "P.get('forceFields', c)"
       }
@@ -45899,13 +45904,13 @@
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 175,
+        "line": 209,
         "method": "str",
         "expression": "rc.ev.str(asset, 'format', ctx)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 530,
+        "line": 565,
         "method": "get",
         "expression": "asset.get('format')"
       },
@@ -45999,7 +46004,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 231,
+        "line": 233,
         "method": "str",
         "expression": "ev.str(asset, 'fps', ctx)"
       },
@@ -46049,7 +46054,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 212,
+        "line": 218,
         "method": "num",
         "expression": "ev.num(el, 'fr', ctx, 0.0)"
       }
@@ -46143,7 +46148,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 704,
+        "line": 808,
         "method": "str",
         "expression": "self.ev.str(tr, 'from', ctx)"
       },
@@ -46155,19 +46160,19 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 285,
+        "line": 287,
         "method": "str",
         "expression": "ev.str(tr, 'from', ctx)"
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 277,
+        "line": 279,
         "method": "str",
         "expression": "ev.str(t, 'from', ctx)"
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 281,
+        "line": 283,
         "method": "str",
         "expression": "ev.str(t, 'from', ctx)"
       }
@@ -46175,7 +46180,7 @@
     "fx": [
       {
         "file": "scenerender/paint.py",
-        "line": 209,
+        "line": 215,
         "method": "num",
         "expression": "ev.num(el, 'fx', ctx, cx)"
       }
@@ -46183,7 +46188,7 @@
     "fy": [
       {
         "file": "scenerender/paint.py",
-        "line": 210,
+        "line": 216,
         "method": "num",
         "expression": "ev.num(el, 'fy', ctx, cy)"
       }
@@ -46200,7 +46205,7 @@
     "gap": [
       {
         "file": "scenerender/layout.py",
-        "line": 19,
+        "line": 21,
         "method": "length",
         "expression": "ev.length(group, 'gap', ctx, gw if mode != 'column' else gh)"
       }
@@ -46209,7 +46214,7 @@
     "gravityX": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 390,
+        "line": 428,
         "method": "get",
         "expression": "P.get('gravityX', c)"
       },
@@ -46223,7 +46228,7 @@
     "gravityY": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 391,
+        "line": 429,
         "method": "get",
         "expression": "P.get('gravityY', c)"
       },
@@ -46237,7 +46242,7 @@
     "gridColumns": [
       {
         "file": "scenerender/layout.py",
-        "line": 36,
+        "line": 39,
         "method": "num",
         "expression": "ev.num(group, 'gridColumns', ctx, 2)"
       }
@@ -46457,21 +46462,27 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 367,
+        "line": 376,
         "method": "length",
         "expression": "ev.length(el, 'height', ctx, box[1], box[1] if tag != 'shape' else 0.0)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 403,
+        "line": 412,
         "method": "num",
         "expression": "self.ev.num(asset, 'height', ctx, 0)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 376,
+        "line": 385,
         "method": "num",
         "expression": "ev.num(sym, 'height', ctx, box[1])"
+      },
+      {
+        "file": "scenerender/compositor.py",
+        "line": 454,
+        "method": "num",
+        "expression": "basis.ev.num(root, 'height', clock, basis.doc.height)"
       },
       {
         "file": "scenerender/document.py",
@@ -46502,6 +46513,18 @@
         "line": 312,
         "method": "num",
         "expression": "rc.ev.num(sym, 'height', sctx, rc.doc.height)"
+      },
+      {
+        "file": "scenerender/nodes/particle_collisions.py",
+        "line": 257,
+        "method": "num",
+        "expression": "em.rc.ev.num(root, 'height', clock, em.rc.doc.height)"
+      },
+      {
+        "file": "scenerender/nodes/particle_collisions.py",
+        "line": 160,
+        "method": "num",
+        "expression": "rc.ev.num(root, 'height', clock, rc.doc.height)"
       },
       {
         "file": "scenerender/output.py",
@@ -46535,25 +46558,37 @@
       },
       {
         "file": "scenerender/references.py",
-        "line": 69,
+        "line": 74,
+        "method": "num",
+        "expression": "rc.ev.num(origin, 'height', current, rc.doc.height)"
+      },
+      {
+        "file": "scenerender/references.py",
+        "line": 131,
         "method": "num",
         "expression": "rc.ev.num(boundary, 'height', current, rc.doc.height)"
       },
       {
         "file": "scenerender/references.py",
-        "line": 81,
+        "line": 143,
         "method": "num",
         "expression": "rc.ev.num(symbol, 'height', current, rc.doc.height)"
       },
       {
+        "file": "scenerender/references.py",
+        "line": 210,
+        "method": "num",
+        "expression": "local.ev.num(root, 'height', clock, local.doc.height)"
+      },
+      {
         "file": "scenerender/three/lights.py",
-        "line": 137,
+        "line": 124,
         "method": "num",
         "expression": "ev.num(el, 'height', c, m)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 64,
+        "line": 65,
         "method": "num",
         "expression": "ev.num(el, 'height', ctx, 2 * r)"
       }
@@ -46890,13 +46925,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 482,
+        "line": 568,
         "method": "get",
         "expression": "n.get('id', '')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 111,
+        "line": 117,
         "method": "get",
         "expression": "el.get('id')"
       },
@@ -47148,19 +47183,19 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 341,
+        "line": 345,
         "method": "get",
         "expression": "el.get('id')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 403,
+        "line": 407,
         "method": "get",
         "expression": "el.get('id')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 615,
+        "line": 628,
         "method": "get",
         "expression": "el.get('id', '')"
       },
@@ -47178,19 +47213,19 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 447,
+        "line": 451,
         "method": "get",
         "expression": "el.get('id')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 292,
+        "line": 296,
         "method": "get",
         "expression": "symbol.get('id')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 491,
+        "line": 496,
         "method": "get",
         "expression": "el.get('id')"
       },
@@ -47208,25 +47243,31 @@
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 140,
+        "line": 142,
         "method": "get",
         "expression": "el.get('id')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 243,
+        "line": 284,
         "method": "get",
         "expression": "f.get('id')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 242,
+        "line": 511,
+        "method": "get",
+        "expression": "self.el.get('id', 'particleEmitter')"
+      },
+      {
+        "file": "scenerender/nodes/particles.py",
+        "line": 283,
         "method": "get",
         "expression": "f.get('id')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 407,
+        "line": 451,
         "method": "get",
         "expression": "f.get('id')"
       },
@@ -47238,7 +47279,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 354,
+        "line": 403,
         "method": "get",
         "expression": "el.get('id')"
       },
@@ -47346,7 +47387,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 209,
+        "line": 211,
         "method": "get",
         "expression": "el.get('id')"
       },
@@ -47364,37 +47405,37 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 163,
+        "line": 154,
         "method": "get",
         "expression": "el.get('id')"
       },
       {
         "file": "scenerender/three/materials.py",
-        "line": 145,
+        "line": 184,
         "method": "get",
         "expression": "mat_el.get('id')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 171,
+        "line": 205,
         "method": "get",
         "expression": "el.get('id', '?')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 114,
+        "line": 115,
         "method": "get",
         "expression": "el.get('id', '?')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 182,
+        "line": 216,
         "method": "get",
         "expression": "el.get('id')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 187,
+        "line": 221,
         "method": "get",
         "expression": "el.get('id')"
       },
@@ -47438,7 +47479,7 @@
     "ies": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 152,
+        "line": 139,
         "method": "str",
         "expression": "ev.str(el, 'ies', c)"
       }
@@ -47472,7 +47513,7 @@
     "innerConeAngle": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 144,
+        "line": 131,
         "method": "num",
         "expression": "ev.num(el, 'innerConeAngle', c, 0.0)"
       }
@@ -47504,7 +47545,7 @@
     "instances": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 227,
+        "line": 261,
         "method": "num",
         "expression": "rc.ev.num(el, 'instances', ctx, 1)"
       }
@@ -47512,7 +47553,7 @@
     "intensity": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 131,
+        "line": 118,
         "method": "num",
         "expression": "ev.num(el, 'intensity', c, 1.0)"
       }
@@ -47520,13 +47561,13 @@
     "interpolation": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 595,
+        "line": 608,
         "method": "get",
         "expression": "mp.get('interpolation', 'linear')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 513,
+        "line": 518,
         "method": "get",
         "expression": "r.get('interpolation')"
       }
@@ -47534,25 +47575,25 @@
     "interpolationSpace": [
       {
         "file": "scenerender/effects/__init__.py",
-        "line": 326,
+        "line": 325,
         "method": "str",
         "expression": "rc.ev.str(el, 'interpolationSpace', ctx, 'linear')"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 160,
+        "line": 166,
         "method": "str",
         "expression": "rc.ev.str(el, 'interpolationSpace', ctx, 'linear')"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 225,
+        "line": 231,
         "method": "str",
         "expression": "ev.str(el, 'interpolationSpace', ctx, 'linear')"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 266,
+        "line": 315,
         "method": "str",
         "expression": "ev.str(el, 'interpolationSpace', ctx, 'oklab')"
       }
@@ -47561,7 +47602,7 @@
     "interval": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 206,
+        "line": 203,
         "method": "get",
         "expression": "b.get('interval', 1)"
       }
@@ -47588,7 +47629,7 @@
     "justify": [
       {
         "file": "scenerender/layout.py",
-        "line": 21,
+        "line": 23,
         "method": "str",
         "expression": "ev.str(group, 'justify', ctx, 'start')"
       }
@@ -47776,7 +47817,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 230,
+        "line": 232,
         "method": "num",
         "expression": "ev.num(asset, 'last', ctx)"
       }
@@ -47800,9 +47841,9 @@
     "layout": [
       {
         "file": "scenerender/compositor.py",
-        "line": 677,
+        "line": 781,
         "method": "str",
-        "expression": "self.ev.str(parent, 'layout', ctx, 'none')"
+        "expression": "self.ev.str(parent, 'layout', owner, 'none')"
       },
       {
         "file": "scenerender/coverage.py",
@@ -47932,7 +47973,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 93,
+        "line": 99,
         "method": "get",
         "expression": "d.project.get('linearLight', 'true')"
       }
@@ -47960,7 +48001,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 636,
+        "line": 662,
         "method": "get",
         "expression": "{'cycle': 'loop', 'pingpong': 'ping-pong', 'offset': 'offset', 'continue': 'linear'}.get(kind, 'loop')"
       },
@@ -47978,7 +48019,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 236,
+        "line": 238,
         "method": "num",
         "expression": "ev.num(el, 'loop', ctx, 0.0)"
       }
@@ -48002,7 +48043,7 @@
     "margin": [
       {
         "file": "scenerender/compositor.py",
-        "line": 311,
+        "line": 320,
         "method": "length",
         "expression": "ev.length(el, 'margin', ctx, min(bw, bh))"
       }
@@ -48010,13 +48051,13 @@
     "marker": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 510,
+        "line": 515,
         "method": "get",
         "expression": "r.get('marker')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 511,
+        "line": 516,
         "method": "get",
         "expression": "r.get('marker')"
       },
@@ -48057,7 +48098,7 @@
     "material": [
       {
         "file": "scenerender/three/materials.py",
-        "line": 423,
+        "line": 514,
         "method": "str",
         "expression": "rc.ev.str(el, 'material', ctx)"
       }
@@ -48065,7 +48106,7 @@
     "materialVariant": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 185,
+        "line": 219,
         "method": "str",
         "expression": "rc.ev.str(el, 'materialVariant', ctx, None)"
       }
@@ -48073,7 +48114,7 @@
     "materialX": [
       {
         "file": "scenerender/three/materials.py",
-        "line": 115,
+        "line": 135,
         "method": "str",
         "expression": "ev.str(mat_el, 'materialX', ctx)"
       }
@@ -48081,49 +48122,49 @@
     "matte": [
       {
         "file": "scenerender/compositor.py",
-        "line": 616,
+        "line": 715,
         "method": "str",
         "expression": "self.ev.str(el, 'matte', ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 665,
+        "line": 764,
         "method": "str",
         "expression": "self.ev.str(el, 'matte', nctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 114,
+        "line": 120,
         "method": "get",
         "expression": "el.get('matte')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 226,
+        "line": 235,
         "method": "str",
         "expression": "self.ev.str(user, 'matte', user_ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 115,
+        "line": 121,
         "method": "get",
         "expression": "el.get('matte')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 120,
+        "line": 126,
         "method": "get",
         "expression": "el.get('matte')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 120,
+        "line": 126,
         "method": "get",
         "expression": "el.get('matte')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 111,
+        "line": 117,
         "method": "get",
         "expression": "el.get('matte')"
       },
@@ -48163,13 +48204,13 @@
     "matteVisible": [
       {
         "file": "scenerender/compositor.py",
-        "line": 114,
+        "line": 120,
         "method": "get",
         "expression": "el.get('matteVisible', 'false')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 227,
+        "line": 236,
         "method": "bool",
         "expression": "self.ev.bool(user, 'matteVisible', user_ctx, False)"
       }
@@ -48195,13 +48236,13 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 547,
+        "line": 560,
         "method": "get",
         "expression": "a.get('max')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 548,
+        "line": 561,
         "method": "get",
         "expression": "a.get('max')"
       }
@@ -48314,24 +48355,17 @@
     "mesh": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 168,
+        "line": 202,
         "method": "str",
         "expression": "rc.ev.str(el, 'mesh', ctx)"
       }
     ],
-    "metallic": [
-      {
-        "file": "scenerender/three/loaders.py",
-        "line": 1161,
-        "method": "get",
-        "expression": "mr.get('metallic')"
-      }
-    ],
+    "metallic": [],
     "metallicRoughnessMap": [],
     "midpoint": [
       {
         "file": "scenerender/paint.py",
-        "line": 154,
+        "line": 160,
         "method": "num",
         "expression": "ev.num(s, 'midpoint', ctx, 0.5)"
       }
@@ -48357,13 +48391,13 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 545,
+        "line": 558,
         "method": "get",
         "expression": "a.get('min')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 546,
+        "line": 559,
         "method": "get",
         "expression": "a.get('min')"
       }
@@ -48447,7 +48481,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 634,
+        "line": 733,
         "method": "num",
         "expression": "self.ev.num(e, 'mix', ctx, 1.0)"
       }
@@ -48473,7 +48507,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 97,
+        "line": 103,
         "method": "get",
         "expression": "d.project.get('mode')"
       },
@@ -48562,7 +48596,7 @@
     "motionBlur": [
       {
         "file": "scenerender/compositor.py",
-        "line": 483,
+        "line": 569,
         "method": "str",
         "expression": "self.ev.str(n, 'motionBlur', nctx, 'inherit')"
       },
@@ -48592,7 +48626,7 @@
       },
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 176,
+        "line": 175,
         "method": "bool",
         "expression": "rc.ev.bool(tr, 'motionBlur', ctx, True)"
       },
@@ -48618,7 +48652,7 @@
     "motionBlurSamples": [
       {
         "file": "scenerender/compositor.py",
-        "line": 490,
+        "line": 576,
         "method": "get",
         "expression": "p.get('motionBlurSamples', 16)"
       },
@@ -48822,7 +48856,7 @@
       },
       {
         "file": "scenerender/three/loaders.py",
-        "line": 610,
+        "line": 777,
         "method": "get",
         "expression": "v.get('name', str(i))"
       },
@@ -48846,7 +48880,7 @@
       },
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 111,
+        "line": 110,
         "method": "get",
         "expression": "c.get('name')"
       }
@@ -48859,7 +48893,20 @@
         "expression": "ev.num(el, 'near', c, 0.1)"
       }
     ],
-    "normalMap": [],
+    "normalMap": [
+      {
+        "file": "scenerender/three/scene.py",
+        "line": 141,
+        "method": "get",
+        "expression": "uvs.get('normalMap')"
+      },
+      {
+        "file": "scenerender/three/scene.py",
+        "line": 144,
+        "method": "get",
+        "expression": "mat.p.get('mapUV', {}).get('normalMap', {})"
+      }
+    ],
     "normalScale": [],
     "normalize": [
       {
@@ -48949,7 +48996,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 544,
+        "line": 557,
         "method": "get",
         "expression": "a.get('offset', 0)"
       },
@@ -48967,7 +49014,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 153,
+        "line": 159,
         "method": "num",
         "expression": "ev.num(s, 'offset', ctx, 0.0)"
       },
@@ -48979,13 +49026,13 @@
       },
       {
         "file": "scenerender/three/loaders.py",
-        "line": 581,
+        "line": 746,
         "method": "get",
         "expression": "tt.get('offset', [0.0, 0.0])"
       },
       {
         "file": "scenerender/three/materials.py",
-        "line": 107,
+        "line": 127,
         "method": "get",
         "expression": "spec.get('offset', (0.0, 0.0))"
       }
@@ -49037,7 +49084,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 366,
+        "line": 415,
         "method": "num",
         "expression": "ev.num(el, 'offsetX', ctx, 0.0)"
       }
@@ -49075,7 +49122,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 366,
+        "line": 415,
         "method": "num",
         "expression": "ev.num(el, 'offsetY', ctx, 0.0)"
       }
@@ -49119,13 +49166,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 536,
+        "line": 622,
         "method": "num",
         "expression": "self.ev.num(el, 'opacity', nctx, 1.0)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 651,
+        "line": 750,
         "method": "num",
         "expression": "self.ev.num(el, 'opacity', nctx, 1.0)"
       },
@@ -49149,7 +49196,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 152,
+        "line": 158,
         "method": "num",
         "expression": "ev.num(s, 'opacity', ctx, 1.0)"
       },
@@ -49160,14 +49207,20 @@
         "expression": "st.get('opacity', 1.0)"
       },
       {
+        "file": "scenerender/three/materials.py",
+        "line": 495,
+        "method": "get",
+        "expression": "params.get('opacity', 1.0)"
+      },
+      {
         "file": "scenerender/three/scene.py",
-        "line": 304,
+        "line": 338,
         "method": "num",
         "expression": "ev.num(el, 'opacity', ctx, 1.0)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 368,
+        "line": 402,
         "method": "num",
         "expression": "rc.ev.num(el, 'opacity', c, 1.0)"
       },
@@ -49178,14 +49231,7 @@
         "expression": "rc.ev.num(ch, 'opacity', nctx, 1.0)"
       }
     ],
-    "opacityEnd": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 743,
-        "method": "get",
-        "expression": "P.get('opacityEnd')"
-      }
-    ],
+    "opacityEnd": [],
     "opacityStep": [],
     "options": [
       {
@@ -49212,19 +49258,12 @@
     "orientOffset": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 609,
+        "line": 622,
         "method": "get",
         "expression": "mp.get('orientOffset', 0)"
       }
     ],
-    "orientToVelocity": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 753,
-        "method": "get",
-        "expression": "P.get('orientToVelocity')"
-      }
-    ],
+    "orientToVelocity": [],
     "orthoHeight": [
       {
         "file": "scenerender/camera.py",
@@ -49321,7 +49360,7 @@
       },
       {
         "file": "scenerender/layout.py",
-        "line": 20,
+        "line": 22,
         "method": "length",
         "expression": "ev.length(group, 'padding', ctx, min(gw, gh))"
       }
@@ -49380,7 +49419,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 428,
+        "line": 514,
         "method": "str",
         "expression": "self.ev.str(el, 'parent', nctx)"
       },
@@ -49434,9 +49473,9 @@
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 198,
-        "method": "get",
-        "expression": "el.get('parent')"
+        "line": 247,
+        "method": "str",
+        "expression": "rc.ev.str(self.el, 'parent', c)"
       }
     ],
     "path": [
@@ -49472,13 +49511,13 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 585,
+        "line": 598,
         "method": "get",
         "expression": "mp.get('path')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 603,
+        "line": 616,
         "method": "get",
         "expression": "mp.get('path')"
       },
@@ -49520,7 +49559,7 @@
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 84,
+        "line": 85,
         "method": "str",
         "expression": "ev.str(el, 'path', ctx, '')"
       },
@@ -49595,7 +49634,7 @@
     "pixelsPerMeter": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 216,
+        "line": 214,
         "method": "get",
         "expression": "ph.get('pixelsPerMeter', 100)"
       },
@@ -49677,7 +49716,13 @@
     "preroll": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 194,
+        "line": 549,
+        "method": "get",
+        "expression": "params.get('preroll')"
+      },
+      {
+        "file": "scenerender/nodes/particles.py",
+        "line": 192,
         "method": "get",
         "expression": "self.P.get('preroll')"
       }
@@ -49753,13 +49798,13 @@
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 129,
+        "line": 131,
         "method": "str",
         "expression": "rc.ev.str(el, 'preset', ctx)"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 175,
+        "line": 177,
         "method": "str",
         "expression": "self.rc.ev.str(self.el, 'preset', ctx or self.ctx0)"
       },
@@ -49827,19 +49872,19 @@
       },
       {
         "file": "scenerender/nodes/scene3d.py",
-        "line": 78,
+        "line": 77,
         "method": "get",
         "expression": "el.get('primitive', '?')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 60,
+        "line": 61,
         "method": "str",
         "expression": "ev.str(el, 'primitive', ctx)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 265,
+        "line": 299,
         "method": "str",
         "expression": "ev.str(el, 'primitive', ctx)"
       }
@@ -49891,13 +49936,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 109,
+        "line": 115,
         "method": "get",
         "expression": "o.get('property')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 112,
+        "line": 118,
         "method": "get",
         "expression": "c.get('property')"
       },
@@ -49945,43 +49990,49 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 468,
+        "line": 472,
         "method": "get",
         "expression": "a.get('property')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 500,
+        "line": 505,
         "method": "get",
         "expression": "a.get('property')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 587,
+        "line": 600,
         "method": "get",
         "expression": "c.get('property')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 459,
+        "line": 670,
+        "method": "get",
+        "expression": "a.get('property')"
+      },
+      {
+        "file": "scenerender/evaluator.py",
+        "line": 463,
         "method": "get",
         "expression": "a.get('property')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 138,
+        "line": 140,
         "method": "get",
         "expression": "a.get('property')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 139,
+        "line": 141,
         "method": "get",
         "expression": "a.get('property')"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 346,
+        "line": 395,
         "method": "get",
         "expression": "a.get('property')"
       },
@@ -50005,7 +50056,7 @@
       },
       {
         "file": "scenerender/three/materials.py",
-        "line": 149,
+        "line": 188,
         "method": "get",
         "expression": "a.get('property')"
       }
@@ -50065,7 +50116,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 208,
+        "line": 214,
         "method": "num",
         "expression": "ev.num(el, 'r', ctx, 0.5)"
       }
@@ -50103,13 +50154,13 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 139,
+        "line": 126,
         "method": "num",
         "expression": "ev.num(el, 'radius', c, m / 2)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 61,
+        "line": 62,
         "method": "num",
         "expression": "ev.num(el, 'radius', ctx, 50.0)"
       }
@@ -50129,7 +50180,7 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 141,
+        "line": 128,
         "method": "num",
         "expression": "ev.num(el, 'range', c, 0.0)"
       }
@@ -50145,7 +50196,7 @@
     "rate": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 447,
+        "line": 492,
         "method": "get",
         "expression": "P.get('rate', c)"
       }
@@ -50154,7 +50205,7 @@
     "receiveShadow": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 308,
+        "line": 342,
         "method": "bool",
         "expression": "ev.bool(el, 'receiveShadow', ctx, True)"
       }
@@ -50172,7 +50223,7 @@
     "repeat": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 205,
+        "line": 202,
         "method": "get",
         "expression": "b.get('repeat', 0)"
       }
@@ -50368,7 +50419,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 285,
+        "line": 294,
         "method": "num",
         "expression": "ev.num(el, 'rotation', ctx, 0.0)"
       },
@@ -50404,13 +50455,13 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 180,
+        "line": 186,
         "method": "num",
         "expression": "rc.ev.num(el, 'rotation', ctx, 0.0)"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 365,
+        "line": 414,
         "method": "num",
         "expression": "ev.num(el, 'rotation', ctx, 0.0)"
       },
@@ -50422,13 +50473,13 @@
       },
       {
         "file": "scenerender/three/loaders.py",
-        "line": 581,
+        "line": 746,
         "method": "get",
         "expression": "tt.get('rotation', 0.0)"
       },
       {
         "file": "scenerender/three/materials.py",
-        "line": 104,
+        "line": 124,
         "method": "get",
         "expression": "spec.get('rotation', 0.0)"
       }
@@ -50476,14 +50527,7 @@
         "expression": "st.get('rotationY', 0.0)"
       }
     ],
-    "roughness": [
-      {
-        "file": "scenerender/three/loaders.py",
-        "line": 1161,
-        "method": "get",
-        "expression": "mr.get('roughness')"
-      }
-    ],
+    "roughness": [],
     "roving": [
       {
         "file": "scenerender/anim.py",
@@ -50507,7 +50551,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 276,
+        "line": 325,
         "method": "num",
         "expression": "ev.num(p, 'row', ctx)"
       }
@@ -50521,7 +50565,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 265,
+        "line": 314,
         "method": "num",
         "expression": "ev.num(el, 'rows', ctx, 2)"
       },
@@ -50541,19 +50585,19 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 341,
+        "line": 350,
         "method": "get",
         "expression": "self.doc.project.get('safeArea')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 343,
+        "line": 352,
         "method": "get",
         "expression": "lay.get('safeArea')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 344,
+        "line": 353,
         "method": "get",
         "expression": "lay.get('safeArea')"
       },
@@ -50638,7 +50682,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 544,
+        "line": 557,
         "method": "get",
         "expression": "a.get('scale', 1)"
       },
@@ -50650,7 +50694,7 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 363,
+        "line": 412,
         "method": "num",
         "expression": "ev.num(el, 'scale', ctx, 1.0)"
       },
@@ -50668,13 +50712,19 @@
       },
       {
         "file": "scenerender/three/loaders.py",
-        "line": 582,
+        "line": 707,
+        "method": "get",
+        "expression": "coat_normal.get('scale', 1.0)"
+      },
+      {
+        "file": "scenerender/three/loaders.py",
+        "line": 747,
         "method": "get",
         "expression": "tt.get('scale', [1.0, 1.0])"
       },
       {
         "file": "scenerender/three/materials.py",
-        "line": 106,
+        "line": 126,
         "method": "get",
         "expression": "spec.get('scale', (1.0, 1.0))"
       },
@@ -50701,13 +50751,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 277,
+        "line": 286,
         "method": "num",
         "expression": "ev.num(el, 'scaleX', ctx, 1.0)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 356,
+        "line": 365,
         "method": "num",
         "expression": "self.ev.num(el, 'scaleX', ctx, 1)"
       },
@@ -50725,9 +50775,9 @@
       },
       {
         "file": "scenerender/layout.py",
-        "line": 26,
+        "line": 29,
         "method": "num",
-        "expression": "ev.num(k, 'scaleX', ctx, 1.0)"
+        "expression": "ev.num(k, 'scaleX', clock, 1.0)"
       },
       {
         "file": "scenerender/physics.py",
@@ -50751,13 +50801,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 278,
+        "line": 287,
         "method": "num",
         "expression": "ev.num(el, 'scaleY', ctx, 1.0)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 358,
+        "line": 367,
         "method": "num",
         "expression": "self.ev.num(el, 'scaleY', ctx, 1)"
       },
@@ -50775,13 +50825,13 @@
       },
       {
         "file": "scenerender/layout.py",
-        "line": 26,
+        "line": 29,
         "method": "num",
-        "expression": "ev.num(k, 'scaleY', ctx, 1.0)"
+        "expression": "ev.num(k, 'scaleY', clock, 1.0)"
       },
       {
         "file": "scenerender/layout.py",
-        "line": 88,
+        "line": 91,
         "method": "num",
         "expression": "rc.ev.num(node, 'scaleY', ctx, 1.0)"
       },
@@ -50851,19 +50901,19 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 614,
+        "line": 627,
         "method": "get",
         "expression": "el.get('seed', '')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 614,
+        "line": 627,
         "method": "str",
         "expression": "self.str(el, 'seed', ctx, '')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 489,
+        "line": 494,
         "method": "get",
         "expression": "a.get('seed')"
       },
@@ -50909,7 +50959,7 @@
     "segments": [
       {
         "file": "scenerender/three/scene.py",
-        "line": 65,
+        "line": 66,
         "method": "num",
         "expression": "ev.num(el, 'segments', ctx, 32)"
       }
@@ -50938,6 +50988,12 @@
     ],
     "semitones": [],
     "sensor": [
+      {
+        "file": "scenerender/nodes/particle_collisions.py",
+        "line": 169,
+        "method": "bool",
+        "expression": "rc.ev.bool(rb, 'sensor', c, False)"
+      },
       {
         "file": "scenerender/physics.py",
         "line": 1128,
@@ -51016,7 +51072,7 @@
     "shadowBias": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 148,
+        "line": 135,
         "method": "num",
         "expression": "ev.num(el, 'shadowBias', c, 0.0005)"
       }
@@ -51064,7 +51120,7 @@
     "shadowMapSize": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 149,
+        "line": 136,
         "method": "num",
         "expression": "ev.num(el, 'shadowMapSize', c, 2048)"
       }
@@ -51100,7 +51156,7 @@
     "shadowSoftness": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 147,
+        "line": 134,
         "method": "num",
         "expression": "ev.num(el, 'shadowSoftness', c, 0.0)"
       }
@@ -51117,12 +51173,6 @@
         "line": 78,
         "method": "str",
         "expression": "rc.ev.str(el, 'shape', ctx, 'rect')"
-      },
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 751,
-        "method": "get",
-        "expression": "P.get('shape')"
       },
       {
         "file": "scenerender/physics.py",
@@ -51170,7 +51220,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 492,
+        "line": 578,
         "method": "get",
         "expression": "p.get('shutterAngle', 180)"
       },
@@ -51184,7 +51234,7 @@
     "shutterPhase": [
       {
         "file": "scenerender/compositor.py",
-        "line": 495,
+        "line": 581,
         "method": "get",
         "expression": "p.get('shutterPhase', -90)"
       },
@@ -51283,14 +51333,7 @@
         "expression": "block.run_style(ci).get('size')"
       }
     ],
-    "sizeCurve": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 729,
-        "method": "get",
-        "expression": "P.get('sizeCurve')"
-      }
-    ],
+    "sizeCurve": [],
     "sizeEnd": [],
     "sizeVariance": [],
     "skeleton": [
@@ -51318,7 +51361,7 @@
     "skewX": [
       {
         "file": "scenerender/compositor.py",
-        "line": 289,
+        "line": 298,
         "method": "num",
         "expression": "ev.num(el, 'skewX', ctx, 0.0)"
       }
@@ -51326,7 +51369,7 @@
     "skewY": [
       {
         "file": "scenerender/compositor.py",
-        "line": 289,
+        "line": 298,
         "method": "num",
         "expression": "ev.num(el, 'skewY', ctx, 0.0)"
       }
@@ -51348,7 +51391,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 534,
+        "line": 544,
         "method": "get",
         "expression": "a.get('smoothing', 0)"
       }
@@ -51364,7 +51407,7 @@
     "softness": [
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 120,
+        "line": 119,
         "method": "num",
         "expression": "rc.ev.num(tr, 'softness', ctx, 0.1)"
       }
@@ -51434,15 +51477,21 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 532,
+        "line": 542,
         "method": "get",
         "expression": "a.get('source', '')"
       },
       {
         "file": "scenerender/three/loaders.py",
-        "line": 504,
+        "line": 624,
         "method": "get",
         "expression": "ext['EXT_texture_webp'].get('source', src)"
+      },
+      {
+        "file": "scenerender/three/loaders.py",
+        "line": 627,
+        "method": "get",
+        "expression": "ext['KHR_texture_basisu'].get('source')"
       }
     ],
     "space": [
@@ -51574,7 +51623,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 233,
+        "line": 235,
         "method": "num",
         "expression": "ev.num(el, 'speed', ctx, 1.0)"
       }
@@ -51592,7 +51641,7 @@
     "spotAngle": [
       {
         "file": "scenerender/three/lights.py",
-        "line": 143,
+        "line": 130,
         "method": "num",
         "expression": "ev.num(el, 'spotAngle', c, 45.0)"
       }
@@ -51600,49 +51649,15 @@
     "spread": [
       {
         "file": "scenerender/paint.py",
-        "line": 175,
+        "line": 181,
         "method": "str",
         "expression": "rc.ev.str(el, 'spread', ctx, 'pad')"
       }
     ],
-    "sprite": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 773,
-        "method": "get",
-        "expression": "P.get('sprite')"
-      },
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 773,
-        "method": "get",
-        "expression": "P.get('sprite')"
-      }
-    ],
-    "spriteCols": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 816,
-        "method": "get",
-        "expression": "P.get('spriteCols')"
-      }
-    ],
-    "spriteFps": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 819,
-        "method": "get",
-        "expression": "P.get('spriteFps')"
-      }
-    ],
-    "spriteRows": [
-      {
-        "file": "scenerender/nodes/particles.py",
-        "line": 817,
-        "method": "get",
-        "expression": "P.get('spriteRows')"
-      }
-    ],
+    "sprite": [],
+    "spriteCols": [],
+    "spriteFps": [],
+    "spriteRows": [],
     "src": [
       {
         "file": "scenerender/assets/__init__.py",
@@ -51808,19 +51823,19 @@
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 173,
+        "line": 207,
         "method": "str",
         "expression": "rc.ev.str(asset, 'src', ctx)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 530,
+        "line": 565,
         "method": "get",
         "expression": "asset.get('src')"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 532,
+        "line": 567,
         "method": "get",
         "expression": "asset.get('src', '?')"
       },
@@ -51912,7 +51927,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 591,
+        "line": 604,
         "method": "get",
         "expression": "mp.get('start', 0)"
       },
@@ -52040,7 +52055,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 229,
+        "line": 231,
         "method": "num",
         "expression": "ev.num(asset, 'step', ctx, 1)"
       }
@@ -52332,7 +52347,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 374,
+        "line": 383,
         "method": "str",
         "expression": "ev.str(el, 'symbol', ctx)"
       },
@@ -52362,7 +52377,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 324,
+        "line": 328,
         "method": "str",
         "expression": "self.str(instance, 'symbol', current)"
       },
@@ -52374,7 +52389,7 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 292,
+        "line": 296,
         "method": "get",
         "expression": "instance.get('symbol')"
       },
@@ -52386,13 +52401,19 @@
       },
       {
         "file": "scenerender/references.py",
-        "line": 64,
+        "line": 126,
         "method": "str",
         "expression": "rc.ev.str(instance, 'symbol', entered)"
       },
       {
         "file": "scenerender/references.py",
-        "line": 99,
+        "line": 87,
+        "method": "str",
+        "expression": "rc.ev.str(instance, 'symbol', entered)"
+      },
+      {
+        "file": "scenerender/references.py",
+        "line": 163,
         "method": "str",
         "expression": "rc.ev.str(node, 'symbol', entered)"
       }
@@ -52426,7 +52447,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 109,
+        "line": 115,
         "method": "get",
         "expression": "o.get('target')"
       },
@@ -52606,7 +52627,7 @@
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 81,
+        "line": 82,
         "method": "str",
         "expression": "ev.str(el, 'text', ctx, '')"
       }
@@ -52655,7 +52676,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 443,
+        "line": 529,
         "method": "get",
         "expression": "el.get('threeD')"
       },
@@ -52682,7 +52703,7 @@
     "tileHeight": [
       {
         "file": "scenerender/paint.py",
-        "line": 359,
+        "line": 408,
         "method": "num",
         "expression": "ev.num(el, 'tileHeight', ctx, ah)"
       }
@@ -52690,7 +52711,7 @@
     "tileWidth": [
       {
         "file": "scenerender/paint.py",
-        "line": 359,
+        "line": 408,
         "method": "num",
         "expression": "ev.num(el, 'tileWidth', ctx, aw)"
       }
@@ -52710,13 +52731,13 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 509,
+        "line": 514,
         "method": "get",
         "expression": "r.get('time')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 203,
+        "line": 200,
         "method": "get",
         "expression": "b.get('time', 0)"
       },
@@ -52736,7 +52757,7 @@
     "timeBase": [
       {
         "file": "scenerender/evaluator.py",
-        "line": 521,
+        "line": 532,
         "method": "get",
         "expression": "a.get('timeBase', 'composition')"
       },
@@ -52748,7 +52769,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 166,
+        "line": 168,
         "method": "get",
         "expression": "c.get('timeBase')"
       }
@@ -52762,7 +52783,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 84,
+        "line": 85,
         "method": "num",
         "expression": "ev.num(seq, 'timeGap', owner_ctx, 0.0)"
       }
@@ -52788,7 +52809,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 241,
+        "line": 243,
         "method": "num",
         "expression": "ev.num(el, 'timeOffset', owner, 0.0)"
       },
@@ -52820,7 +52841,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 240,
+        "line": 242,
         "method": "num",
         "expression": "ev.num(el, 'timeScale', owner, 1.0)"
       }
@@ -52841,7 +52862,7 @@
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 236,
+        "line": 238,
         "method": "num",
         "expression": "ev.num(el, 'timeStretch', ctx, 1.0)"
       }
@@ -52865,25 +52886,25 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 705,
+        "line": 809,
         "method": "str",
         "expression": "self.ev.str(tr, 'to', ctx)"
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 286,
+        "line": 288,
         "method": "str",
         "expression": "ev.str(tr, 'to', ctx)"
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 277,
+        "line": 279,
         "method": "str",
         "expression": "ev.str(t, 'to', ctx)"
       },
       {
         "file": "scenerender/scheduling.py",
-        "line": 281,
+        "line": 283,
         "method": "str",
         "expression": "ev.str(t, 'to', ctx)"
       }
@@ -52941,15 +52962,15 @@
     "trail": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 752,
+        "line": 208,
         "method": "get",
-        "expression": "P.get('trail')"
+        "expression": "self.P.get('trail')"
       },
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 211,
+        "line": 550,
         "method": "get",
-        "expression": "self.P.get('trail')"
+        "expression": "params.get('trail')"
       }
     ],
     "transcribe": [
@@ -53051,7 +53072,7 @@
     "turbulence": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 392,
+        "line": 430,
         "method": "get",
         "expression": "P.get('turbulence', c)"
       }
@@ -53059,7 +53080,7 @@
     "turbulenceScale": [
       {
         "file": "scenerender/nodes/particles.py",
-        "line": 394,
+        "line": 432,
         "method": "get",
         "expression": "P.get('turbulenceScale', c)"
       }
@@ -53117,13 +53138,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 629,
+        "line": 728,
         "method": "str",
         "expression": "self.ev.str(e, 'type', ctx)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 451,
+        "line": 537,
         "method": "str",
         "expression": "self.ev.str(e, 'type', ctx)"
       },
@@ -53242,10 +53263,10 @@
         "expression": "m.get('type')"
       },
       {
-        "file": "scenerender/nodes/scene3d.py",
-        "line": 42,
-        "method": "get",
-        "expression": "L.get('type')"
+        "file": "scenerender/nodes/particles.py",
+        "line": 256,
+        "method": "str",
+        "expression": "rc.ev.str(constraint, 'type', c)"
       },
       {
         "file": "scenerender/physics.py",
@@ -53297,7 +53318,7 @@
       },
       {
         "file": "scenerender/three/lights.py",
-        "line": 127,
+        "line": 114,
         "method": "str",
         "expression": "ev.str(el, 'type', c, 'point')"
       }
@@ -53313,7 +53334,7 @@
     "units": [
       {
         "file": "scenerender/paint.py",
-        "line": 181,
+        "line": 187,
         "method": "str",
         "expression": "rc.ev.str(el, 'units', ctx, 'object')"
       }
@@ -53428,25 +53449,25 @@
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 503,
+        "line": 508,
         "method": "get",
         "expression": "raw[0].get('value')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 512,
+        "line": 517,
         "method": "get",
         "expression": "r.get('value')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 512,
+        "line": 517,
         "method": "get",
         "expression": "r.get('value')"
       },
       {
         "file": "scenerender/evaluator.py",
-        "line": 506,
+        "line": 511,
         "method": "get",
         "expression": "r.get('value', '')"
       },
@@ -53476,7 +53497,7 @@
       },
       {
         "file": "scenerender/transitions/__init__.py",
-        "line": 113,
+        "line": 112,
         "method": "get",
         "expression": "c.get('value')"
       }
@@ -53653,13 +53674,13 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 251,
+        "line": 260,
         "method": "bool",
         "expression": "self.ev.bool(el, 'visible', ctx, True)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 459,
+        "line": 545,
         "method": "bool",
         "expression": "self.ev.bool(el, 'visible', ctx, True)"
       }
@@ -53712,7 +53733,7 @@
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 51,
+        "line": 52,
         "method": "get",
         "expression": "a.get('weight', 400)"
       }
@@ -53726,7 +53747,7 @@
       },
       {
         "file": "scenerender/three/loaders.py",
-        "line": 691,
+        "line": 861,
         "method": "get",
         "expression": "L.raw['nodes'][len(nodes)].get('weights')"
       }
@@ -53938,27 +53959,33 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 366,
+        "line": 375,
         "method": "length",
         "expression": "ev.length(el, 'width', ctx, box[0], box[0] if tag != 'shape' else 0.0)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 403,
+        "line": 412,
         "method": "num",
         "expression": "self.ev.num(asset, 'width', ctx, 0)"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 375,
+        "line": 384,
         "method": "get",
         "expression": "sym.get('width')"
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 376,
+        "line": 385,
         "method": "num",
         "expression": "ev.num(sym, 'width', ctx, box[0])"
+      },
+      {
+        "file": "scenerender/compositor.py",
+        "line": 453,
+        "method": "num",
+        "expression": "basis.ev.num(root, 'width', clock, basis.doc.width)"
       },
       {
         "file": "scenerender/document.py",
@@ -53989,6 +54016,18 @@
         "line": 311,
         "method": "num",
         "expression": "rc.ev.num(sym, 'width', sctx, rc.doc.width)"
+      },
+      {
+        "file": "scenerender/nodes/particle_collisions.py",
+        "line": 256,
+        "method": "num",
+        "expression": "em.rc.ev.num(root, 'width', clock, em.rc.doc.width)"
+      },
+      {
+        "file": "scenerender/nodes/particle_collisions.py",
+        "line": 159,
+        "method": "num",
+        "expression": "rc.ev.num(root, 'width', clock, rc.doc.width)"
       },
       {
         "file": "scenerender/output.py",
@@ -54034,25 +54073,37 @@
       },
       {
         "file": "scenerender/references.py",
-        "line": 68,
+        "line": 73,
+        "method": "num",
+        "expression": "rc.ev.num(origin, 'width', current, rc.doc.width)"
+      },
+      {
+        "file": "scenerender/references.py",
+        "line": 130,
         "method": "num",
         "expression": "rc.ev.num(boundary, 'width', current, rc.doc.width)"
       },
       {
         "file": "scenerender/references.py",
-        "line": 80,
+        "line": 142,
         "method": "num",
         "expression": "rc.ev.num(symbol, 'width', current, rc.doc.width)"
       },
       {
+        "file": "scenerender/references.py",
+        "line": 209,
+        "method": "num",
+        "expression": "local.ev.num(root, 'width', clock, local.doc.width)"
+      },
+      {
         "file": "scenerender/three/lights.py",
-        "line": 137,
+        "line": 124,
         "method": "num",
         "expression": "ev.num(el, 'width', c, m)"
       },
       {
         "file": "scenerender/three/scene.py",
-        "line": 63,
+        "line": 64,
         "method": "num",
         "expression": "ev.num(el, 'width', ctx, 2 * r)"
       }
@@ -54141,7 +54192,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 270,
+        "line": 279,
         "method": "length",
         "expression": "ev.length(el, 'x', ctx, bw)"
       },
@@ -54171,13 +54222,13 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 280,
+        "line": 329,
         "method": "num",
         "expression": "ev.num(p, 'x', ctx, pts[r, c, 0])"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 279,
+        "line": 328,
         "method": "get",
         "expression": "p.get('x')"
       },
@@ -54209,7 +54260,7 @@
     "x1": [
       {
         "file": "scenerender/paint.py",
-        "line": 199,
+        "line": 205,
         "method": "num",
         "expression": "ev.num(el, 'x1', ctx, 0)"
       }
@@ -54217,7 +54268,7 @@
     "x2": [
       {
         "file": "scenerender/paint.py",
-        "line": 200,
+        "line": 206,
         "method": "num",
         "expression": "ev.num(el, 'x2', ctx, 1)"
       }
@@ -54255,7 +54306,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 271,
+        "line": 280,
         "method": "length",
         "expression": "ev.length(el, 'y', ctx, bh)"
       },
@@ -54285,13 +54336,13 @@
       },
       {
         "file": "scenerender/paint.py",
-        "line": 282,
+        "line": 331,
         "method": "num",
         "expression": "ev.num(p, 'y', ctx, pts[r, c, 1])"
       },
       {
         "file": "scenerender/paint.py",
-        "line": 281,
+        "line": 330,
         "method": "get",
         "expression": "p.get('y')"
       },
@@ -54323,7 +54374,7 @@
     "y1": [
       {
         "file": "scenerender/paint.py",
-        "line": 199,
+        "line": 205,
         "method": "num",
         "expression": "ev.num(el, 'y1', ctx, 0)"
       }
@@ -54331,7 +54382,7 @@
     "y2": [
       {
         "file": "scenerender/paint.py",
-        "line": 200,
+        "line": 206,
         "method": "num",
         "expression": "ev.num(el, 'y2', ctx, 0)"
       }
@@ -54365,7 +54416,7 @@
       },
       {
         "file": "scenerender/compositor.py",
-        "line": 179,
+        "line": 185,
         "method": "num",
         "expression": "self.ev.num(c, 'z', self.enter_node(c, ctx), 0)"
       }

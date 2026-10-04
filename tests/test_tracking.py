@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from scenerender import document, tracking
-from scenerender.registry import FEATURES, FULL
+from scenerender.registry import FEATURES, FULL, PARTIAL
 from scenerender.tracking import Ctx, load_track, mask_path, find_track
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "tracking")
@@ -430,6 +430,6 @@ def test_sniff_and_registry(tmp_path):
     assert tracking.sniff_format(make_fbx.scene_fbx(), "a.bin") == "fbx"
     assert tracking.sniff_format(b' {"tracks": {}}', "a.csv") == "json"
     for f in tracking.FORMATS:
-        assert FEATURES.level(f"trackData:{f}") == FULL
+        assert FEATURES.level(f"trackData:{f}") == (PARTIAL if f == 'fbx' else FULL)
     for k in tracking.KINDS:
         assert FEATURES.level(f"trackData:kind:{k}") == FULL

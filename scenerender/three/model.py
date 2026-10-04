@@ -13,6 +13,8 @@ Animation (glTF semantics, used for every format):
     times (s), values and interpolation LINEAR (quaternions: slerp), STEP or CUBICSPLINE
     (Hermite with in/out tangents scaled by the key interval).
   * Sampling clamps to the first/last key; the object3D decides the clip time (looping).
+  * glTF pointer channels also target individual weights and matrix translations. Clip-local
+    material samplers evaluate factors and UV transforms without mutating the imported materials.
   * Skinning is linear blend skinning: joint matrix = world(joint) @ inverseBind, applied relative to
     the skinned mesh node's world (glTF: the mesh node transform is ignored for skinned meshes).
   * Morph targets add weighted position/normal deltas before skinning.
@@ -28,11 +30,17 @@ import numpy as np
 @dataclass
 class MaterialSpec:
     """Material parameters with the scene-render <material> attribute names; colours are LINEAR
-    RGBA floats. Texture fields hold decoded arrays (h, w, C) float32 in [0, 1] (baseColor/emissive
-    already converted to linear) or None. Missing keys fall back to the <material> schema defaults."""
+    RGBA floats. Texture fields hold decoded arrays (h, w, C) float32 (baseColor/emissive
+    already converted to linear), TextureImage values with authored mip levels, or None.
+    HDR values and texture scale/bias can exceed [0, 1].
+    Missing keys fall back to the <material> schema defaults."""
     params: dict = field(default_factory=dict)
-    textures: dict = field(default_factory=dict)   # "baseColorMap", "normalMap", ... -> ndarray
+    textures: dict = field(default_factory=dict)   # "baseColorMap", ... -> ndarray or TextureImage
     name: str = ""
+    sampler: Callable[[float], MaterialSpec] | None = None
+    sample_times: tuple = ()
+    dynamic: bool = False
+    animation_key: int | None = None          # shared by derived glTF primitive materials
 
 
 @dataclass
@@ -49,7 +57,7 @@ class Primitive:
     morph_normals: list = field(default_factory=list)     # [(n, 3)] deltas (may be empty)
     material: MaterialSpec | None = None
     variants: dict = field(default_factory=dict)           # KHR_materials_variants: name -> MaterialSpec
-    uv_sets: dict = field(default_factory=dict)            # TEXCOORD_n -> (n, 2)
+    uv_sets: dict = field(default_factory=dict)            # glTF set index / USD primvar name -> (n, 2)
     mode: int = 4                            # glTF/OpenGL topology; strips/fans are triangulated
     morph_tangents: list = field(default_factory=list)    # [(n, 3)] tangent XYZ deltas
 
@@ -60,7 +68,7 @@ class Node:
     translation: np.ndarray = field(default_factory=lambda: np.zeros(3))
     rotation: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.0, 1.0]))   # quaternion xyzw
     scale: np.ndarray = field(default_factory=lambda: np.ones(3))
-    matrix: np.ndarray | None = None          # explicit 4x4 (not animatable), overrides TRS when set
+    matrix: np.ndarray | None = None          # explicit 4x4; a glTF pointer may replace its translation
     children: list = field(default_factory=list)
     mesh: int | None = None                   # index into Model.meshes
     skin: int | None = None                   # index into Model.skins
@@ -78,10 +86,11 @@ class Skin:
 @dataclass
 class Channel:
     node: int
-    path: str                                 # translation | rotation | scale | weights
+    path: str                                 # node TRS/weights/matrixTranslation, or material pointer path
     times: np.ndarray                         # (k,)
     values: np.ndarray                        # (k, c) or (3k, c) for CUBICSPLINE (in, value, out)
     interpolation: str = "LINEAR"
+    component: int | None = None              # one element of an array-valued weights pointer
 
 
 @dataclass
@@ -89,6 +98,7 @@ class Clip:
     name: str
     channels: list
     duration: float = 0.0
+    material_samplers: dict = field(default_factory=dict)  # id(MaterialSpec) -> clip-local sampler
 
 
 @dataclass

@@ -1,0 +1,1259 @@
+{
+  "inspected_at": "2026-09-29",
+  "renderer": {
+    "GL_VENDOR": "Intel",
+    "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+    "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+  },
+  "command": "uv run --no-sync pytest -q tests/test_materialx_inputs.py tests/test_scalar_material_maps.py -o cache_dir=/tmp/py-render-intel-numerical-cache --junitxml=/tmp/py-render-intel-numerical-controls.xml --tb=short",
+  "tests": 155,
+  "failures": 37,
+  "passed": 118,
+  "seconds": 2.094,
+  "junit_sha256": "b627e8c6e3b2cd9214ad7d9af7180a16894a266d1d256876f1a8dba4eb78e822",
+  "interpretation": "The top-level 155-case result preserves the historical failures. Current verification below passes after explicit ordinary samplers gained float interpolation and correct nearest-border behavior, and atlas mip controls gained independent float64 references plus exact-fraction native GPU controls. Numerical tolerances are unchanged.",
+  "observations": [
+    {
+      "test": "tests.test_materialx_inputs::test_different_roughness_metallic_images_and_coordinates_render_independently",
+      "maximum_absolute_difference": 0.00029007,
+      "absolute_tolerance": 3e-06
+    },
+    {
+      "test": "tests.test_materialx_inputs::test_image_wraps_use_their_own_default_border[periodic-periodic]",
+      "maximum_absolute_difference": 0.00019585,
+      "absolute_tolerance": 2e-06
+    },
+    {
+      "test": "tests.test_materialx_inputs::test_image_wraps_use_their_own_default_border[periodic-mirror]",
+      "maximum_absolute_difference": 0.00041625,
+      "absolute_tolerance": 2e-06
+    },
+    {
+      "test": "tests.test_materialx_inputs::test_image_wraps_use_their_own_default_border[periodic-clamp]",
+      "maximum_absolute_difference": 0.00041625,
+      "absolute_tolerance": 2e-06
+    },
+    {
+      "test": "tests.test_materialx_inputs::test_image_wraps_use_their_own_default_border[periodic-constant]",
+      "maximum_absolute_difference": 0.00010405,
+      "absolute_tolerance": 2e-06
+    },
+    {
+      "test": "tests.test_materialx_inputs::test_place2d_and_tiledimage_coordinates_reach_native_primitive[0]",
+      "maximum_absolute_difference": 0.00025917,
+      "absolute_tolerance": 3e-06
+    },
+    {
+      "test": "tests.test_materialx_inputs::test_place2d_and_tiledimage_coordinates_reach_native_primitive[1]",
+      "maximum_absolute_difference": 0.00021691,
+      "absolute_tolerance": 3e-06
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[0.5-9729-9728]",
+      "maximum_absolute_difference": 0.00505507,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[0.5-9729-9729]",
+      "maximum_absolute_difference": 0.00505507,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[0.5-9729-9984]",
+      "maximum_absolute_difference": 0.00505507,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[0.5-9729-9985]",
+      "maximum_absolute_difference": 0.00505507,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[0.5-9729-9986]",
+      "maximum_absolute_difference": 0.00505507,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[0.5-9729-9987]",
+      "maximum_absolute_difference": 0.00505507,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.2-9728-9729]",
+      "maximum_absolute_difference": 0.00677884,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.2-9728-9985]",
+      "maximum_absolute_difference": 0.00677884,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.2-9728-9987]",
+      "maximum_absolute_difference": 0.00506276,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.2-9729-9729]",
+      "maximum_absolute_difference": 0.00677884,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.2-9729-9985]",
+      "maximum_absolute_difference": 0.00677884,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.2-9729-9987]",
+      "maximum_absolute_difference": 0.00506276,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.425-9728-9729]",
+      "maximum_absolute_difference": 0.00744939,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.425-9728-9985]",
+      "maximum_absolute_difference": 0.00265384,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.425-9728-9987]",
+      "maximum_absolute_difference": 0.00392938,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.425-9729-9729]",
+      "maximum_absolute_difference": 0.00744939,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.425-9729-9985]",
+      "maximum_absolute_difference": 0.00265384,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[1.425-9729-9987]",
+      "maximum_absolute_difference": 0.00392938,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[2.45-9728-9729]",
+      "maximum_absolute_difference": 0.00511026,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[2.45-9728-9985]",
+      "maximum_absolute_difference": 0.0036335,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[2.45-9728-9987]",
+      "maximum_absolute_difference": 0.00260746,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[2.45-9729-9729]",
+      "maximum_absolute_difference": 0.00511026,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[2.45-9729-9985]",
+      "maximum_absolute_difference": 0.0036335,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[2.45-9729-9987]",
+      "maximum_absolute_difference": 0.00260746,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[8.0-9728-9729]",
+      "maximum_absolute_difference": 0.00330257,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[8.0-9728-9985]",
+      "maximum_absolute_difference": 0.0004108,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[8.0-9728-9987]",
+      "maximum_absolute_difference": 0.0004108,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[8.0-9729-9729]",
+      "maximum_absolute_difference": 0.00330257,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[8.0-9729-9985]",
+      "maximum_absolute_difference": 0.0004108,
+      "absolute_tolerance": 3e-05
+    },
+    {
+      "test": "tests.test_scalar_material_maps::test_gpu_scalar_atlas_mip_filters_match_explicit_lod_texture[8.0-9729-9987]",
+      "maximum_absolute_difference": 0.0004108,
+      "absolute_tolerance": 3e-05
+    }
+  ],
+  "filter_precision_probe": {
+    "intel": {
+      "renderer": {
+        "GL_VENDOR": "Intel",
+        "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+        "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+      },
+      "input": "3x5 R32F texture, 4096 level-zero linear samples with periodic wrapping; CPU reference uses the GLSL-returned UVs",
+      "observations": [
+        {
+          "fraction_bits": null,
+          "maximum_absolute_difference": 0.0036183029907408404,
+          "rms_difference": 0.0009841873394731012
+        },
+        {
+          "fraction_bits": 7,
+          "maximum_absolute_difference": 0.014494227867544396,
+          "rms_difference": 0.0048269060321652815
+        },
+        {
+          "fraction_bits": 8,
+          "maximum_absolute_difference": 2.3840402718633413e-07,
+          "rms_difference": 1.0201190307905314e-07
+        },
+        {
+          "fraction_bits": 9,
+          "maximum_absolute_difference": 0.0038329644064560853,
+          "rms_difference": 0.0013034443411053527
+        },
+        {
+          "fraction_bits": 10,
+          "maximum_absolute_difference": 0.0038328458219893946,
+          "rms_difference": 0.0010001188219319857
+        },
+        {
+          "fraction_bits": 12,
+          "maximum_absolute_difference": 0.0038328458219893946,
+          "rms_difference": 0.0009891318071244722
+        },
+        {
+          "fraction_bits": 16,
+          "maximum_absolute_difference": 0.0036232365984627535,
+          "rms_difference": 0.000985906284874
+        }
+      ]
+    },
+    "llvmpipe": {
+      "renderer": {
+        "GL_VENDOR": "Mesa",
+        "GL_RENDERER": "llvmpipe (LLVM 20.1.2, 256 bits)",
+        "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+      },
+      "input": "3x5 R32F texture, 4096 level-zero linear samples with periodic wrapping; CPU reference uses the GLSL-returned UVs",
+      "observations": [
+        {
+          "fraction_bits": null,
+          "maximum_absolute_difference": 5.352704897099159e-07,
+          "rms_difference": 1.1794858988038112e-07
+        },
+        {
+          "fraction_bits": 7,
+          "maximum_absolute_difference": 0.013513016205251915,
+          "rms_difference": 0.004718318617301835
+        },
+        {
+          "fraction_bits": 8,
+          "maximum_absolute_difference": 0.003618587447817845,
+          "rms_difference": 0.0009841869588533684
+        },
+        {
+          "fraction_bits": 9,
+          "maximum_absolute_difference": 0.0017480371345754975,
+          "rms_difference": 0.00048576972003553493
+        },
+        {
+          "fraction_bits": 10,
+          "maximum_absolute_difference": 0.0009352822997925614,
+          "rms_difference": 0.00024991650153860604
+        },
+        {
+          "fraction_bits": 12,
+          "maximum_absolute_difference": 0.00021457209163600055,
+          "rms_difference": 6.059840559937468e-05
+        },
+        {
+          "fraction_bits": 16,
+          "maximum_absolute_difference": 1.3139052885691171e-05,
+          "rms_difference": 3.800539296809779e-06
+        }
+      ]
+    }
+  },
+  "filter_precision_interpretation": "In an isolated 3x5 R32F level-zero probe, Intel native filtering matches CPU interpolation with 8-bit fractional weights to 2.4e-7; llvmpipe matches unquantized interpolation to 5.4e-7. This explains a source of the regression differences, but the full mip/filter controls still require contract-aware numerical references; no test tolerances were changed.",
+  "prior_interpretation": "These CPU/GPU and independent GPU texture-filter comparisons fail their current numerical tolerances on this Intel backend. No assertion is made yet that each difference violates the rendering contract or is only driver precision. This remains an open fidelity and test-portability gate. The llvmpipe checkpoint is a different backend.",
+  "current_verification": {
+    "date": "2026-10-01",
+    "complete_suite": {
+      "passed": 3335,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 739.516,
+      "junit_sha256": "1ef887df91ea226f7ca2b7ad7709a0f29e302d9885e7c00d5e8040adb629b8db"
+    },
+    "sampler_probe": {
+      "renderer": {
+        "GL_VENDOR": "Intel",
+        "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+        "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+      },
+      "vertex_attributes": 14,
+      "vertex_attribute_locations": {
+        "gl_VertexID": -1,
+        "in_pos": 0,
+        "in_nrm": 1,
+        "in_tan": 2,
+        "in_col": 3,
+        "in_baseNrmUV": 4,
+        "in_mrOccUV": 5,
+        "in_emisRoughUV": 6,
+        "in_metalOpacityUV": 7,
+        "in_iorCoatUV": 8,
+        "in_coatRoughUV": 9,
+        "in_m0": 10,
+        "in_m1": 11,
+        "in_m2": 12,
+        "in_m3": 13
+      },
+      "texture_samplers": 17,
+      "vertex_texture_samplers": 1,
+      "fragment_texture_samplers": 16,
+      "observations": [
+        {
+          "name": "nearest_constant_border",
+          "actual": 0.20000000298023224,
+          "expected": 0.2,
+          "absolute_difference": 2.980232227667301e-09,
+          "within_1e-6": true
+        },
+        {
+          "name": "float_linear_interpolation",
+          "actual": 0.36800000071525574,
+          "expected": 0.368,
+          "absolute_difference": 7.152557435219364e-10,
+          "within_1e-6": true
+        }
+      ]
+    },
+    "command": "uv run --no-sync pytest -q --tb=short -o cache_dir=/tmp/py-render-ktx-full-intel-cache --junitxml=/tmp/py-render-ktx-full-intel.xml",
+    "scope": "Complete suite after KTX2/BasisU import, channel unpacking and authored mip preservation through ordinary textures and scalar/RGBA atlases. Earlier backend-specific results retain their historical scope in verification_history."
+  },
+  "verification_history": [
+    {
+      "date": "2026-09-29",
+      "targeted_material_and_texture_suite": {
+        "passed": 345,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 5.395,
+        "junit_sha256": "019414c793f0c89547c0dc3e68ffaf524fe35f6c08d0df7b63d3a4d659ea52af"
+      },
+      "complete_suite": {
+        "passed": 2349,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 92.664,
+        "junit_sha256": "cbfec5a718bd1e369b36ede6be499b2ffb0a1a52bb91dbfd6e39b6503656ffde"
+      },
+      "sampler_probes": {
+        "intel": {
+          "renderer": {
+            "GL_VENDOR": "Intel",
+            "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+            "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+          },
+          "vertex_attributes": 14,
+          "texture_samplers": 16,
+          "observations": [
+            {
+              "name": "nearest_constant_border",
+              "actual": 0.20000000298023224,
+              "expected": 0.2,
+              "absolute_difference": 2.980232227667301e-09,
+              "within_1e-6": true
+            },
+            {
+              "name": "float_linear_interpolation",
+              "actual": 0.36800000071525574,
+              "expected": 0.368,
+              "absolute_difference": 7.152557435219364e-10,
+              "within_1e-6": true
+            }
+          ]
+        },
+        "llvmpipe": {
+          "renderer": {
+            "GL_VENDOR": "Mesa",
+            "GL_RENDERER": "llvmpipe (LLVM 20.1.2, 256 bits)",
+            "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+          },
+          "vertex_attributes": 14,
+          "texture_samplers": 16,
+          "observations": [
+            {
+              "name": "nearest_constant_border",
+              "actual": 0.20000000298023224,
+              "expected": 0.2,
+              "absolute_difference": 2.980232227667301e-09,
+              "within_1e-6": true
+            },
+            {
+              "name": "float_linear_interpolation",
+              "actual": 0.36800000071525574,
+              "expected": 0.368,
+              "absolute_difference": 7.152557435219364e-10,
+              "within_1e-6": true
+            }
+          ]
+        }
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-full-intel-cache --junitxml=/tmp/py-render-full-intel.xml --tb=short",
+      "reference_changes": "Float64 area integration and texel-weight controls verify both ordinary textures and the atlas at the queried LOD. Decimal-scale nearest controls avoid ambiguous rounding ties; binary-coordinate native GPU comparisons exercise exact fractions and ties."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2449,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 91.303,
+        "junit_sha256": "7f80633bb4ff27fdd06e745b0e92027a8ee45913a10c26165270d3124174cf61"
+      },
+      "gltf_material_extension_suite": {
+        "passed": 100,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 3.017,
+        "junit_sha256": "47f6f047be1fc20fce403f87a55639d88958b262a5f7255e8267771b98d26cd7"
+      },
+      "sampler_probes": {
+        "intel": {
+          "renderer": {
+            "GL_VENDOR": "Intel",
+            "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+            "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+          },
+          "vertex_attributes": 14,
+          "vertex_attribute_locations": {
+            "gl_VertexID": -1,
+            "in_pos": 0,
+            "in_nrm": 1,
+            "in_tan": 2,
+            "in_col": 3,
+            "in_baseNrmUV": 4,
+            "in_mrOccUV": 5,
+            "in_emisRoughUV": 6,
+            "in_metalOpacityUV": 7,
+            "in_iorCoatUV": 8,
+            "in_coatRoughUV": 9,
+            "in_m0": 10,
+            "in_m1": 11,
+            "in_m2": 12,
+            "in_m3": 13
+          },
+          "texture_samplers": 17,
+          "vertex_texture_samplers": 1,
+          "fragment_texture_samplers": 16,
+          "observations": [
+            {
+              "name": "nearest_constant_border",
+              "actual": 0.20000000298023224,
+              "expected": 0.2,
+              "absolute_difference": 2.980232227667301e-09,
+              "within_1e-6": true
+            },
+            {
+              "name": "float_linear_interpolation",
+              "actual": 0.36800000071525574,
+              "expected": 0.368,
+              "absolute_difference": 7.152557435219364e-10,
+              "within_1e-6": true
+            }
+          ]
+        },
+        "llvmpipe": {
+          "renderer": {
+            "GL_VENDOR": "Mesa",
+            "GL_RENDERER": "llvmpipe (LLVM 20.1.2, 256 bits)",
+            "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+          },
+          "vertex_attributes": 14,
+          "vertex_attribute_locations": {
+            "gl_VertexID": -1,
+            "in_pos": 0,
+            "in_nrm": 1,
+            "in_tan": 2,
+            "in_col": 3,
+            "in_baseNrmUV": 4,
+            "in_mrOccUV": 5,
+            "in_emisRoughUV": 6,
+            "in_metalOpacityUV": 7,
+            "in_iorCoatUV": 8,
+            "in_coatRoughUV": 9,
+            "in_m0": 10,
+            "in_m1": 11,
+            "in_m2": 12,
+            "in_m3": 13
+          },
+          "texture_samplers": 17,
+          "vertex_texture_samplers": 1,
+          "fragment_texture_samplers": 16,
+          "observations": [
+            {
+              "name": "nearest_constant_border",
+              "actual": 0.20000000298023224,
+              "expected": 0.2,
+              "absolute_difference": 2.980232227667301e-09,
+              "within_1e-6": true
+            },
+            {
+              "name": "float_linear_interpolation",
+              "actual": 0.36800000071525574,
+              "expected": 0.368,
+              "absolute_difference": 7.152557435219364e-10,
+              "within_1e-6": true
+            }
+          ]
+        }
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-extension-full-intel-cache --junitxml=/tmp/py-render-extension-full-intel.xml --tb=short",
+      "scope": "Complete current suite, including the prior texture-filter repairs and the new extension inputs. Historical failures and the preceding 2349-test verification remain above/in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2580,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 106.602,
+        "junit_sha256": "7de0fc8ee29f950cb8ff933c4eee47478072c161dad828380b99099ab653c052"
+      },
+      "gltf_animation_pointer_suite": {
+        "passed": 131,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 4.957,
+        "junit_sha256": "4fa0ac9a346e545f4a56ab394e7e2501ce9f2abc66088ffe3dcc6475d5aa106d"
+      },
+      "sampler_probes": {
+        "intel": {
+          "renderer": {
+            "GL_VENDOR": "Intel",
+            "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+            "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+          },
+          "vertex_attributes": 14,
+          "vertex_attribute_locations": {
+            "gl_VertexID": -1,
+            "in_pos": 0,
+            "in_nrm": 1,
+            "in_tan": 2,
+            "in_col": 3,
+            "in_baseNrmUV": 4,
+            "in_mrOccUV": 5,
+            "in_emisRoughUV": 6,
+            "in_metalOpacityUV": 7,
+            "in_iorCoatUV": 8,
+            "in_coatRoughUV": 9,
+            "in_m0": 10,
+            "in_m1": 11,
+            "in_m2": 12,
+            "in_m3": 13
+          },
+          "texture_samplers": 17,
+          "vertex_texture_samplers": 1,
+          "fragment_texture_samplers": 16,
+          "observations": [
+            {
+              "name": "nearest_constant_border",
+              "actual": 0.20000000298023224,
+              "expected": 0.2,
+              "absolute_difference": 2.980232227667301e-09,
+              "within_1e-6": true
+            },
+            {
+              "name": "float_linear_interpolation",
+              "actual": 0.36800000071525574,
+              "expected": 0.368,
+              "absolute_difference": 7.152557435219364e-10,
+              "within_1e-6": true
+            }
+          ]
+        },
+        "llvmpipe": {
+          "renderer": {
+            "GL_VENDOR": "Mesa",
+            "GL_RENDERER": "llvmpipe (LLVM 20.1.2, 256 bits)",
+            "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+          },
+          "vertex_attributes": 14,
+          "vertex_attribute_locations": {
+            "gl_VertexID": -1,
+            "in_pos": 0,
+            "in_nrm": 1,
+            "in_tan": 2,
+            "in_col": 3,
+            "in_baseNrmUV": 4,
+            "in_mrOccUV": 5,
+            "in_emisRoughUV": 6,
+            "in_metalOpacityUV": 7,
+            "in_iorCoatUV": 8,
+            "in_coatRoughUV": 9,
+            "in_m0": 10,
+            "in_m1": 11,
+            "in_m2": 12,
+            "in_m3": 13
+          },
+          "texture_samplers": 17,
+          "vertex_texture_samplers": 1,
+          "fragment_texture_samplers": 16,
+          "observations": [
+            {
+              "name": "nearest_constant_border",
+              "actual": 0.20000000298023224,
+              "expected": 0.2,
+              "absolute_difference": 2.980232227667301e-09,
+              "within_1e-6": true
+            },
+            {
+              "name": "float_linear_interpolation",
+              "actual": 0.36800000071525574,
+              "expected": 0.368,
+              "absolute_difference": 7.152557435219364e-10,
+              "within_1e-6": true
+            }
+          ]
+        }
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-pointer-verified-full-intel-cache --junitxml=/tmp/py-render-pointer-verified-full-intel.xml --tb=short",
+      "scope": "Complete suite after animation pointers and the cache-key repair, including all preceding material/texture regressions. Historical numerical failures and earlier checkpoints remain in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2616,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 88.617,
+        "junit_sha256": "2167854738072686d637388f7169687243b3c07a980310f9ff31137430c2cb3a"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-particle-full-intel-cache --junitxml=/tmp/py-render-particle-full-intel.xml --tb=short",
+      "scope": "Complete suite after particle evaluation and replay repairs, including all prior GL material regressions. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2676,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 87.787,
+        "junit_sha256": "e448f33a7e5d1ca58598e1d6d1ed1a7bf5c013bcb67d34c4264aeafdca6fb046"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-particle-paints-full-intel-cache --junitxml=/tmp/py-render-particle-paints-full-intel.xml --tb=short",
+      "scope": "Complete suite after spatial particle paints and analytic conic sampling, including all prior GL material regressions. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2716,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 400.239,
+        "junit_sha256": "79b6a3165c161c6b20dac02b6b4eea809e542041033ccd97dc98acb9325bd92e"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-collision-full-intel-cache --junitxml=/tmp/py-render-collision-full-intel.xml --tb=short",
+      "scope": "Complete suite after animated particle collider, clock and relative-contact repairs. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2763,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 292.973,
+        "junit_sha256": "cd37bbb59117eabe21761eeeaa69a6b62bc03be2fd8da2137204594effe4753b"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-transform-full-intel-cache --junitxml=/tmp/py-render-transform-full-intel.xml --tb=short",
+      "scope": "Complete suite after particle effective-parent, birth-transform, field velocity, layout-clock and identity-inversion repairs. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2792,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 441.254,
+        "junit_sha256": "2f4bfac6149749691a10cdd11bf9ff1cfad961e17668bb8eb9f4e3f23e418f2b"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-matte-full-intel-cache --junitxml=/tmp/py-render-matte-full-intel.xml --tb=short",
+      "scope": "Complete suite after particle-backed collider mattes, cycle diagnostics/recovery, effective repeat bindings and bounded recent-state reuse. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2837,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 427.872,
+        "junit_sha256": "882ce5debbd10fcbebf8890d839862d29727605d91baea60c54ceec36ada265b"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-ancestor-full-intel-cache --junitxml=/tmp/py-render-ancestor-full-intel.xml --tb=short",
+      "scope": "Complete suite after collider ancestor rendering, sibling selection and complete dependency rendering. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-09-30",
+      "complete_suite": {
+        "passed": 2893,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 454.05,
+        "junit_sha256": "b3aa7673bf2370a3039283c51c69b617679214ed84eb5501da0ae757425c0c52"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-projection-full-intel-cache --junitxml=/tmp/py-render-projection-full-intel.xml --tb=short",
+      "scope": "Complete suite after projected collider matrix capture and homogeneous relative contact mappings. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-10-01",
+      "complete_suite": {
+        "passed": 2951,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 590.795,
+        "junit_sha256": "8b63e829de5e38c7ef132307d36426397639b0466e64de3847bed94a08aa2ba4"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-emitter-projection-full-intel-cache --junitxml=/tmp/py-render-emitter-projection-full-intel.xml --tb=short",
+      "scope": "Complete suite after projected emitter contact coordinates/Jacobians, independent traversal contexts and gradient-based interior recovery. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-10-01",
+      "complete_suite": {
+        "passed": 2985,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 718.224,
+        "junit_sha256": "cdbb79d1cbe2ae6b0e96d564685e13a66c0cebeda4fe9db51ec7ce2b270e8780"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-scene-space-full-intel-cache --junitxml=/tmp/py-render-scene-space-full-intel.xml --tb=short",
+      "scope": "Complete suite after explicit scene-coordinate traversal, singular-instance replay and common-instance reference cancellation. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-10-01",
+      "complete_suite": {
+        "passed": 3044,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 703.035,
+        "junit_sha256": "8317201095205972e602f2778780f1e16412c0923b6cece2337ad01dbfa3fbc0"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-pullback-full-intel-cache --junitxml=/tmp/py-render-pullback-full-intel.xml --tb=short",
+      "scope": "Complete suite after forward raster-reference sampling through collapsed canvases, projected-consumer mapping and requested off-frame/padded source bounds. Earlier backend-specific results retain their historical scope in verification_history."
+    },
+    {
+      "date": "2026-10-01",
+      "complete_suite": {
+        "passed": 3153,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 744.028,
+        "junit_sha256": "fb526101cec3f8c41c1bfbd489317e12ce4cbf198689c69f798797527c9e59c5"
+      },
+      "sampler_probe": {
+        "renderer": {
+          "GL_VENDOR": "Intel",
+          "GL_RENDERER": "Mesa Intel(R) Arc(tm) Graphics (MTL)",
+          "GL_VERSION": "4.6 (Core Profile) Mesa 26.1.6-1pop0~1787580452~24.04~a5619ea"
+        },
+        "vertex_attributes": 14,
+        "vertex_attribute_locations": {
+          "gl_VertexID": -1,
+          "in_pos": 0,
+          "in_nrm": 1,
+          "in_tan": 2,
+          "in_col": 3,
+          "in_baseNrmUV": 4,
+          "in_mrOccUV": 5,
+          "in_emisRoughUV": 6,
+          "in_metalOpacityUV": 7,
+          "in_iorCoatUV": 8,
+          "in_coatRoughUV": 9,
+          "in_m0": 10,
+          "in_m1": 11,
+          "in_m2": 12,
+          "in_m3": 13
+        },
+        "texture_samplers": 17,
+        "vertex_texture_samplers": 1,
+        "fragment_texture_samplers": 16,
+        "observations": [
+          {
+            "name": "nearest_constant_border",
+            "actual": 0.20000000298023224,
+            "expected": 0.2,
+            "absolute_difference": 2.980232227667301e-09,
+            "within_1e-6": true
+          },
+          {
+            "name": "float_linear_interpolation",
+            "actual": 0.36800000071525574,
+            "expected": 0.368,
+            "absolute_difference": 7.152557435219364e-10,
+            "within_1e-6": true
+          }
+        ]
+      },
+      "command": "uv run --no-sync pytest -q -o cache_dir=/tmp/py-render-source-projection-full-intel-cache --junitxml=/tmp/py-render-source-projection-full-intel.xml --tb=short",
+      "scope": "Complete suite after shared source drawing traversal, inherited group/instance projection and camera optics, and empty projective-buffer handling. Earlier backend-specific results retain their historical scope in verification_history."
+    }
+  ]
+}

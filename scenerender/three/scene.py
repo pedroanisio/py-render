@@ -7,6 +7,7 @@ semantics of each attribute.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 
@@ -123,9 +124,42 @@ def _displace(pos, nrm, uv, idx, mat: Material):
     if arr is None or k == 0 or uv is None:
         return pos, nrm
     uvs = np.asarray(uv, np.float64) * [mat.p["uvScaleX"], mat.p["uvScaleY"]]
-    h = sample_map(arr, uvs)[:, 0]
+    h = sample_map(arr, uvs, mat.p.get('mapSamplers', {}).get('displacementMap'))[:, 0]
     p2 = np.asarray(pos, np.float64) + np.asarray(nrm, np.float64) * (h * k)[:, None]
     return p2.astype(np.float32), G.compute_normals(p2, np.asarray(idx).reshape(-1, 3))
+
+
+def _normal_tangents(item, mat, pos, nrm, uvs):
+    """Normal-map frames use the texture's coordinate convention, before image-origin conversion."""
+    tangent = item.tangents
+    if pos is not item.positions and getattr(item, 'mode', 4) == 4 and item.uvs is not None:
+        tangent = G.compute_tangents(pos, nrm, item.uvs, np.asarray(item.indices).reshape(-1, 3))
+    if mat.p.get('surfaceModel') == 'gltf' and tangent is not None:
+        # Authored tangents define the shared glTF normal/coat/anisotropy frame.
+        # A texture-coordinate transform changes image lookup, not that frame.
+        return tangent
+    uv = uvs.get('normalMap')
+    if getattr(item, 'mode', 4) != 4 or 'normalMap' not in mat.maps or uv is None or mat.p.get('normalSpace') == 'world':
+        return tangent
+    spec = mat.p.get('mapUV', {}).get('normalMap', {})
+    usd = mat.p.get('surfaceModel') == 'usdPreviewSurface'
+    if 'normalMapScale' in mat.p or mat.p.get('normalTangentGeometry'):
+        # MaterialX normalmap defaults use the geometry's frame, independently of
+        # transforms on its image coordinates. Its geometric UV convention is +V up.
+        if tangent is not None:
+            tangent = np.array(tangent, copy=True)
+            tangent[:, 3] *= -1  # Preserve authored T while reversing the model's +V-down convention.
+            return tangent
+        uv = np.asarray(item.uvs)*[1., -1.] if item.uvs is not None else None
+        return G.compute_tangents(pos, nrm, uv, np.asarray(item.indices).reshape(-1, 3)) if uv is not None else tangent
+    if usd:
+        if 'constant' in spec or ('fallback' in spec and spec.get('texCoord') not in getattr(item, 'uv_sets', {})):
+            uv = item.uvs
+        if uv is not None:
+            uv = np.asarray(uv) * [1., -1.]  # USD's tangent +V points up the image.
+    if uv is not None and (usd or tangent is None or spec or pos is not item.positions):
+        tangent = G.compute_tangents(pos, nrm, uv, np.asarray(item.indices).reshape(-1, 3))
+    return tangent
 
 
 def _gpu(rc, key, build):
@@ -199,9 +233,7 @@ def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
 
         def build(it=it, m=m, pos=pos, nrm=nrm, uvs=uvs):
             u = uvs if uvs is not None else map_uvs(it, m)
-            tan = it.tangents
-            if it.mode == 4 and "normalMap" in m.maps and "normalMap" in u and (tan is None or "normalMap" in m.p.get("mapUV", {})):
-                tan = G.compute_tangents(pos, nrm, u["normalMap"], np.asarray(it.indices).reshape(-1, 3))
+            tan = _normal_tangents(it, m, pos, nrm, u)
             return R.upload(ctx_gl, pos, nrm, it.uvs, tan, it.colors, it.indices, u, it.mode)
         static = it.static and pos is it.positions
         item = _gpu(rc, ("mesh",) + tuple(it.key) + (path, m.key), build) if static else build()
@@ -229,6 +261,8 @@ def _mesh_items(rc, el, ctx, obj_mat: Material | None, ctx_gl):
 def _spec_material(rc, spec) -> Material:
     if spec is None:
         return default_material()
+    if spec.dynamic:
+        return from_spec(spec)
     key = ("spec-mat", id(spec))
     hit = rc.cache.get(key)
     if hit is None or hit[0] is not spec:
@@ -371,14 +405,14 @@ def _object_items(rc, el, ctx: Ctx, ctx_gl):
         if g is None:
             return None
         m = obj_mat or default_material()
-        pos, nrm = _displace(g.positions, g.normals, g.uvs, g.indices, m)
-        if pos is g.positions:
-            item = _gpu(rc, key, lambda: R.upload(ctx_gl, g.positions, g.normals, g.uvs, g.tangents, None, g.indices))
-        else:
-            dkey = key + ("disp", id(m.maps.get("displacementMap")), m.p["displacementScale"], m.p["uvScaleX"],
-                          m.p["uvScaleY"])
-            tan = G.compute_tangents(pos, nrm, g.uvs, g.indices)
-            item = _gpu(rc, dkey, lambda: R.upload(ctx_gl, pos, nrm, g.uvs, tan, None, g.indices))
+        uvs = map_uvs(g, m)
+        pos, nrm = _displace(g.positions, g.normals, uvs.get('displacementMap'), g.indices, m)
+        tan = _normal_tangents(g, m, pos, nrm, uvs)
+        dkey = key + ('mapGeometry', str(m.p.get('mapUV', {})), m.p.get('normalSpace'),
+                      m.p.get('surfaceModel'), m.p.get('normalTangentGeometry'),
+                      id(m.maps.get('displacementMap')), m.p['displacementScale'],
+                      m.p['uvScaleX'], m.p['uvScaleY'], str(m.p.get('mapSamplers', {}).get('displacementMap')))
+        item = _gpu(rc, dkey, lambda: R.upload(ctx_gl, pos, nrm, g.uvs, tan, None, g.indices, uvs))
         items.append((item, m))
         bounds = (pos.min(0), pos.max(0))
     elif prim == "mesh":
@@ -550,15 +584,16 @@ def world3d_at(rc, t: float, root, base: Ctx | None = None) -> R.World3D:
                 sm = R.render_shadow(r, list(objs.values()), L, (c0, rad), rc.scale, tex_cache)
                 if sm is not None:
                     w.shadows[i] = sm
-        dome_sh = [L for L in lights if L.kind == "dome" and L.shadow]
-        if dome_sh and env.shadow_dir is not None and env.dominance > 1e-3:
-            from .lights import LightState
-            L0 = dome_sh[0]
-            Ld = LightState(L0.el, "dome", L0.color, np.zeros(3), np.array([1.0, 0, 0]), np.array([0, 1.0, 0]),
-                            -env.shadow_dir, shadow=True, softness=env.dominance, bias=L0.bias, map_size=L0.map_size)
+        for i, light, entry, _ in env.domes:
+            if not light.shadow or entry.dominance <= 1e-3 or not (light.diffuse or light.specular):
+                continue
+            spread = .5 * math.tan(math.acos(min(1., max(0., entry.dominance))))
+            softness = light.softness if light.softness > 0 else math.degrees(math.atan(spread))
+            Ld = replace(light, kind='directional', pos=np.zeros(3), right=np.array([1., 0., 0.]),
+                         up=np.array([0., 1., 0.]), fwd=-entry.shadow_dir, softness=softness)
             sm = R.render_shadow(r, list(objs.values()), Ld, (c0, rad), rc.scale, tex_cache)
             if sm is not None:
-                w.shadows["env"] = sm
+                w.shadows[i] = sm
     live.append((rc.frame_cache, key, w))
     rc.frame_cache[key] = w
     return w
@@ -735,10 +770,9 @@ def mesh_thumbnail(rc, asset, w: int, h: int, t: float) -> np.ndarray | None:
     for it in model.pose(clip, ct):
         mat = _spec_material(rc, it.material)
         uvs = map_uvs(it, mat)
-        tan = it.tangents
-        if it.mode == 4 and "normalMap" in mat.maps and "normalMap" in uvs:
-            tan = G.compute_tangents(it.positions, it.normals, uvs["normalMap"], it.indices)
-        g = R.upload(ctx_gl, it.positions, it.normals, it.uvs, tan, it.colors, it.indices, uvs, it.mode)
+        pos, nrm = _displace(it.positions, it.normals, uvs.get("displacementMap"), it.indices, mat)
+        tan = _normal_tangents(it, mat, pos, nrm, uvs)
+        g = R.upload(ctx_gl, pos, nrm, it.uvs, tan, it.colors, it.indices, uvs, it.mode)
         items.append((g, mat))
         temp.append(g)
     inst = np.eye(4)[None]

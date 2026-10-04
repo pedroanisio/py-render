@@ -81,3 +81,26 @@ def test_loop_histories_keep_composition_dependent_inputs_separate(tmp_path, kin
         expected = state(control, t, kind, False)
         np.testing.assert_allclose(state(r, comp_t, kind, True), expected, atol=2e-8, rtol=2e-8)
         np.testing.assert_allclose(r.frame_linear(comp_t), control.frame_linear(t), atol=1/255)
+
+
+@pytest.mark.parametrize('change', ['cycle', 'global_reference'])
+def test_recorded_physics_history_rejects_different_clock_inputs(tmp_path, change):
+    r = scene(tmp_path, 'bodies', 'loop')
+    r.doc.project.set('duration', '1')  # The recorded local history covers this test's query.
+    r.doc.section('physics').set('cache', str(tmp_path / 'history.npz'))
+    first = state(r, 1.4, 'bodies', True)[:2]
+    assert (tmp_path / 'history.npz').exists()
+    if change == 'cycle':
+        control = scene(tmp_path, 'bodies', 'loop', control=True, cycle=1, name='control')
+        actual = state(r, 2.9, 'bodies', True)[:2]
+    else:
+        r = scene(tmp_path, 'bodies', 'loop')
+        r.doc.project.set('duration', '1')
+        r.doc.section('physics').set('cache', str(tmp_path / 'history.npz'))
+        r.doc.ids['source'].find('expression').text = '2+time'
+        control = scene(tmp_path, 'bodies', 'loop', control=True, name='control')
+        control.doc.ids['source'].find('expression').text = '3+time/2'
+        actual = state(r, 1.4, 'bodies', True)[:2]
+    expected = state(control, .8, 'bodies', False)[:2]
+    assert not np.allclose(first, expected)
+    np.testing.assert_allclose(actual, expected, atol=2e-8, rtol=2e-8)

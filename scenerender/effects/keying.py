@@ -43,7 +43,7 @@ def luma_key(rc, e, buf, ctx, node):
 @EFFECTS.register("difference-key", level=FULL, note="frame-aligned difference plate in real parent transform; tolerance/softness and plate opacity")
 def difference_key(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
-    src = source_buf(rc, e, ctx, node)
+    src = source_buf(rc, e, ctx, node, rect=buf.rect)
     if src is None:
         return buf.copy()
     rgb, a = display_rgb(rc, buf.px)

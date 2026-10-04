@@ -316,7 +316,7 @@ def value_noise(x, y, seed):
     return (a*(1-fy) + b*fy).astype(np.float32)
 
 
-def source_buf(rc, e, ctx, node=None, *, source=None):
+def source_buf(rc, e, ctx, node=None, *, source=None, rect=None):
     """Render a second input in its own parent frame; guard recursive references."""
     sid = rc.ev.str(e, "source", ctx) if source is None else source
     src, source_ctx = rc.ev.reference(sid or "", e, ctx)
@@ -331,8 +331,7 @@ def source_buf(rc, e, ctx, node=None, *, source=None):
         return None
     active.add(key)
     try:
-        loc = rc.node_location(src, source_ctx)
-        out = loc.rc.render_node(src, loc.ctx, loc.matrix, loc.box, loc.layout, force=True)
+        out = rc.render_reference(src, source_ctx, force=True, rect=rect)
         return None if out is None else result(out.buf, out.buf.px * out.opacity)
     finally:
         active.remove(key)

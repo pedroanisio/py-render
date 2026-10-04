@@ -64,11 +64,13 @@ def tile(rc, e, buf, ctx, node):
 @EFFECTS.register("displacement-map", level=FULL, note="source in its real parent frame, channels around 0.5, transparent map neutral")
 def displacement_map(rc, e, buf, ctx, node):
     p = Params(rc, e, ctx)
-    src = source_buf(rc, e, ctx, node)
+    amount = p.d("amount", 1)
+    pad = math.ceil(abs(amount))
+    rect = (buf.x0-pad, buf.y0-pad, buf.x0+buf.w+pad, buf.y0+buf.h+pad)
+    src = source_buf(rc, e, ctx, node, rect=rect)
     if src is None:
         return buf.copy()
-    amount = p.d("amount", 1)
-    b = buf.pad(math.ceil(abs(amount)))
+    b = buf.pad(pad)
     rgb, a = straight(src.region(b.rect))
     rgb = rgb*a+.5*(1-a)
     channel = p.s("channel", "rgb")

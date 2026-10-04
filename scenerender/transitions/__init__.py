@@ -68,8 +68,7 @@ def matte_rgba(rc, tr, ctx) -> np.ndarray | None:
         buf = fn(rc, node, scale_m(rc.width / aw, rc.height / ah), target_ctx,
                  src_t=target_ctx.t) if aw and ah else None
         return None if buf is None else buf.region(rc.frame_rect)
-    loc = rc.node_location(node, target_ctx)
-    o = loc.rc.render_node(node, loc.ctx, loc.matrix, loc.box, loc.layout, force=True)
+    o = rc.render_reference(node, target_ctx, force=True)
     return np.zeros((rc.height, rc.width, 4), np.float32) if o is None else o.buf.region(rc.frame_rect) * o.opacity
 
 

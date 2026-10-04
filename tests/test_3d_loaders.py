@@ -424,6 +424,7 @@ def Scope "mats"
         {
             uniform token info:id = "UsdUVTexture"
             asset inputs:file = @rough.png@
+            token inputs:sourceColorSpace = "raw"
             float outputs:g
         }
     }
@@ -448,8 +449,8 @@ def test_usd_stage(tmp_path):
     p = it.material.params
     np.testing.assert_allclose(p["baseColor"], (0.8, 0.1, 0.1, 1.0), atol=1e-6)
     assert p["metallic"] == 0.25 and p["roughness"] == 1.0 and p["opacity"] == 0.5 and p["alphaMode"] == "blend"
-    mr = it.material.textures["metallicRoughnessMap"]
-    np.testing.assert_allclose(mr[0, 0], [1, 0.2, 1, 1], atol=1e-4)            # 8-bit texel held as float16
+    rough = it.material.textures["roughnessMap"]
+    np.testing.assert_allclose(rough[0, 0, 0], 0.2, atol=1e-4)                  # 8-bit texel held as float16
     clip = m.clip("default")
     assert clip.duration == pytest.approx(1.0)
     moved = m.pose(clip, 0.5)[0]
@@ -464,7 +465,7 @@ def test_usdz_packaged_texture(tmp_path):
     assert UsdUtils.CreateNewUsdzPackage(Sdf.AssetPath(str(tmp_path / "s.usda")), str(tmp_path / "s.usdz"))
     os.remove(tmp_path / "rough.png")                               # must come from the zip
     it = load_model(str(tmp_path / "s.usdz")).pose(None, 0.0)[0]
-    np.testing.assert_allclose(it.material.textures["metallicRoughnessMap"][0, 0], [1, 0.2, 1, 1], atol=1e-4)
+    np.testing.assert_allclose(it.material.textures["roughnessMap"][0, 0, 0], 0.2, atol=1e-4)
 
 
 USD_SKEL = """#usda 1.0

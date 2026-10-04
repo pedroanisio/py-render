@@ -353,7 +353,7 @@ def god_rays(rc,e,buf,ctx,node):
     rgb,a=straight(src)
     emission=np.clip((luma(rgb)-p.n("threshold",.7))/max(1-p.n("threshold",.7),1e-5),0,None)*a[...,0]
     blocker=a[...,0]*(1-np.clip(emission,0,1))
-    plate=source_buf(rc,e,ctx,node) if p.s("source") else None
+    plate=source_buf(rc,e,ctx,node,rect=b.rect) if p.s("source") else None
     if plate is not None:
         blocker=plate.region(b.rect)[...,3]
     n=max(1,min(256,round(p.n("samples",16))))

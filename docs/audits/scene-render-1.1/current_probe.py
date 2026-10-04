@@ -215,8 +215,10 @@ def physics_in_symbol():
     ph = '<physics gravityY="-1" pixelsPerMeter="100"/>'
     r, actual = render('physics_in_symbol', scene('<instance id="i" symbol="sym"/>', symbol(shape), ph))
     _, control = render('physics_direct', scene(shape, after=ph))
-    simulations = [v for k, v in r.rc.cache.items() if isinstance(k, tuple) and k[0] == 'physics-sim'
-                   and v is not None and getattr(v, 'root', None) is r.doc.ids['sym']]
+    simulations = [sim for k, histories in r.rc.cache.items()
+                   if isinstance(k, tuple) and k[0] == 'physics-sim'
+                   for sim in histories.values()
+                   if sim is not None and getattr(sim, 'root', None) is r.doc.ids['sym']]
     return {'discovered_symbol_bodies': sum(len(sim.body_els) for sim in simulations),
             'actual_top': int(np.where(actual[:, 15, 3] > 0)[0].min()),
             'control_top': int(np.where(control[:, 15, 3] > 0)[0].min()), **compare(actual, control)}

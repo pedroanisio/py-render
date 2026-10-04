@@ -1,0 +1,298 @@
+{
+  "generator": "Khronos KTX-Software 4.4.2; generate.py contains the original inputs and commands.",
+  "fixtures": [
+    {
+      "name": "etc1s_1_data",
+      "codec": "etc1s",
+      "channels": 1,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "25ba791dac6828af091fce07f0f21ccc7630f58d62d4c90f6ae2c3a67d5c4c10",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "etc1s_2_data",
+      "codec": "etc1s",
+      "channels": 2,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "087ace8826b597283e8a81c642a667b91e8f3d682297a1708d6dbc78d810e2a2",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "etc1s_3_data",
+      "codec": "etc1s",
+      "channels": 3,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "0293ee86d977e33163ae31740f20b8ec71fb7a5685677cc8edc15612c7826db1",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "etc1s_4_data",
+      "codec": "etc1s",
+      "channels": 4,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "0fd0b436d97f54874b9b31906fb7ee78b5ba2082e4a401744ae258c1944924a9",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "etc1s_3_color",
+      "codec": "etc1s",
+      "channels": 3,
+      "srgb": true,
+      "levels": 4,
+      "sha256": "8825ad7a95ea9fb8d8b9f220a5c31e326f78b7a8a4c47907fe74fa5d24fa66f4",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "etc1s_4_color",
+      "codec": "etc1s",
+      "channels": 4,
+      "srgb": true,
+      "levels": 4,
+      "sha256": "8c4dc966cb9125663da5795d049b4b2c6573475bf72e902e2a68e1576ced11b4",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_1_data",
+      "codec": "uastc",
+      "channels": 1,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "16c8e63779133760b1f35e867d7250b84818b6ac14ad58e98039610302f59be2",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_2_data",
+      "codec": "uastc",
+      "channels": 2,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "3da66b309bca683607347030e199cc1cbe3363fe084251f789dc39b69358fbd5",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_3_data",
+      "codec": "uastc",
+      "channels": 3,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "bb85b6a2f82811496e5beba95481335d3a977f4ffdfc374d31f74b82e8df7fb0",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_4_data",
+      "codec": "uastc",
+      "channels": 4,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "f0f3b1a10d9213d44a90197736055a3184482745b627003baa4a00c961ed6c3b",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_3_color",
+      "codec": "uastc",
+      "channels": 3,
+      "srgb": true,
+      "levels": 4,
+      "sha256": "d82b58a261cc12a8c3b5068a51a8d7a1b2ad39b641decd6158b274addbbe15c5",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_4_color",
+      "codec": "uastc",
+      "channels": 4,
+      "srgb": true,
+      "levels": 4,
+      "sha256": "2cfe52e9008984f655fb438ea6bd5b92b492da1b9e2723204ba27fb14e74bc64",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_zstd_1_data",
+      "codec": "uastc_zstd",
+      "channels": 1,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "cf07233cdd73ede711247726cd8e36d6e2a253b8c56a06be17d2bed7abc12418",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_zstd_2_data",
+      "codec": "uastc_zstd",
+      "channels": 2,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "2d78b728f40d7a692059096ea7ad2e44d30281d3b6d7808cd1be124d844f74ec",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_zstd_3_data",
+      "codec": "uastc_zstd",
+      "channels": 3,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "657eab7885c97c455e23c7f7211b0ae8be9c6a5ad9b4c124155594693021d3c3",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_zstd_4_data",
+      "codec": "uastc_zstd",
+      "channels": 4,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "f92bd63a275f5155a2fcbbd52ccd7bd1f62089634e1a6623cd1f4298b3bc86d0",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_zstd_3_color",
+      "codec": "uastc_zstd",
+      "channels": 3,
+      "srgb": true,
+      "levels": 4,
+      "sha256": "c1989cbf4ade2ee077f315285f1ca7fa1c388c8e5b848230968692fa9dc9a244",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_zstd_4_color",
+      "codec": "uastc_zstd",
+      "channels": 4,
+      "srgb": true,
+      "levels": 4,
+      "sha256": "c3db9bae2acf0808710fc96bf0319f24cae7cfd40dd8f45ae357d7b2ee355b97",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "uastc_zstd_4_color_single",
+      "codec": "uastc_zstd",
+      "channels": 4,
+      "srgb": true,
+      "levels": 1,
+      "sha256": "ac8aacbb908d00f116e32caa5a326035b143c2d03d6b6f7be8f0df1a1ea543b0",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": true,
+        "messages": []
+      }
+    },
+    {
+      "name": "etc1s_4_data_partial",
+      "codec": "etc1s",
+      "channels": 4,
+      "srgb": false,
+      "levels": 2,
+      "sha256": "cd73b2d8604e512056a7d3d6afe699a5ccc6d533246fb579f8cdb0593f5798ef",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": false,
+        "messages": [
+          {
+            "id": 3104,
+            "type": "error",
+            "message": "When multiple mip levels are present KHR_texture_basisu requires a full mip pyramid.",
+            "details": "levelCount is 2 but it must be 1 (single level) or 4 (full mip pyramid) for KHR_texture_basisu compatibility."
+          }
+        ]
+      }
+    },
+    {
+      "name": "uastc_2_data_legacy",
+      "codec": "uastc",
+      "channels": 2,
+      "srgb": false,
+      "levels": 4,
+      "sha256": "0d1f781c09c1062b7f6cb7c67eb2bca3f0324ae5f333daed55dd03a7843142c9",
+      "validation": {
+        "$schema": "https://schema.khronos.org/ktx/validate_v0.json",
+        "valid": false,
+        "messages": [
+          {
+            "id": 6303,
+            "type": "error",
+            "message": "Invalid sample channelType for colorModel for KHR_texture_basisu compatibility.",
+            "details": "DFD block #1 colorModel is KHR_DF_MODEL_UASTC but sample #0 channelType is KHR_DF_CHANNEL_UASTC_RRRG while KHR_texture_basisu requires KHR_DF_CHANNEL_UASTC_RGB, KHR_DF_CHANNEL_UASTC_RGBA, KHR_DF_CHANNEL_UASTC_RRR, or KHR_DF_CHANNEL_UASTC_RG."
+          },
+          {
+            "id": 5004,
+            "type": "warning",
+            "message": "Non-conformant texture file accepted by libktx.",
+            "details": "KTX 2.0 file does not conform to the specification but it is currently accepted by libktx."
+          }
+        ]
+      }
+    }
+  ]
+}

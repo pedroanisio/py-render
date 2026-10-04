@@ -895,7 +895,7 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
     inp = PremulInput(work, codes[0]) if gpu_conv else to_shader(rc, work.px, space)
     src = None
     if rc.ev.str(e, "source", ctx):
-        sb = source_buf(rc, e, ctx, node)
+        sb = source_buf(rc, e, ctx, node, rect=work.rect)
         if sb is not None:
             src = to_shader(rc, sb.region(work.rect), space)
     fps = float(rc.doc.fps) or 30.0
@@ -924,7 +924,7 @@ def _run_effect(rc, e, buf, ctx, node, code, base, *, label):
         sid = rc.doc.resolve_id(e, value)
         source, _ = rc.ev.reference(sid, e, ctx)
         if source is not None and source.getparent().tag != "assets":
-            sb = source_buf(rc, e, ctx, node, source=sid)
+            sb = source_buf(rc, e, ctx, node, source=sid, rect=work.rect)
             if sb is not None:
                 samplers[name] = to_shader(rc, sb.region(work.rect), space)
         elif source is not None:

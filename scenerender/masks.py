@@ -108,8 +108,7 @@ def matte_coverage(rc, el, rect, ctx) -> np.ndarray:
     inverted = mode.endswith("inverted")
     if node is None:
         return np.ones((h, w), np.float32)
-    loc = rc.node_location(node, target_ctx)
-    out = loc.rc.render_node(node, loc.ctx, loc.matrix, loc.box, loc.layout, force=False)
+    out = rc.render_reference(node, target_ctx, rect=rect)
     if out is None:
         cov = np.zeros((h, w), np.float32)
     else:

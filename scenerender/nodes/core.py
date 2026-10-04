@@ -179,7 +179,7 @@ def render_shape(rc: RenderContext, el, ctx: Ctx, M, size) -> Buf | None:
     pad = sw * max(2.0, rc.ev.num(el, "miterLimit", ctx, 4.0) / 2) + 2
     from ..raster import Canvas, intersect, transformed_rect
     r = transformed_rect(M, min(0, x0) - pad, min(0, y0) - pad, max(w, x1) + pad, max(h, y1) + pad, 1)
-    r = intersect(r, (-64, -64, rc.width + 64, rc.height + 64))
+    r = intersect(r, rc.raster_bounds())
     if r is None:
         return None
     c = Canvas(r)

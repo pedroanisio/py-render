@@ -10,9 +10,9 @@ Pinned decisions
       rotating -90 deg about X; FBX is converted by ufbx to right-handed Y-up). Splats keep their
       COLMAP axes. The renderer maps both into scene space (CONVENTIONS 2.6, see model.py).
     * Colours in `MaterialSpec.params` are linear float tuples (RGBA; emissive/attenuation/sheen/
-      specular colours carry alpha 1). Textures are (h, w, 4) in [0, 1], float16 when decoded
-      from 8-bit images and float32 otherwise (16-bit, HDR, EXR, npy); baseColorMap and
-      emissiveMap are sRGB-decoded to linear, data maps (normal, metallicRoughness, occlusion) are not.
+      specular colours carry alpha 1). Textures are (h, w, 4), float16 when decoded from 8-bit images
+      and float32 otherwise (16-bit, HDR, EXR, npy); HDR and texture scale/bias can exceed [0, 1].
+      glTF/OBJ colour maps are sRGB-decoded; USD uses sourceColorSpace and metadata.
     * Node.matrix uses the math layout of animation.py (column vectors).
   glTF / GLB (pygltflib)
     * Accessors include byteStride, sparse, normalized integers and padded matrix columns;
@@ -20,15 +20,21 @@ Pinned decisions
       sets are retained; COLOR_0 drives vertex colour. Each material map selects its UV set and
       applies its own KHR_texture_transform before interpolation.
       Per-map samplers retain both axis wrap modes and the minification/magnification filters.
+      Clearcoat, transmission, volume, sheen, specular, iridescence and anisotropy texture inputs
+      retain their channels and independent UV/sampler settings. Iridescence thickness limits
+      and clearcoat normal scale survive import; authored tangent frames survive UV transforms.
     * TRIANGLE_STRIP/FAN are converted to triangle lists; POINTS/LINES/LINE_LOOP/LINE_STRIP retain
       their topology through rendering. Missing indices = 0..n-1. Skin weights are renormalised.
       Missing normals use flat shading (also after morphing); normal and tangent morph deltas
       preserve absent-target attributes and tangent handedness.
-    * mesh.weights is copied to node.weights when the node has none. Channels without a target node
-      (KHR_animation_pointer) are ignored. Clip name = animation.name or its index as a string.
+    * mesh.weights is copied to node.weights when the node has none. KHR_animation_pointer animates
+      node TRS/weights and material factors/texture transforms; matrix-node translation and individual
+      weights follow the Asset Object Model. Camera/light targets warn; see docs/GLTF.md.
+      Clip name = animation.name or its index as a string.
     * Material factors default per glTF (metallic = roughness = 1); extension params are only set when
       the extension is present. anisotropyRotation is converted to degrees. EXT_texture_webp sources
-      are honoured; KHR_texture_basisu (KTX2) cannot be decoded with PIL and is skipped with a warning.
+      are honoured; KHR_texture_basisu uses libktx for ETC1S/UASTC KTX2 images, preserving authored
+      mip levels. Optional extensions can use their fallback when the decoder is unavailable.
   OBJ / PLY / STL (trimesh, force="scene", process=False)
     * One Node (explicit matrix = scene-graph transform) per geometry instance. Vertex normals come
       from trimesh (file normals or trimesh-computed). UVs are flipped to glTF (v = 1 - v). OBJ/MTL
@@ -43,23 +49,29 @@ Pinned decisions
       subtrees are skipped. Local transforms at the default time; resetXformStack makes a root.
     * Meshes are fan-triangulated (leftHanded orientation flips winding). When any used primvar is
       faceVarying/uniform the mesh is un-indexed to one vertex per face corner. Normals: primvars:normals
-      over the normals attribute. primvars:st (or the first texCoord2f primvar) -> uvs with v = 1 - v.
+      over the normals attribute. Named two-component UV primvars (including inherited/indexed
+      values) are retained with v = 1 - v; st or the first UV primvar supplies the default set.
       GeomSubsets of the "materialBind" family split the mesh into primitives per bound material.
     * displayColor: constant -> baseColor when no material is bound; varying -> vertex colours.
       USD colours are already linear.
-    * UsdPreviewSurface: diffuseColor, metallic, roughness, emissiveColor, opacity (opacity < 1 ->
-      alphaMode blend; opacityThreshold > 0 -> mask), ior, clearcoat, clearcoatRoughness; UsdUVTexture
-      files for diffuseColor / emissiveColor (sRGB unless sourceColorSpace = raw), normal (stored as
-      the [0, 1] encoded image, i.e. assumes the standard scale 2 / bias -1), occlusion (R), and
-      roughness / metallic merged into metallicRoughnessMap (G = roughness, B = metallic, missing
-      one = 1); the matching factor param is then 1. Texture scale/bias and UsdTransform2d are ignored.
-      Packaged USDZ textures ("pkg.usdz[inner]") are read from the zip.
+    * UsdPreviewSurface: diffuseColor, metallic, roughness, emissiveColor, normal, occlusion,
+      displacement and opacity can each read UsdUVTexture outputs. Each map keeps its own named
+      primvar, nested UsdTransform2d graph, scale/bias, output channel and wrap modes. Material
+      interfaces and NodeGraph outputs are followed. USD signed normals are encoded for the GPU.
+      opacityThreshold > 0 selects mask; other opacity below 1 selects blend. ior, clearcoat and
+      clearcoatRoughness accept constants. Specular workflow reads constant/textured specularColor;
+      opacityMode distinguishes transparency from presence. USD reflectance/coat/normal conventions
+      are retained by the shader. Mesh doubleSided survives shared/animated material bindings.
+      Packaged USDZ textures are read from the zip.
+      Animated graph inputs join clip "default" and are sampled at the requested USD time.
+      Remaining material/stage boundaries are documented in docs/USD.md.
     * Time-sampled xformOps -> clip "default": native USD transform evaluation at each requested
       time preserves shear, transform order and each op's interpolation; time = (code - start
       code) / timeCodesPerSecond.
     * UsdSkel: each bound Skeleton becomes joint Nodes (under the skeleton's Node) with rest
       transforms; inverse_bind = inverse(bindTransform) @ geomBindTransform; jointIndices/Weights are
-      retained and renormalised. A bound SkelAnimation adds LINEAR TRS
+      retained and renormalised. Skeleton/animation bindings, constant joint influences, local
+      joint order and geometry bind transforms can be inherited. A bound SkelAnimation adds LINEAR TRS
       channels for its joints to clip "default" (attributes with a single value override the rest
       pose instead). Blend shapes include sparse point/normal offsets and inbetweens. Animation
       weights are mapped by name; object3D morphWeights overrides are resolved through inbetweens.
@@ -82,9 +94,10 @@ Pinned decisions
       axis orientations, value = mantissa * 2^(exponent - 136) (no +0.5 dither), EXPOSURE ignored.
     * load_hdr_image returns (h, w, 3) linear float32, cached by (abspath, mtime).
   IES (LM-63-1986/1991/1995/2002)
-    * TILT=INCLUDE data is skipped (lamp-tilt factors not applied); TILT=<file> is ignored with a
-      warning. Candela are multiplied by the candela multiplier and the ballast factor. Photometric
-      types A/B are treated as type C.
+    * Embedded/external tilt records and LAMPPOSITION are preserved. The light evaluator applies
+      burning-angle factors after peak normalization. Candela use multiplier/ballast factors,
+      including the ballast-lamp factor for 1986/1991. Types A/B/C use their respective coordinate
+      frames and measured symmetries, with bilinear interpolation of the original angle knots.
 """
 from __future__ import annotations
 
@@ -94,6 +107,7 @@ import json
 import logging
 import math
 import os
+import re
 import urllib.parse
 import zipfile
 from dataclasses import dataclass
@@ -101,7 +115,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..raster import srgb_to_linear
+from ..ufbx_bridge import Keep as _Keep
 from .model import Channel, Clip, MaterialSpec, Model, Node, Primitive, Skin, Splats
+from .texture_image import TextureImage, map_image
 
 log = logging.getLogger(__name__)
 
@@ -412,62 +428,167 @@ def _read_exr_bytes(data: bytes) -> np.ndarray:
 
 # ------------------------------------------------------------------------------------ IES
 @dataclass
+class IESTilt:
+    geometry: int
+    angles: np.ndarray
+    factors: np.ndarray
+
+
+@dataclass
 class IESProfile:
     vertical_angles: np.ndarray       # (n_v,) degrees, type C: 0 = nadir
     horizontal_angles: np.ndarray     # (n_h,) degrees
     candela: np.ndarray               # (n_h, n_v)
     max_candela: float
+    tilt: IESTilt | None = None
+    lamp_position: tuple[float, float] | None = None
+    photometric_type: int = 1         # LM-63: 1=C, 2=B, 3=A
+
+    def tilt_factor(self, forward, right, up) -> float:
+        """Lamp output correction from its burning angle to world nadir (-Y).
+
+        LM-63 lamp geometry 1 is axial, 2 lies across the 90-degree plane,
+        and 3 along the zero-degree plane. LAMPPOSITION supersedes that geometry.
+        The factor scales output, not the angular distribution's normalization.
+        """
+        if self.tilt is None:
+            return 1.
+        if self.lamp_position is not None:
+            h, v = np.radians(self.lamp_position)
+            axis = np.cos(v)*np.asarray(forward) + np.sin(v)*(np.cos(h)*np.asarray(right) + np.sin(h)*np.asarray(up))
+        else:
+            axis = np.asarray({1: forward, 2: up, 3: right}[self.tilt.geometry])
+        angle = np.degrees(np.arccos(np.clip(-axis[1] / max(np.linalg.norm(axis), 1e-12), -1., 1.)))
+        if self.tilt.angles[-1] <= 90.:
+            angle = min(angle, 180.-angle)
+        return float(np.interp(angle, self.tilt.angles, self.tilt.factors))
 
     def table(self, n_theta: int = 64, n_phi: int = 64) -> np.ndarray:
         """float32 (n_phi, n_theta) of candela / max on theta = linspace(0, 180), phi = k*360/n_phi."""
+        theta, phi = np.meshgrid(np.linspace(0., 180., n_theta), np.arange(n_phi)*(360./n_phi))
+        return self.sample(theta, phi).astype(np.float32)
+
+    def sample(self, theta, phi):
+        """Peak-normalized intensity at renderer polar angles, interpolating original knots.
+
+        Local nadir is -Z, photometric horizontal is +X. Type A uses elevation
+        and clockwise azimuth. Type B planes share the horizontal +X polar axis:
+        V is latitude along that axis, H rotates the plane away from nadir.
+        """
         v, h, cd = self.vertical_angles, self.horizontal_angles, self.candela
-        theta = np.linspace(0.0, 180.0, n_theta)
-        phi = np.arange(n_phi) * (360.0 / n_phi)
-        if len(h) == 1:
-            planes = np.repeat(cd[:1], n_phi, axis=0)
+        theta, phi = np.broadcast_arrays(np.asarray(theta, float), np.asarray(phi, float))
+        if self.photometric_type == 3:
+            vertical = theta - 90.
+            horizontal = (180.-phi) % 360. - 180.
+        elif self.photometric_type == 2:
+            th, ph = np.radians(theta), np.radians(phi)
+            x, y, f = np.sin(th)*np.cos(ph), np.sin(th)*np.sin(ph), np.cos(th)
+            vertical = np.degrees(np.arcsin(np.clip(x, -1., 1.)))
+            horizontal = np.degrees(np.arctan2(-y, f))
+            if v[0] >= 0:
+                vertical = np.abs(vertical)
         else:
-            p = phi % 360.0
-            if h[-1] <= 90.0 + 1e-6:                       # quadrant symmetry
-                p = np.where(p > 180, 360 - p, p)
-                p = np.where(p > 90, 180 - p, p)
-            elif h[0] >= 90.0 - 1e-6 and h[-1] <= 270.0 + 1e-6:   # bilateral about the 90-270 plane
-                p = np.where(p < 90, 180 - p, np.where(p > 270, 540 - p, p))
-            elif h[-1] <= 180.0 + 1e-6:                    # bilateral about the 0-180 plane
-                p = np.where(p > 180, 360 - p, p)
-            elif h[-1] < 360.0:                            # full circle, close the gap
-                h = np.append(h, h[0] + 360.0)
-                cd = np.vstack([cd, cd[:1]])
-            planes = np.stack([np.interp(p, h, cd[:, k]) for k in range(len(v))], 1)
-        out = np.stack([np.interp(theta, v, row, left=0.0, right=0.0) for row in planes])
-        return (out / (self.max_candela or 1.0)).astype(np.float32)
+            vertical, horizontal = theta, phi % 360.
+        if self.photometric_type != 1 and h[0] >= 0:
+            horizontal = np.abs(horizontal)
+        # Avoid classifying the same pole differently due to trigonometric roundoff.
+        vertical = np.where(np.abs(vertical-v[0]) < 1e-7, v[0], vertical)
+        vertical = np.where(np.abs(vertical-v[-1]) < 1e-7, v[-1], vertical)
+        valid = (vertical >= v[0]) & (vertical <= v[-1])
+        if len(h) == 1:
+            horizontal = np.zeros_like(horizontal) + h[0]
+        elif self.photometric_type == 1:
+            p = horizontal
+            if h[-1] <= 90.0 + 1e-6:
+                p = np.where(p > 180, 360-p, p)
+                p = np.where(p > 90, 180-p, p)
+            elif h[0] >= 90.0-1e-6 and h[-1] <= 270.0+1e-6:
+                p = np.where(p < 90, 180-p, np.where(p > 270, 540-p, p))
+            elif h[-1] <= 180.0+1e-6:
+                p = np.where(p > 180, 360-p, p)
+            elif h[-1] < h[0]+360.:
+                p = (p-h[0]) % 360. + h[0]
+                h, cd = np.r_[h, h[0]+360.], np.vstack([cd, cd[:1]])
+            horizontal = p
+        else:
+            valid &= (horizontal >= h[0]-1e-7) & (horizontal <= h[-1]+1e-7)
+        vi = np.clip(np.searchsorted(v, vertical, side='right')-1, 0, len(v)-1)
+        hi = np.clip(np.searchsorted(h, horizontal, side='right')-1, 0, len(h)-1)
+        vj, hj = np.minimum(vi+1, len(v)-1), np.minimum(hi+1, len(h)-1)
+        vf = np.clip((vertical-v[vi])/np.maximum(v[vj]-v[vi], 1e-12), 0., 1.)
+        hf = np.clip((horizontal-h[hi])/np.maximum(h[hj]-h[hi], 1e-12), 0., 1.)
+        low = cd[hi, vi]*(1-vf) + cd[hi, vj]*vf
+        high = cd[hj, vi]*(1-vf) + cd[hj, vj]*vf
+        return np.where(valid, (low*(1-hf)+high*hf)/(self.max_candela or 1.), 0.)
 
 
 def load_ies(path: str) -> IESProfile:
     with open(path, "r", encoding="latin-1") as fh:
         lines = fh.read().splitlines()
-    i = next((k for k, ln in enumerate(lines) if ln.strip().upper().startswith("TILT")), None)
+    i = next((k for k, ln in enumerate(lines) if re.match(r"\s*TILT\s*=", ln, re.I)), None)
     if i is None:
         raise ValueError(f"{path}: no TILT line")
     tilt = lines[i].split("=", 1)[1].strip()
     tok = " ".join(lines[i + 1:]).replace(",", " ").split()
-    pos = 0
+    def numbers(text):
+        values = np.array([float(t) for t in text.replace(',', ' ').split()], dtype=np.float64)
+        if not np.isfinite(values).all():
+            raise ValueError(f"{path}: non-finite IES data")
+        return values
+
+    def count(value):
+        n = int(value)
+        if n < 1 or n != value:
+            raise ValueError(f"{path}: invalid IES count {value}")
+        return n
+
+    def read_tilt(values):
+        if len(values) < 2:
+            raise ValueError(f"{path}: truncated TILT data")
+        geom, n = count(values[0]), count(values[1])
+        if geom not in (1, 2, 3) or len(values) < 2 + 2*n:
+            raise ValueError(f"{path}: invalid lamp geometry or truncated TILT data")
+        angles, factors = values[2:2+n], values[2+n:2+2*n]
+        if np.any(np.diff(angles) <= 0) or angles[0] != 0 or angles[-1] not in (90, 180) or np.any(factors < 0):
+            raise ValueError(f"{path}: invalid TILT angles or factors")
+        return IESTilt(geom, angles, factors), 2 + 2*n
+
+    values = numbers(' '.join(tok))
+    pos, correction = 0, None
     if tilt.upper() == "INCLUDE":
-        n = int(float(tok[1]))
-        pos = 2 + 2 * n                                    # geometry, count, angles, factors
+        correction, pos = read_tilt(values)
     elif tilt.upper() != "NONE":
-        log.warning("IES %s: TILT file %r ignored", path, tilt)
-    nums = [float(t) for t in tok[pos:]]
-    _, _, mult, n_v, n_h, _, _, _, _, _ = nums[:10]
+        tilt_path = os.path.join(os.path.dirname(path), tilt.strip('"'))
+        with open(tilt_path, encoding='latin-1') as fh:
+            correction, _ = read_tilt(numbers(fh.read()))
+    nums = values[pos:]
+    if len(nums) < 13:
+        raise ValueError(f"{path}: truncated IES header")
+    _, _, mult, n_v, n_h, ptype, _, _, _, _ = nums[:10]
+    if ptype not in (1, 2, 3):
+        raise ValueError(f"{path}: unknown IES photometric type {ptype}")
     ballast = nums[10]
-    n_v, n_h = int(n_v), int(n_h)
+    if not lines[0].strip().upper().startswith('IESNA:LM-63-'):
+        ballast *= nums[11]   # Ballast-lamp photometric factor in 1986/1991.
+    n_v, n_h = count(n_v), count(n_h)
     k = 13
     va = np.array(nums[k:k + n_v]); k += n_v
     ha = np.array(nums[k:k + n_h]); k += n_h
+    if va.size != n_v or ha.size != n_h or np.any(np.diff(va) <= 0) or np.any(np.diff(ha) <= 0):
+        raise ValueError(f"{path}: missing or unordered IES angles")
     cd = np.array(nums[k:k + n_v * n_h], dtype=np.float64)
     if cd.size != n_v * n_h:
         raise ValueError(f"{path}: expected {n_v * n_h} candela values, got {cd.size}")
     cd = cd.reshape(n_h, n_v) * mult * ballast
-    return IESProfile(va, ha, cd, float(cd.max()) if cd.size else 0.0)
+    lamp_position = None
+    for line in lines[:i]:
+        match = re.match(r'\s*\[LAMPPOSITION\]\s*(.*)', line, re.I)
+        if match:
+            angles = numbers(match[1])
+            if len(angles) != 2:
+                raise ValueError(f"{path}: LAMPPOSITION requires two angles")
+            lamp_position = tuple(angles)
+    return IESProfile(va, ha, cd, float(cd.max()) if cd.size else 0.0, correction, lamp_position, int(ptype))
 
 
 # ------------------------------------------------------------------------------------ glTF
@@ -494,7 +615,7 @@ class _Gltf:
             self.g = pygltflib.GLTF2.from_json(data.decode("utf-8"))
             self.raw = json.loads(data)
         self._buffers: dict[int, bytes] = {}
-        self._images: dict[tuple[int, bool], np.ndarray | None] = {}
+        self._images: dict[tuple, np.ndarray | TextureImage] = {}
 
     def uri_bytes(self, uri: str) -> bytes:
         if uri.startswith("data:"):
@@ -537,29 +658,44 @@ class _Gltf:
             return np.maximum(arr.astype(np.float32) / _NORM[dt], -1.0)
         return arr
 
-    def image(self, tex_index: int, srgb: bool) -> np.ndarray | None:
+    def image(self, tex_index: int, srgb: bool) -> np.ndarray | TextureImage | None:
         tex = self.g.textures[tex_index]
         ext = tex.extensions or {}
         src = tex.source
         if "EXT_texture_webp" in ext:
             src = ext["EXT_texture_webp"].get("source", src)
+        if "KHR_texture_basisu" in ext:
+            from .ktx import KTXUnavailable, decode_basisu
+            basis = ext['KHR_texture_basisu'].get('source')
+            if not isinstance(basis, int) or isinstance(basis, bool) or not 0 <= basis < len(self.g.images):
+                raise ValueError('KHR_texture_basisu requires a valid image source index')
+            key = (basis, srgb, 'basisu')
+            try:
+                if key not in self._images:
+                    self._images[key] = decode_basisu(self.image_bytes(basis), srgb)
+                return self._images[key]
+            except KTXUnavailable:
+                if 'KHR_texture_basisu' in (self.g.extensionsRequired or []) or src is None:
+                    raise
+                log.warning('glTF texture %d: libktx unavailable; using the optional BasisU fallback', tex_index)
         if src is None:
             log.warning("glTF texture %d has no decodable source (%s)", tex_index, ", ".join(ext) or "none")
             return None
         key = (src, srgb)
         if key not in self._images:
-            img = self.g.images[src]
-            if img.bufferView is not None:
-                bv = self.g.bufferViews[img.bufferView]
-                off = bv.byteOffset or 0
-                data = self.buffer(bv.buffer)[off:off + bv.byteLength]
-            else:
-                data = self.uri_bytes(img.uri)
-            self._images[key] = decode_image(data, srgb)
+            self._images[key] = decode_image(self.image_bytes(src), srgb)
         return self._images[key]
 
+    def image_bytes(self, source: int) -> bytes:
+        img = self.g.images[source]
+        if img.bufferView is not None:
+            bv = self.g.bufferViews[img.bufferView]
+            off = bv.byteOffset or 0
+            return self.buffer(bv.buffer)[off:off + bv.byteLength]
+        return self.uri_bytes(img.uri)
+
     def material(self, m) -> MaterialSpec:
-        p: dict = {}
+        p: dict = {'surfaceModel': 'gltf'}
         tx: dict = {}
         pbr = m.pbrMetallicRoughness
         bcf = (pbr.baseColorFactor if pbr else None) or [1.0, 1.0, 1.0, 1.0]
@@ -604,6 +740,13 @@ class _Gltf:
             p["specularColor"] = _rgba(ext["KHR_materials_specular"].get("specularColorFactor", [1.0, 1.0, 1.0]))
         if "KHR_materials_anisotropy" in ext:
             p["anisotropyRotation"] = math.degrees(float(ext["KHR_materials_anisotropy"].get("anisotropyRotation", 0.0)))
+        if "KHR_materials_iridescence" in ext:
+            irid = ext["KHR_materials_iridescence"]
+            p["iridescenceThicknessMinimum"] = float(irid.get("iridescenceThicknessMinimum", 100.0))
+            p["iridescenceThicknessMaximum"] = float(irid.get("iridescenceThicknessMaximum", 400.0))
+        coat_normal = ext.get("KHR_materials_clearcoat", {}).get("clearcoatNormalTexture")
+        if coat_normal is not None:
+            p["clearcoatNormalScale"] = float(coat_normal.get("scale", 1.0))
         if m.normalTexture is not None:
             p["normalScale"] = float(m.normalTexture.scale if m.normalTexture.scale is not None else 1.0)
         if m.occlusionTexture is not None:
@@ -612,16 +755,39 @@ class _Gltf:
                  ("metallicRoughnessMap", pbr.metallicRoughnessTexture if pbr else None, False),
                  ("normalMap", m.normalTexture, False), ("occlusionMap", m.occlusionTexture, False),
                  ("emissiveMap", m.emissiveTexture, True)]
+        for extension, fields in {
+            "clearcoat": [("clearcoatTexture", "clearcoatMap", False),
+                          ("clearcoatRoughnessTexture", "clearcoatRoughnessMap", False),
+                          ("clearcoatNormalTexture", "clearcoatNormalMap", False)],
+            "transmission": [("transmissionTexture", "transmissionMap", False)],
+            "volume": [("thicknessTexture", "thicknessMap", False)],
+            "sheen": [("sheenColorTexture", "sheenColorMap", True),
+                      ("sheenRoughnessTexture", "sheenRoughnessMap", False)],
+            "specular": [("specularTexture", "specularMap", False),
+                         ("specularColorTexture", "specularColorMap", True)],
+            "iridescence": [("iridescenceTexture", "iridescenceMap", False),
+                            ("iridescenceThicknessTexture", "iridescenceThicknessMap", False)],
+            "anisotropy": [("anisotropyTexture", "anisotropyMap", False)],
+        }.items():
+            values = ext.get("KHR_materials_"+extension, {})
+            slots.extend((key, values.get(field), srgb) for field, key, srgb in fields)
         for key, info, srgb in slots:
-            if info is not None and info.index is not None:
-                img = self.image(info.index, srgb)
+            if info is None:
+                continue
+            get = info.get if isinstance(info, dict) else lambda name, default=None: getattr(info, name, default)
+            index = get('index')
+            if index is not None:
+                img = self.image(index, srgb)
                 if img is not None:
+                    if key in ('clearcoatMap', 'clearcoatRoughnessMap'):
+                        channel = 0 if key == 'clearcoatMap' else 1
+                        img = map_image(img, lambda a: np.repeat(a[..., channel:channel+1], 4, -1))
                     tx[key] = img
-                tt = (info.extensions or {}).get("KHR_texture_transform", {})
-                p.setdefault("mapUV", {})[key] = dict(texCoord=tt.get("texCoord", info.texCoord or 0),
+                tt = (get('extensions') or {}).get("KHR_texture_transform", {})
+                p.setdefault("mapUV", {})[key] = dict(texCoord=tt.get("texCoord", get('texCoord') or 0),
                     offset=tuple(tt.get("offset", [0., 0.])), rotation=float(tt.get("rotation", 0.)),
                     scale=tuple(tt.get("scale", [1., 1.])))
-                sampler_i = self.g.textures[info.index].sampler
+                sampler_i = self.g.textures[index].sampler
                 sampler = self.g.samplers[sampler_i] if sampler_i is not None else None
                 p.setdefault("mapSamplers", {})[key] = dict(
                     wrapS=sampler.wrapS or 10497 if sampler is not None else 10497,
@@ -647,6 +813,8 @@ def _load_gltf(path: str) -> Model:
     L = _Gltf(path)
     g = L.g
     materials = [L.material(m) for m in g.materials or []]
+    for material in materials:
+        material.animation_key = id(material)
     root_ext = g.extensions or {}
     variant_names = [v.get("name", str(i)) for i, v in
                      enumerate(root_ext.get("KHR_materials_variants", {}).get("variants", []))]
@@ -714,14 +882,17 @@ def _load_gltf(path: str) -> Model:
             for mp in ((pr.extensions or {}).get("KHR_materials_variants") or {}).get("mappings", []):
                 for vi in mp.get("variants", []):
                     if vi < len(variant_names):
-                        prim.variants[variant_names[vi]] = materials[mp["material"]]
+                        variant_material = materials[mp["material"]]
+                        if mode < 4 and prim.normals is None:
+                            variant_material = replace(variant_material, params=dict(variant_material.params, unlit=True))
+                        prim.variants[variant_names[vi]] = variant_material
             prims.append(prim)
         meshes.append(prims)
 
     nodes = []
     for n in g.nodes or []:
         nd = Node(name=n.name or "", children=list(n.children or []), mesh=n.mesh, skin=n.skin)
-        if n.matrix is not None and not np.allclose(n.matrix, np.eye(4).ravel()):
+        if n.matrix is not None:
             nd.matrix = np.asarray(n.matrix, dtype=np.float64).reshape(4, 4).T
         if n.translation is not None:
             nd.translation = np.asarray(n.translation, dtype=np.float64)
@@ -746,21 +917,8 @@ def _load_gltf(path: str) -> Model:
             if s.inverseBindMatrices is not None else np.tile(np.eye(4), (len(s.joints), 1, 1))
         skins.append(Skin(joints=list(s.joints), inverse_bind=ibm))
 
-    clips = []
-    for ai, an in enumerate(g.animations or []):
-        chans = []
-        for ch in an.channels:
-            if ch.target is None or ch.target.node is None:
-                continue
-            smp = an.samplers[ch.sampler]
-            times = L.accessor(smp.input)[:, 0].astype(np.float64)
-            interp = (smp.interpolation or "LINEAR").upper()
-            vals = L.accessor(smp.output).astype(np.float64)
-            rows = len(times) * (3 if interp == "CUBICSPLINE" else 1)
-            chans.append(Channel(node=ch.target.node, path=ch.target.path, times=times,
-                                 values=vals.reshape(rows, -1), interpolation=interp))
-        dur = max((float(c.times[-1]) for c in chans if len(c.times)), default=0.0)
-        clips.append(Clip(name=an.name or str(ai), channels=chans, duration=dur))
+    from .gltf_pointers import load_clips
+    clips = load_clips(L, nodes, meshes, materials)
     return Model(nodes=nodes, roots=roots, meshes=meshes, skins=skins, clips=clips, variants=variant_names)
 
 
@@ -937,8 +1095,10 @@ class _Usd:
             self.model.nodes.append(Node(name="__zup_to_yup", rotation=np.array([-s, 0.0, 0.0, s]), children=roots))
             roots = [len(self.model.nodes) - 1]
         self.model.roots = roots
-        if self.channels:
-            self.model.clips.append(Clip("default", self.channels, max(float(c.times[-1]) for c in self.channels)))
+        material_times = [t for mat in self.materials.values() if mat is not None for t in mat.sample_times]
+        if self.channels or material_times:
+            end = max([float(c.times[-1]) for c in self.channels] + material_times)
+            self.model.clips.append(Clip("default", self.channels, end))
 
     def add_node(self, nd: Node) -> int:
         self.model.nodes.append(nd)
@@ -972,7 +1132,7 @@ class _Usd:
             nd.mesh = len(self.model.meshes)
             self.model.meshes.append(self.mesh(prim))
             self.bind_blends(prim, ni)
-            if UsdSkel.BindingAPI(prim).GetSkeleton():
+            if UsdSkel.BindingAPI(prim).GetInheritedSkeleton():
                 self.skinned.append((prim, ni))
         elif prim.IsA(UsdSkel.Skeleton):
             self.skeleton(prim, ni)
@@ -998,7 +1158,7 @@ class _Usd:
         pv = UsdGeom.PrimvarsAPI(prim)
 
         def primvar(name: str):
-            p = pv.GetPrimvar(name)
+            p = pv.FindPrimvarWithInheritance(name)
             if not p or not p.HasValue():
                 return None
             v = p.ComputeFlattened()
@@ -1006,15 +1166,16 @@ class _Usd:
         normals = primvar("normals")
         if normals is None and m.GetNormalsAttr().HasValue():
             normals = (np.asarray(m.GetNormalsAttr().Get(), np.float64), m.GetNormalsInterpolation())
-        st = primvar("st")
-        if st is None:
-            st = next((primvar(p.GetPrimvarName()) for p in pv.GetPrimvarsWithValues()
-                       if str(p.GetTypeName()) in ("texCoord2f[]", "float2[]")), None)
+        texcoords = {str(p.GetPrimvarName()): primvar(p.GetPrimvarName()) for p in pv.FindPrimvarsWithInheritance()
+                     if str(p.GetTypeName()).removesuffix('[]') in
+                     ('texCoord2f', 'texCoord2h', 'texCoord2d', 'float2', 'half2', 'double2') and p.HasValue()}
+        st = texcoords.get('st', next(iter(texcoords.values()), None))
         dc = primvar("displayColor")
         do = primvar("displayOpacity")
         joints = self.skin_influences(prim, len(pts))
         morph_pos, morph_nrm = self.blend_shapes(prim, len(pts))
         attrs = {"n": normals, "uv": st, "c": dc if dc is not None and dc[1] != "constant" else None}
+        attrs.update({('uv', name): values for name, values in texcoords.items()})
         unindex = any(a is not None and a[1] in ("faceVarying", "uniform") for a in attrs.values())
 
         def expand(a):
@@ -1034,6 +1195,8 @@ class _Usd:
             morph_nrm = [a[fvi] for a in morph_nrm]
         uvs = None if "uv" not in out else \
             np.stack([out["uv"][:, 0], 1.0 - out["uv"][:, 1]], 1).astype(np.float32)
+        uv_sets = {name: np.stack([out['uv', name][:, 0], 1.-out['uv', name][:, 1]], 1).astype(np.float32)
+                   for name in texcoords}
         colors = None
         if "c" in out:
             alpha = np.ones((len(out["c"]), 1))
@@ -1048,6 +1211,20 @@ class _Usd:
         if mats[0] is None and dc is not None and dc[1] == "constant":
             a = float(do[0][0]) if do is not None else 1.0
             mats[0] = MaterialSpec(params={"baseColor": tuple(float(x) for x in dc[0][0][:3]) + (a,)})
+        # Sidedness belongs to the mesh, so a shared or animated material must
+        # not overwrite the setting on another mesh using the same binding.
+        double_sided = bool(m.GetDoubleSidedAttr().Get())
+        def sided_material(material):
+            from dataclasses import replace
+            if material is None:
+                if not double_sided:
+                    return None
+                material = MaterialSpec({'baseColor': tuple(srgb_to_linear(np.array([.8, .8, .82])))+(1.,)})
+            elif not double_sided:
+                return material
+            sampler = material.sampler
+            return replace(material, params=dict(material.params, doubleSided=double_sided),
+                           sampler=(lambda t: sided_material(sampler(t))) if sampler else None)
         prims = []
         for mi, mat in enumerate(mats):
             sel = face_mat[tri_f] == mi
@@ -1055,10 +1232,10 @@ class _Usd:
                 continue
             prims.append(Primitive(
                 positions=pos.astype(np.float32), indices=corner[sel].astype(np.uint32),
-                normals=_unit_f32(out["n"]) if "n" in out else None, uvs=uvs, colors=colors,
+                normals=_unit_f32(out["n"]) if "n" in out else None, uvs=uvs, colors=colors, uv_sets=uv_sets,
                 joints=None if joints is None else joints[0], weights=None if joints is None else joints[1],
                 morph_positions=morph_pos, morph_normals=morph_nrm,
-                material=mat if mat is not None else (mats[0] if mi else None)))
+                material=sided_material(mat if mat is not None else (mats[0] if mi else None))))
         return prims
 
     def blend_shapes(self, prim, n_points):
@@ -1138,88 +1315,8 @@ class _Usd:
         return self.materials[key]
 
     def preview_surface(self, mat) -> MaterialSpec | None:
-        from pxr import UsdShade
-        shader = mat.ComputeSurfaceSource()[0]
-        if not shader or shader.GetIdAttr().Get() != "UsdPreviewSurface":
-            return None
-        p: dict = {"metallic": 0.0, "roughness": 0.5}
-        tx: dict = {}
-        mr: dict = {}
-
-        def inp(name: str):
-            i = shader.GetInput(name)
-            if not i:
-                return None, None
-            if i.HasConnectedSource():
-                src, out_name, _ = i.GetConnectedSource()
-                s = UsdShade.Shader(src.GetPrim())
-                if s.GetIdAttr().Get() == "UsdUVTexture":
-                    f = s.GetInput("file")
-                    ap = f.Get() if f else None
-                    cs = s.GetInput("sourceColorSpace")
-                    return None, (ap.resolvedPath or ap.path if ap else "", str(out_name),
-                                  (cs.Get() if cs else "auto") != "raw")
-                return None, None
-            return i.Get(), None
-
-        def texture(spec, srgb_ok: bool) -> np.ndarray | None:
-            path, out_name, srgb = spec
-            data = _usd_asset_bytes(path)
-            if data is None:
-                log.warning("USD texture %r not found", path)
-                return None
-            img = decode_image(data, srgb and srgb_ok)
-            ch = {"r": 0, "g": 1, "b": 2, "a": 3}.get(out_name)
-            return img if ch is None else img[..., ch]
-        v, t = inp("diffuseColor")
-        if v is not None:
-            p["baseColor"] = _rgba(v)
-        if t is not None and (img := texture(t, True)) is not None:
-            tx["baseColorMap"] = img if img.ndim == 3 else _add_alpha(img)
-            p["baseColor"] = (1.0, 1.0, 1.0, 1.0)
-        v, t = inp("emissiveColor")
-        if v is not None:
-            p["emissive"] = _rgba(v)
-        if t is not None and (img := texture(t, True)) is not None:
-            tx["emissiveMap"] = img if img.ndim == 3 else _add_alpha(img)
-            p["emissive"] = (1.0, 1.0, 1.0, 1.0)
-        for name in ("metallic", "roughness"):
-            v, t = inp(name)
-            if v is not None:
-                p[name] = float(v)
-            if t is not None and (img := texture(t, False)) is not None:
-                mr[name] = img if img.ndim == 2 else img[..., 0]
-                p[name] = 1.0
-        if mr:
-            h = max(a.shape[0] for a in mr.values())
-            w = max(a.shape[1] for a in mr.values())
-
-            def fit(a):
-                if a is None:
-                    return np.ones((h, w), np.float32)
-                return a[(np.arange(h) * a.shape[0]) // h][:, (np.arange(w) * a.shape[1]) // w]
-            one = np.ones((h, w), np.float32)
-            tx["metallicRoughnessMap"] = np.stack([one, fit(mr.get("roughness")), fit(mr.get("metallic")), one], -1)
-        _, t = inp("normal")
-        if t is not None and (img := texture(t, False)) is not None and img.ndim == 3:
-            tx["normalMap"] = img
-        _, t = inp("occlusion")
-        if t is not None and (img := texture(t, False)) is not None:
-            a = img if img.ndim == 2 else img[..., 0]
-            tx["occlusionMap"] = np.stack([a, a, a, np.ones_like(a)], -1)
-        for name in ("ior", "clearcoat", "clearcoatRoughness"):
-            v, _ = inp(name)
-            if v is not None:
-                p[name] = float(v)
-        op, _ = inp("opacity")
-        thr, _ = inp("opacityThreshold")
-        if op is not None:
-            p["opacity"] = float(op)
-            if thr is not None and float(thr) > 0:
-                p["alphaMode"], p["alphaCutoff"] = "mask", float(thr)
-            elif float(op) < 1.0:
-                p["alphaMode"] = "blend"
-        return MaterialSpec(params=p, textures=tx, name=mat.GetPrim().GetName())
+        from .usd_materials import read_material
+        return read_material(mat, self.start, self.tps)
 
     # --- skeletons
     def skeleton(self, prim, skel_node: int) -> None:
@@ -1241,7 +1338,7 @@ class _Usd:
         ibm = np.stack([np.linalg.inv(b) for b in bind]) if len(bind) == len(joints) and joints else \
             np.tile(np.eye(4), (len(joints), 1, 1))
         self.skels[str(prim.GetPath())] = (joints, nodes, ibm)
-        anim_prim = UsdSkel.BindingAPI(prim).GetAnimationSource()
+        anim_prim = UsdSkel.BindingAPI(prim).GetInheritedAnimationSource()
         if not anim_prim:
             return
         anim = UsdSkel.Animation(anim_prim)
@@ -1266,9 +1363,10 @@ class _Usd:
                     setattr(self.model.nodes[ni], path, vals[0, ji].astype(np.float64))
 
     def skin_influences(self, prim, n_points: int):
-        from pxr import UsdSkel
-        b = UsdSkel.BindingAPI(prim)
-        ji, jw = b.GetJointIndicesPrimvar(), b.GetJointWeightsPrimvar()
+        from pxr import UsdGeom
+        pv = UsdGeom.PrimvarsAPI(prim)
+        ji = pv.FindPrimvarWithInheritance('skel:jointIndices')
+        jw = pv.FindPrimvarWithInheritance('skel:jointWeights')
         if not ji or not jw or not ji.HasValue():
             return None
         es = ji.GetElementSize()
@@ -1279,16 +1377,23 @@ class _Usd:
         return _skin_weights(idx, w)
 
     def bind_skin(self, prim, ni: int) -> None:
-        from pxr import UsdSkel
+        from pxr import UsdGeom, UsdSkel
         b = UsdSkel.BindingAPI(prim)
-        skel = b.GetSkeleton()
+        skel = b.GetInheritedSkeleton()
         entry = self.skels.get(str(skel.GetPath())) if skel else None
         if entry is None:
             return
         names, nodes, ibm = entry
-        gb = b.GetGeomBindTransformAttr()
+        gb = UsdGeom.PrimvarsAPI(prim).FindPrimvarWithInheritance('skel:geomBindTransform')
         geom_bind = _gf(gb.Get()) if gb and gb.HasValue() else np.eye(4)
-        joints_attr = b.GetJointsAttr()
+        owner = prim
+        joints_attr = None
+        while owner and not owner.IsPseudoRoot():
+            attr = UsdSkel.BindingAPI(owner).GetJointsAttr()
+            if attr and attr.HasAuthoredValueOpinion():
+                joints_attr = attr
+                break
+            owner = owner.GetParent()
         order = [names.index(str(j)) for j in joints_attr.Get()] if joints_attr and joints_attr.HasValue() \
             else list(range(len(names)))                    # mesh-local joint order when authored
         self.model.skins.append(Skin([nodes[k] for k in order], ibm[order] @ geom_bind))
@@ -1305,36 +1410,6 @@ def _load_usd(path: str) -> Model:
 
 
 # ------------------------------------------------------------------------------------ FBX
-class _Keep:
-    """Keep-alive proxy for ufbx 0.0.5 objects. The binding caches one wrapper per element without
-    owning it: once a wrapper is freed, fetching the same element again returns a dangling object
-    (segfault at the next GC). Everything fetched through this proxy stays referenced in `pool`
-    for the duration of the load; arguments passed to methods are unwrapped."""
-    __slots__ = ("_o", "_pool")
-
-    def __init__(self, o, pool: list):
-        self._o, self._pool = o, pool
-        pool.append(o)
-
-    def _wrap(self, v):
-        return v if v is None or isinstance(v, (int, float, str, bytes, tuple)) else _Keep(v, self._pool)
-
-    def __getattr__(self, k: str):
-        v = getattr(self._o, k)
-        if callable(v):
-            return lambda *a, **kw: self._wrap(v(*[x._o if isinstance(x, _Keep) else x for x in a], **kw))
-        return self._wrap(v)
-
-    def __len__(self) -> int:
-        return len(self._o)
-
-    def __getitem__(self, i):
-        return self._wrap(self._o[i])
-
-    def __iter__(self):
-        return (self._wrap(x) for x in self._o)
-
-
 def _ints(seq) -> np.ndarray:
     return np.fromiter(iter(seq), np.int64, count=len(seq))
 
