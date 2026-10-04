@@ -61,14 +61,18 @@ class Ctx:
     clock_offset: float = 0.0   # evaluated sequence offset applied at node entry
     sequence_clocks: tuple = () # (sequence, time before its warp, composition time, window start, end)
 
-    def __hash__(self):
+    def vars_key(self) -> tuple:
+        """`vars` with dict values frozen, so it can sit in a cache key (an `item` may be a dict)."""
         def freeze(value):
             if isinstance(value, dict):
                 return tuple(sorted((k, freeze(v)) for k, v in value.items()))
             if isinstance(value, (list, tuple)):
                 return tuple(freeze(v) for v in value)
             return value
-        return hash((self.t, self.comp_t, self.frame, self.scope, freeze(self.vars),
+        return freeze(self.vars)
+
+    def __hash__(self):
+        return hash((self.t, self.comp_t, self.frame, self.scope, self.vars_key(),
                      self.node_start, self.node_end, self.clock_node, self.clock_offset, self.sequence_clocks))
 
     def at(self, t: float) -> "Ctx":

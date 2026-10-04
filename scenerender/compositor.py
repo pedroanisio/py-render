@@ -221,7 +221,7 @@ class RenderContext:
         # The order only changes with animated z: otherwise it is remembered per parent, scope and vars
         # (keyed on the children and their authored z, so edits are seen).
         sig = (tuple(kids), tuple(c.get("z") for c in kids))
-        key = ("child-order", parent, ctx.scope, ctx.vars)
+        key = ("child-order", parent, ctx.scope, ctx.vars_key())
         hit = self.cache.get(key)
         if hit is not None and hit[0] == sig:
             return list(hit[1])
@@ -359,7 +359,7 @@ class RenderContext:
         (through non-isolated descendants) that blends with the backdrop other than by source-over, no
         adjustment layers and no transitions. Source-over is associative, so the extra buffer and its
         composite are skipped."""
-        key = ("iso-redundant", el, ctx.scope, ctx.vars)
+        key = ("iso-redundant", el, ctx.scope, ctx.vars_key())
         hit = self.frame_cache.get(key)
         if hit is not None:
             return hit
@@ -706,7 +706,7 @@ class RenderContext:
     def _render_node_reused(self, el, ctx: Ctx, PM, box, layout_pos) -> Out | None:
         """_render_node_once, reusing the output of an earlier shutter sample of this frame when the node
         provably renders the same pixels at every sample time (see mb_reusable) and is placed identically."""
-        key = (ctx.scope, ctx.vars, box, layout_pos)
+        key = (ctx.scope, ctx.vars_key(), box, layout_pos)
         entries = self._mb_nodes.setdefault(el, [])
         for k, pm, out in entries:
             if k == key and np.array_equal(pm, PM):
