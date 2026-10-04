@@ -1,0 +1,1418 @@
+[
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/a04-sequence-hold.scene.xml",
+  "t": 1.2345666666666666,
+  "rs_seconds": 9.04,
+  "py_seconds": 12.77,
+  "status": "RS-ERROR",
+  "error": "error: frame at 1.235 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/a03-remote.scene.xml",
+  "t": 6.239566666666667,
+  "rs_seconds": 9.69,
+  "py_seconds": 12.77,
+  "status": "RS-ERROR",
+  "error": "error: frame at 6.240 s: bg: remote video https is not fetched while rendering"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/a03-remote.scene.xml",
+  "t": 1.2345666666666666,
+  "rs_seconds": 9.91,
+  "py_seconds": 13.04,
+  "status": "RS-ERROR",
+  "error": "error: frame at 1.235 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/a04-sequence-hold.scene.xml",
+  "t": 6.239566666666667,
+  "rs_seconds": 14.86,
+  "py_seconds": 8.53,
+  "status": "RS-ERROR",
+  "error": "error: frame at 6.240 s: bg: cannot run ffprobe: No such file or directory (os error 2); install FFmpeg or set SR_FFMPEG / SR_FFPROBE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/a03-remote.scene.xml",
+  "t": 11.244566666666667,
+  "rs_seconds": 13.92,
+  "py_seconds": 9.76,
+  "status": "RS-ERROR",
+  "error": "error: frame at 11.245 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/a04-sequence-hold.scene.xml",
+  "t": 11.244566666666667,
+  "rs_seconds": 17.1,
+  "py_seconds": 7.89,
+  "status": "RS-ERROR",
+  "error": "error: frame at 11.245 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/baked-volume.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 32.99,
+  "py_seconds": 2.63,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/advected-volume.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 35.25,
+  "py_seconds": 2.63,
+  "psnr": 23.97,
+  "max": 122,
+  "pct_off2": 5.859,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/baked-volume.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 32.72,
+  "py_seconds": 3.31,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/advected-volume.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 36.11,
+  "py_seconds": 2.26,
+  "psnr": 23.85,
+  "max": 122,
+  "pct_off2": 5.859,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/crater.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.29,
+  "py_seconds": 2.6,
+  "psnr": 37.89,
+  "max": 23,
+  "pct_off2": 2.441,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/crater.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 0.41,
+  "py_seconds": 2.31,
+  "psnr": 37.74,
+  "max": 40,
+  "pct_off2": 2.441,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/crater.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 0.54,
+  "py_seconds": 2.78,
+  "psnr": 37.21,
+  "max": 44,
+  "pct_off2": 2.441,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/advected-volume.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 38.41,
+  "py_seconds": 2.55,
+  "psnr": 23.88,
+  "max": 122,
+  "pct_off2": 5.859,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/fracture.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 3.0,
+  "py_seconds": 2.73,
+  "psnr": 26.97,
+  "max": 186,
+  "pct_off2": 0.61,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/fracture.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 3.61,
+  "py_seconds": 2.6,
+  "psnr": 32.19,
+  "max": 175,
+  "pct_off2": 0.22,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/globe-relief.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 2.85,
+  "py_seconds": 2.6,
+  "psnr": 5.25,
+  "max": 253,
+  "pct_off2": 45.02,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/globe-relief.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 2.74,
+  "py_seconds": 2.53,
+  "psnr": 5.25,
+  "max": 253,
+  "pct_off2": 45.02,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/baked-volume.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 41.94,
+  "py_seconds": 2.56,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/fracture.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 4.4,
+  "py_seconds": 2.7,
+  "psnr": 32.19,
+  "max": 175,
+  "pct_off2": 0.22,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/globe-relief.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 2.33,
+  "py_seconds": 2.28,
+  "psnr": 5.25,
+  "max": 253,
+  "pct_off2": 45.02,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/mesh-sequence.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.35,
+  "py_seconds": 2.78,
+  "psnr": 5.79,
+  "max": 199,
+  "pct_off2": 45.41,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/mesh-sequence.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.39,
+  "py_seconds": 2.76,
+  "psnr": 2.77,
+  "max": 204,
+  "pct_off2": 87.891,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/mesh-sequence.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.33,
+  "py_seconds": 2.91,
+  "psnr": 2.77,
+  "max": 204,
+  "pct_off2": 87.891,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/kitchen-sink.scene.xml",
+  "t": 6.239566666666667,
+  "rs_seconds": 2.35,
+  "py_seconds": 5.74,
+  "status": "RS-ERROR",
+  "error": "error: frame at 6.240 s: bg: cannot run ffprobe: No such file or directory (os error 2); install FFmpeg or set SR_FFMPEG / SR_FFPROBE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/kitchen-sink.scene.xml",
+  "t": 1.2345666666666666,
+  "rs_seconds": 3.39,
+  "py_seconds": 5.5,
+  "status": "RS-ERROR",
+  "error": "error: frame at 1.235 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/kitchen-sink.scene.xml",
+  "t": 11.244566666666667,
+  "rs_seconds": 2.58,
+  "py_seconds": 5.81,
+  "status": "RS-ERROR",
+  "error": "error: frame at 11.245 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/minimal.scene.xml",
+  "t": 2.5,
+  "rs_seconds": 4.04,
+  "py_seconds": 1.13,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/minimal.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 4.43,
+  "py_seconds": 1.14,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/ocean.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.36,
+  "py_seconds": 1.38,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/ocean.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.43,
+  "py_seconds": 0.98,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/ocean.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.29,
+  "py_seconds": 1.16,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/minimal.scene.xml",
+  "t": 4.5,
+  "rs_seconds": 4.04,
+  "py_seconds": 1.06,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/openvdb.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.51,
+  "py_seconds": 2.44,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/openvdb-sequence.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.29,
+  "py_seconds": 2.77,
+  "psnr": 10.99,
+  "max": 124,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/openvdb-sequence.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.39,
+  "py_seconds": 3.01,
+  "psnr": 10.99,
+  "max": 124,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/openvdb-sequence.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.49,
+  "py_seconds": 2.88,
+  "psnr": 10.99,
+  "max": 124,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/openvdb.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.32,
+  "py_seconds": 2.32,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/openvdb.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.38,
+  "py_seconds": 3.63,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/particles3d.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.27,
+  "py_seconds": 2.57,
+  "psnr": 30.91,
+  "max": 121,
+  "pct_off2": 17.993,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/particles3d.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.33,
+  "py_seconds": 2.52,
+  "psnr": 31.29,
+  "max": 23,
+  "pct_off2": 17.969,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/particles3d.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.29,
+  "py_seconds": 3.55,
+  "psnr": 31.06,
+  "max": 105,
+  "pct_off2": 17.993,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-fields.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 53.13,
+  "py_seconds": 2.42,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-fields.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 54.89,
+  "py_seconds": 2.85,
+  "psnr": 28.53,
+  "max": 155,
+  "pct_off2": 0.879,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-mesh.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.42,
+  "py_seconds": 2.54,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-colliders.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 59.51,
+  "py_seconds": 2.38,
+  "psnr": 40.25,
+  "max": 68,
+  "pct_off2": 0.391,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-mesh.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.38,
+  "py_seconds": 2.36,
+  "psnr": 20.04,
+  "max": 172,
+  "pct_off2": 3.516,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-mesh.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.42,
+  "py_seconds": 2.16,
+  "psnr": 20.04,
+  "max": 173,
+  "pct_off2": 3.516,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.36,
+  "py_seconds": 2.57,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-colliders.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 61.28,
+  "py_seconds": 2.34,
+  "psnr": 33.55,
+  "max": 90,
+  "pct_off2": 0.879,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.57,
+  "py_seconds": 2.23,
+  "psnr": 28.48,
+  "max": 155,
+  "pct_off2": 0.879,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.55,
+  "py_seconds": 2.11,
+  "psnr": 28.24,
+  "max": 164,
+  "pct_off2": 0.879,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/solid-colliders.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 1.4,
+  "py_seconds": 2.25,
+  "psnr": 7.84,
+  "max": 194,
+  "pct_off2": 96.777,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/solid-colliders.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 1.86,
+  "py_seconds": 2.39,
+  "psnr": 7.84,
+  "max": 194,
+  "pct_off2": 96.777,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/thermal-volume.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.6,
+  "py_seconds": 2.19,
+  "psnr": 8.9,
+  "max": 137,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-fields.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 64.98,
+  "py_seconds": 2.37,
+  "psnr": 28.58,
+  "max": 164,
+  "pct_off2": 1.074,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/version-1.0.scene.xml",
+  "t": 0.2,
+  "rs_seconds": 0.66,
+  "py_seconds": 1.08,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/thermal-volume.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.36,
+  "py_seconds": 2.21,
+  "psnr": 8.9,
+  "max": 137,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/solid-colliders.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 2.89,
+  "py_seconds": 2.37,
+  "psnr": 7.84,
+  "max": 194,
+  "pct_off2": 96.777,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/thermal-volume.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.3,
+  "py_seconds": 2.09,
+  "psnr": 8.9,
+  "max": 137,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/version-1.0.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.63,
+  "py_seconds": 0.79,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/version-1.0.scene.xml",
+  "t": 1.8,
+  "rs_seconds": 0.64,
+  "py_seconds": 0.97,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/volume-sequence.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.29,
+  "py_seconds": 2.16,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/volume-sequence.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.45,
+  "py_seconds": 2.08,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/volume-sequence.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.45,
+  "py_seconds": 2.32,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/volume.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.4,
+  "py_seconds": 2.35,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/volume.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.36,
+  "py_seconds": 2.06,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/volume.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.35,
+  "py_seconds": 2.53,
+  "psnr": 11.55,
+  "max": 119,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/animated-z.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.65,
+  "py_seconds": 1.04,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/pyro-colliders.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 74.45,
+  "py_seconds": 2.86,
+  "psnr": 33.55,
+  "max": 90,
+  "pct_off2": 0.879,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/animated-z.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.74,
+  "py_seconds": 0.97,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/animated-z.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.63,
+  "py_seconds": 1.12,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/basemap.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.01,
+  "py_seconds": 0.99,
+  "status": "RS-ERROR",
+  "error": "invalid basemap.scene.xml: 2 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/basemap.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.01,
+  "py_seconds": 0.96,
+  "status": "RS-ERROR",
+  "error": "invalid basemap.scene.xml: 2 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/basemap.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.02,
+  "py_seconds": 0.97,
+  "status": "RS-ERROR",
+  "error": "invalid basemap.scene.xml: 2 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/broken-shader.scene.xml",
+  "t": 0.08333333333333333,
+  "rs_seconds": 0.02,
+  "py_seconds": 0.98,
+  "status": "RS-ERROR",
+  "error": "invalid broken-shader.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/w01-non-finite.scene.xml",
+  "t": 1.2345666666666666,
+  "rs_seconds": 1.84,
+  "py_seconds": 4.85,
+  "status": "RS-ERROR",
+  "error": "error: frame at 1.235 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/broken-shader.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.02,
+  "py_seconds": 1.12,
+  "status": "RS-ERROR",
+  "error": "invalid broken-shader.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/broken-shader.scene.xml",
+  "t": 0.9166666666666666,
+  "rs_seconds": 0.01,
+  "py_seconds": 1.05,
+  "status": "RS-ERROR",
+  "error": "invalid broken-shader.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/w01-non-finite.scene.xml",
+  "t": 6.239566666666667,
+  "rs_seconds": 2.15,
+  "py_seconds": 4.8,
+  "status": "RS-ERROR",
+  "error": "error: frame at 6.240 s: bg: cannot run ffprobe: No such file or directory (os error 2); install FFmpeg or set SR_FFMPEG / SR_FFPROBE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tests/corpus/valid/w01-non-finite.scene.xml",
+  "t": 11.244566666666667,
+  "rs_seconds": 2.21,
+  "py_seconds": 6.43,
+  "status": "RS-ERROR",
+  "error": "error: frame at 11.245 s: auto: transcript line 1: expected value at line 1 column 1"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/cinematic-pbr.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.92,
+  "py_seconds": 2.82,
+  "psnr": 13.58,
+  "max": 255,
+  "pct_off2": 64.784,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/clay-3d.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 1.0,
+  "py_seconds": 2.34,
+  "psnr": 20.33,
+  "max": 183,
+  "pct_off2": 7.128,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/cinematic-pbr.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.86,
+  "py_seconds": 2.84,
+  "psnr": 13.58,
+  "max": 255,
+  "pct_off2": 64.784,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/cinematic-pbr.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.88,
+  "py_seconds": 2.78,
+  "psnr": 13.58,
+  "max": 255,
+  "pct_off2": 64.784,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/clay-3d.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 0.99,
+  "py_seconds": 2.15,
+  "psnr": 20.14,
+  "max": 183,
+  "pct_off2": 7.71,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/erosion.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.75,
+  "py_seconds": 0.93,
+  "psnr": 4.68,
+  "max": 227,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/erosion.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 0.99,
+  "py_seconds": 0.81,
+  "psnr": 4.55,
+  "max": 215,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/fbx-animation.scene.xml",
+  "t": 0.08333333333333333,
+  "rs_seconds": 0.01,
+  "py_seconds": 1.95,
+  "status": "RS-ERROR",
+  "error": "invalid fbx-animation.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/clay-3d.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 0.82,
+  "py_seconds": 2.04,
+  "psnr": 20.15,
+  "max": 183,
+  "pct_off2": 7.693,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/erosion.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 1.34,
+  "py_seconds": 0.85,
+  "psnr": 4.58,
+  "max": 209,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/fbx-animation.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.05,
+  "status": "RS-ERROR",
+  "error": "invalid fbx-animation.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/fbx-animation.scene.xml",
+  "t": 0.9166666666666666,
+  "rs_seconds": 0.01,
+  "py_seconds": 1.85,
+  "status": "RS-ERROR",
+  "error": "invalid fbx-animation.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/flocking.scene.xml",
+  "t": 0.4166666666666667,
+  "rs_seconds": 0.72,
+  "py_seconds": 0.81,
+  "psnr": 10.4,
+  "max": 216,
+  "pct_off2": 21.161,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/flocking.scene.xml",
+  "t": 2.0,
+  "rs_seconds": 0.77,
+  "py_seconds": 1.16,
+  "psnr": 10.93,
+  "max": 216,
+  "pct_off2": 17.698,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/flocking.scene.xml",
+  "t": 3.5833333333333335,
+  "rs_seconds": 0.88,
+  "py_seconds": 0.83,
+  "psnr": 11.23,
+  "max": 216,
+  "pct_off2": 16.084,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/fluid.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.78,
+  "py_seconds": 1.3,
+  "psnr": 32.52,
+  "max": 185,
+  "pct_off2": 1.148,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/fluid.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 1.57,
+  "py_seconds": 1.24,
+  "psnr": 25.76,
+  "max": 184,
+  "pct_off2": 4.507,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/gltf-character.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.02,
+  "py_seconds": 2.12,
+  "status": "RS-ERROR",
+  "error": "invalid gltf-character.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/gltf-character.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.24,
+  "status": "RS-ERROR",
+  "error": "invalid gltf-character.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/fluid.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 2.3,
+  "py_seconds": 0.87,
+  "psnr": 23.73,
+  "max": 186,
+  "pct_off2": 8.334,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/map-3d.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.13,
+  "status": "RS-ERROR",
+  "error": "invalid map-3d.scene.xml: 3 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/gltf-character.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.75,
+  "status": "RS-ERROR",
+  "error": "invalid gltf-character.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/map-3d.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.25,
+  "status": "RS-ERROR",
+  "error": "invalid map-3d.scene.xml: 3 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/map-3d.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.42,
+  "status": "RS-ERROR",
+  "error": "invalid map-3d.scene.xml: 3 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/object3d-depth-order.scene.xml",
+  "t": 0.08333333333333333,
+  "rs_seconds": 0.54,
+  "py_seconds": 2.13,
+  "psnr": 39.63,
+  "max": 137,
+  "pct_off2": 0.26,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/object3d-depth-order.scene.xml",
+  "t": 0.9166666666666666,
+  "rs_seconds": 0.35,
+  "py_seconds": 2.08,
+  "psnr": 39.63,
+  "max": 137,
+  "pct_off2": 0.26,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/object3d-depth-order.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.36,
+  "py_seconds": 2.31,
+  "psnr": 39.63,
+  "max": 137,
+  "pct_off2": 0.26,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/ocio-pipeline.scene.xml",
+  "t": 0.08333333333333333,
+  "rs_seconds": 0.65,
+  "py_seconds": 2.75,
+  "psnr": 18.59,
+  "max": 30,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/ocio-pipeline.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.79,
+  "py_seconds": 2.64,
+  "psnr": 18.59,
+  "max": 30,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/ocio-pipeline.scene.xml",
+  "t": 0.9166666666666666,
+  "rs_seconds": 0.67,
+  "py_seconds": 2.59,
+  "psnr": 18.59,
+  "max": 30,
+  "pct_off2": 100.0,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/review-product.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.89,
+  "py_seconds": 2.41,
+  "psnr": 43.44,
+  "max": 98,
+  "pct_off2": 1.941,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/review-product.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 1.0,
+  "py_seconds": 2.7,
+  "psnr": 43.68,
+  "max": 98,
+  "pct_off2": 1.928,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/review-product.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 1.04,
+  "py_seconds": 2.63,
+  "psnr": 43.74,
+  "max": 98,
+  "pct_off2": 1.907,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/review-title.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.8,
+  "py_seconds": 0.95,
+  "psnr": 39.1,
+  "max": 105,
+  "pct_off2": 1.719,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/path-tracing.scene.xml",
+  "t": 0.9166666666666666,
+  "rs_seconds": 4.0,
+  "py_seconds": 2.33,
+  "psnr": 20.06,
+  "max": 193,
+  "pct_off2": 50.281,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/path-tracing.scene.xml",
+  "t": 0.08333333333333333,
+  "rs_seconds": 4.19,
+  "py_seconds": 2.37,
+  "psnr": 20.06,
+  "max": 193,
+  "pct_off2": 50.281,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/path-tracing.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 4.11,
+  "py_seconds": 2.81,
+  "psnr": 20.06,
+  "max": 193,
+  "pct_off2": 50.281,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/review-title.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 0.91,
+  "py_seconds": 0.84,
+  "psnr": 46.37,
+  "max": 56,
+  "pct_off2": 1.211,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/review-title.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 0.85,
+  "py_seconds": 0.85,
+  "psnr": 46.37,
+  "max": 56,
+  "pct_off2": 1.211,
+  "status": "CLOSE"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/rigid-3d.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.69,
+  "py_seconds": 2.26,
+  "psnr": 17.24,
+  "max": 239,
+  "pct_off2": 10.339,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/rigid-particles-fields.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.64,
+  "py_seconds": 1.8,
+  "psnr": 14.76,
+  "max": 239,
+  "pct_off2": 13.538,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/rigid-3d.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 0.7,
+  "py_seconds": 2.31,
+  "psnr": 16.35,
+  "max": 239,
+  "pct_off2": 11.92,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/rigid-3d.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 0.66,
+  "py_seconds": 2.61,
+  "psnr": 16.67,
+  "max": 239,
+  "pct_off2": 11.859,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/shadertoy-look.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.01,
+  "py_seconds": 0.84,
+  "status": "RS-ERROR",
+  "error": "invalid shadertoy-look.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/shadertoy-look.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.01,
+  "py_seconds": 0.84,
+  "status": "RS-ERROR",
+  "error": "invalid shadertoy-look.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/shadertoy-look.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.01,
+  "py_seconds": 1.09,
+  "status": "RS-ERROR",
+  "error": "invalid shadertoy-look.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/slime.scene.xml",
+  "t": 0.4166666666666667,
+  "rs_seconds": 0.86,
+  "py_seconds": 1.09,
+  "psnr": 8.33,
+  "max": 255,
+  "pct_off2": 29.023,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/softbody-jelly.scene.xml",
+  "t": 0.2916666666666667,
+  "rs_seconds": 0.75,
+  "py_seconds": 1.14,
+  "psnr": 45.43,
+  "max": 80,
+  "pct_off2": 0.174,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/slime.scene.xml",
+  "t": 2.0,
+  "rs_seconds": 1.64,
+  "py_seconds": 0.97,
+  "psnr": 10.56,
+  "max": 255,
+  "pct_off2": 25.037,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/slime.scene.xml",
+  "t": 3.5833333333333335,
+  "rs_seconds": 2.37,
+  "py_seconds": 0.99,
+  "psnr": 12.56,
+  "max": 255,
+  "pct_off2": 19.002,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/softbody-jelly.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 0.73,
+  "py_seconds": 1.73,
+  "psnr": 25.78,
+  "max": 172,
+  "pct_off2": 1.407,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/splat-object.scene.xml",
+  "t": 0.20833333333333334,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.39,
+  "status": "RS-ERROR",
+  "error": "invalid splat-object.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/softbody-jelly.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 0.72,
+  "py_seconds": 2.28,
+  "psnr": 29.68,
+  "max": 172,
+  "pct_off2": 0.727,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/splat-object.scene.xml",
+  "t": 1.0,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.45,
+  "status": "RS-ERROR",
+  "error": "invalid splat-object.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/still-formats.scene.xml",
+  "t": 0.1,
+  "rs_seconds": 0.01,
+  "py_seconds": 0.94,
+  "status": "RS-ERROR",
+  "error": "invalid still-formats.scene.xml: 5 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/rigid-particles-fields.scene.xml",
+  "t": 1.5,
+  "rs_seconds": 0.67,
+  "py_seconds": 8.14,
+  "psnr": 13.99,
+  "max": 239,
+  "pct_off2": 26.207,
+  "status": "DIFFERENT"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/still-formats.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.01,
+  "py_seconds": 1.1,
+  "status": "RS-ERROR",
+  "error": "invalid still-formats.scene.xml: 5 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/splat-object.scene.xml",
+  "t": 1.7916666666666667,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.39,
+  "status": "RS-ERROR",
+  "error": "invalid splat-object.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/still-formats.scene.xml",
+  "t": 0.9,
+  "rs_seconds": 0.02,
+  "py_seconds": 1.03,
+  "status": "RS-ERROR",
+  "error": "invalid still-formats.scene.xml: 5 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/stopmotion-holds.scene.xml",
+  "t": 0.08333333333333333,
+  "rs_seconds": 0.67,
+  "py_seconds": 0.88,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/stopmotion-holds.scene.xml",
+  "t": 0.9166666666666666,
+  "rs_seconds": 0.73,
+  "py_seconds": 0.87,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/stopmotion-holds.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.65,
+  "py_seconds": 1.2,
+  "psnr": 99.0,
+  "max": 0,
+  "pct_off2": 0.0,
+  "status": "MATCH"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/world-map.scene.xml",
+  "t": 3.0,
+  "rs_seconds": 0.01,
+  "py_seconds": 0.97,
+  "status": "RS-ERROR",
+  "error": "invalid world-map.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/usd-binary.scene.xml",
+  "t": 0.08333333333333333,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.57,
+  "status": "RS-ERROR",
+  "error": "invalid usd-binary.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/world-map.scene.xml",
+  "t": 0.6,
+  "rs_seconds": 0.01,
+  "py_seconds": 1.26,
+  "status": "RS-ERROR",
+  "error": "invalid world-map.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/usd-binary.scene.xml",
+  "t": 0.5,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.31,
+  "status": "RS-ERROR",
+  "error": "invalid usd-binary.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/world-map.scene.xml",
+  "t": 5.4,
+  "rs_seconds": 0.01,
+  "py_seconds": 0.82,
+  "status": "RS-ERROR",
+  "error": "invalid world-map.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/usd-binary.scene.xml",
+  "t": 0.9166666666666666,
+  "rs_seconds": 0.01,
+  "py_seconds": 2.4,
+  "status": "RS-ERROR",
+  "error": "invalid usd-binary.scene.xml: 1 error(s), 0 warning(s)"
+ },
+ {
+  "scene": "/home/admin/src/rs-scene-render/tools/evidence/scenes/rigid-particles-fields.scene.xml",
+  "t": 2.7083333333333335,
+  "rs_seconds": 0.7,
+  "py_seconds": 12.29,
+  "psnr": 14.09,
+  "max": 239,
+  "pct_off2": 26.579,
+  "status": "DIFFERENT"
+ }
+]
