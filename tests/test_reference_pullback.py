@@ -171,8 +171,10 @@ def test_transition_matte_pullback_preserves_full_canvas_band(tmp_path, invert):
 @pytest.mark.parametrize('placement', ['leaf', 'group'])
 @pytest.mark.parametrize('collapsed', [False, True])
 def test_external_matte_is_sampled_in_projected_frame_coordinates(tmp_path, angle, placement, collapsed):
-    camera = '<camera id="camera" projection="perspective" fov="90" z="160"/>'
-    attrs = f'threeD="true" rotationY="{angle}"'
+    # Scene space (CONVENTIONS 5.x): the camera sits at the frame centre,
+    # 160 px in front of the z=0 plane (negative z), and rotationY signs flip.
+    camera = '<camera id="camera" projection="perspective" fov="90" x="80" y="60" z="-160"/>'
+    attrs = f'threeD="true" rotationY="{-angle}"'
     if placement == 'leaf':
         wall = WALL.replace('id="wall"', f'id="wall" {attrs} matte="mask"')
     else:

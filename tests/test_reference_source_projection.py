@@ -45,7 +45,7 @@ def test_source_camera_canvas_matches_full_render(tmp_path, kind, placement, pro
     if placement == 'nested':
         node = '<group id="inner" x="4" y="3" scaleX="1.1" scaleY=".9">'+node+'</group>'
     collapse = 'collapse="true"' if placement == 'collapsed' else ''
-    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" z="160"/>'
+    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" x="80" y="60" z="-160"/>'
     body = camera+f'<group id="g" threeD="true" rotationY="25" timeScale="1.3" {collapse}>'+node+'</group>'
     scale = 2 if instanced else .5
     control = scene(tmp_path, body, name='control', assets=assets, instanced=instanced, scale=scale)
@@ -66,7 +66,7 @@ def test_source_camera_canvas_matches_full_render(tmp_path, kind, placement, pro
 @pytest.mark.parametrize('instanced', [False, True])
 def test_source_inherits_group_camera_optics(tmp_path, optics, instanced):
     extra = 'lensDistortion=".3"' if optics == 'lens' else 'depthOfField="true" focusDistance="500" fStop=".5"'
-    camera = f'<camera id="camera" projection="perspective" fov="90" z="160" {extra}/>'
+    camera = f'<camera id="camera" projection="perspective" fov="90" x="80" y="60" z="-160" {extra}/>'
     node, _ = source('shape')
     body = camera+'<group id="g" threeD="true" rotationY="25">'+node+'</group>'
     control = scene(tmp_path, body, name='control', instanced=instanced)
@@ -79,7 +79,7 @@ def test_source_appearance_is_evaluated_before_parent_compositing(tmp_path):
     # Referencing a child must not acquire its parent's later opacity/matte.
     # In particular a group's own matte can be supplied by one of its children.
     node, _ = source('shape')
-    camera = '<camera id="camera" projection="perspective" fov="90" z="160"/>'
+    camera = '<camera id="camera" projection="perspective" fov="90" x="80" y="60" z="-160"/>'
     body = camera+'<group id="g" threeD="true" rotationY="25" opacity=".2" matte="mask">'+node+'</group>'
     consumer = '<shape id="consumer" shape="rect" width="160" height="120" matte="mask"/>'
     r = scene(tmp_path, body+consumer)
@@ -89,7 +89,7 @@ def test_source_appearance_is_evaluated_before_parent_compositing(tmp_path):
 
 @pytest.mark.parametrize('kind', ['difference-key', 'transition'])
 def test_projected_source_is_shared_by_effect_and_transition_inputs(tmp_path, kind):
-    camera = '<camera id="camera" projection="orthographic" orthoHeight="240"/>'
+    camera = '<camera id="camera" projection="orthographic" orthoHeight="240" x="80" y="60" z="-160"/>'
     source = camera+'<group id="g" threeD="true"><shape id="mask" shape="rect" x="40" y="20" width="40" height="60"/></group>'
     # Keep the source out of the primary picture while retaining its reference.
     hidden = '<shape id="hider" shape="rect" width="1" height="1" opacity="0" matte="mask"/>'
@@ -112,7 +112,7 @@ def test_projected_source_is_shared_by_effect_and_transition_inputs(tmp_path, ki
 @pytest.mark.parametrize('instanced', [False, True])
 @pytest.mark.parametrize('scale', [.5, 2])
 def test_projected_collider_matte_matches_analytic_affine_source(tmp_path, moving, instanced, scale):
-    camera = '<camera id="camera" projection="orthographic" orthoHeight="240"/>'
+    camera = '<camera id="camera" projection="orthographic" orthoHeight="240" x="80" y="60" z="-160"/>'
     animation = '<expression property="x">80+40*time</expression>' if moving else ''
     source = '<group id="g" threeD="true"><shape id="mask" shape="rect" x="80" y="0" width="20" height="100">'+animation+'</shape></group>'
     control_source = '<shape id="mask" shape="rect" x="80" y="30" width="10" height="50">' \
@@ -142,7 +142,7 @@ def test_projected_collider_matte_matches_analytic_affine_source(tmp_path, movin
 @pytest.mark.parametrize('fit', ['none', 'fill', 'contain'])
 @pytest.mark.parametrize('projection', ['orthographic', 'perspective'])
 def test_source_projection_crosses_instance_boundaries(tmp_path, placement, fit, projection):
-    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" z="160"/>'
+    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" x="80" y="60" z="-160"/>'
     leaf, _ = source('shape')
     symbols = '<symbol id="s" width="160" height="120" duration="4">'+leaf+'</symbol>'
     target = 'i/mask'
@@ -171,7 +171,7 @@ def test_source_projection_crosses_instance_boundaries(tmp_path, placement, fit,
 @pytest.mark.parametrize('optics', ['lens', 'dof'])
 def test_projected_instance_optics_use_its_enclosing_camera(tmp_path, nested, optics):
     extra = 'lensDistortion=".3"' if optics == 'lens' else 'depthOfField="true" focusDistance="500" fStop=".5"'
-    camera = f'<camera id="camera" projection="perspective" fov="90" z="160" {extra}/>'
+    camera = f'<camera id="camera" projection="perspective" fov="90" x="80" y="60" z="-160" {extra}/>'
     leaf, _ = source('shape')
     # A different inner camera must not replace the outer instance's optics.
     symbols = '<symbol id="s" width="160" height="120" duration="4"><camera id="inner-camera" projection="orthographic" orthoHeight="1000"/>'+leaf+'</symbol>'
