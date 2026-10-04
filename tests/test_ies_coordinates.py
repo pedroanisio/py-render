@@ -174,8 +174,8 @@ def test_rendered_profiles_after_fourth_light(tmp_path, kind):
         cd = np.ones((3, 3)); factor = 1.
     p = write_profile(tmp_path, kind, v, h, cd)
     # Keep the floor within the measured +/-90-degree A azimuth hemisphere.
-    lights = ''.join(f'<light id="l{i}" type="point" x="{30*i-1000}" y="500" pitch="-90" intensity="200" ies="{p}"/>' for i in range(7))
-    controls = ''.join(f'<light id="l{i}" type="point" x="{30*i-1000}" y="500" intensity="{200*factor}"/>' for i in range(7))
+    lights = ''.join(f'<light id="l{i}" type="point" x="{30*i-900}" y="-440" pitch="-90" intensity="200" ies="{p}"/>' for i in range(7))
+    controls = ''.join(f'<light id="l{i}" type="point" x="{30*i-900}" y="-440" intensity="{200*factor}"/>' for i in range(7))
     scene = doc(tmp_path, FLOOR.format(cs='castShadow="false"'), lights=lights, materials=WHITE, w=96, h=64)
     control = doc(tmp_path, FLOOR.format(cs='castShadow="false"'), lights=controls, materials=WHITE, w=96, h=64, name='control.xml')
     expected = frame(control)
@@ -192,7 +192,7 @@ def test_profile_scales_all_direct_light_lobes(tmp_path, kind, flags):
         pytest.skip('no GL')
     p = write_profile(tmp_path, 1, [0, 90, 180], [0], [[.25, .25, 1]])
     intensity = 2 if kind == 'directional' else 200
-    attrs = f'type="{kind}" y="500" pitch="-90" {flags}'
+    attrs = f'type="{kind}" x="100" y="-440" pitch="-90" {flags}'
     scene = doc(tmp_path, FLOOR.format(cs='castShadow="false"'), materials=WHITE, w=96, h=64,
                 lights=f'<light id="l" {attrs} intensity="{intensity}" ies="{p}"/>')
     control = doc(tmp_path, FLOOR.format(cs='castShadow="false"'), materials=WHITE, w=96, h=64,

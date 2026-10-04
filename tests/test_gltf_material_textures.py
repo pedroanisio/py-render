@@ -32,6 +32,12 @@ CASES = [
 PIXEL = np.array([64, 128, 192, 160], np.uint8)
 
 
+def held(sample):
+    """What the loader keeps of 8-bit texels: float16 (11 significant bits; the sRGB decode happens
+    before the rounding), so the reference carries the same stored values."""
+    return np.asarray(sample, np.float32).astype(np.float16).astype(np.float64)
+
+
 def material(extensions):
     return gt.Material(pbrMetallicRoughness=gt.PbrMetallicRoughness(
         baseColorFactor=[.35, .25, .15, 1.], metallicFactor=.25, roughnessFactor=.4),
@@ -54,7 +60,7 @@ def render(builder, tmp_path, name, lighting='directional', tangent=(1, 0, 0, -1
     plane(builder, tangent)
     path = builder.save(tmp_path/(name+'.gltf'))
     light = f'<light id="key" type="{lighting}" intensity="2" yaw="25" pitch="-15"/>'
-    r = doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="m"/>', h=120,
+    r = doc(tmp_path, '<object3D id="o" primitive="mesh" mesh="m" x="80" y="60" scaleX="0.01" scaleY="0.01" scaleZ="0.01"/>', h=120,
             assets=f'<mesh id="m" src="{path}" format="gltf"/>', lights=light, name=name+'.xml')
     return frame(r)
 
@@ -79,7 +85,8 @@ def test_imported_extension_image_channels_and_metadata(tmp_path, case):
         expected[..., :3] = srgb_to_linear(expected[..., :3])
     if key in ('clearcoatMap', 'clearcoatRoughnessMap'):
         expected = np.repeat(expected[..., channel:channel+1], 4, -1)
-    np.testing.assert_allclose(spec.textures[key], expected, atol=1e-7)
+    assert spec.textures[key].dtype == np.float16
+    np.testing.assert_allclose(spec.textures[key], held(expected), atol=1e-7)
     assert spec.params['mapUV'][key] == dict(texCoord=2, offset=(.17, -.3), scale=(2., 3.), rotation=.7)
     assert spec.params['mapSamplers'][key] == dict(wrapS=33648, wrapT=33071, minFilter=9985, magFilter=9728)
     if field == 'clearcoatNormalTexture':
@@ -136,6 +143,7 @@ def test_constant_extension_texture_matches_factor(tmp_path, case, lighting):
     texel = PIXEL.astype(float)/255
     if srgb:
         texel[:3] = srgb_to_linear(texel[:3])
+    texel = held(texel)
     if field == 'iridescenceThicknessTexture':
         expected[extension]['iridescenceThicknessMaximum'] = 650.+(150.-650.)*texel[1]
     elif field == 'anisotropyTexture':
@@ -286,7 +294,7 @@ def test_clearcoat_normal_uses_its_scale_and_geometry_frame(tmp_path, monkeypatc
         with monkeypatch.context() as patch:
             patch.setattr(resources, 'main', program)
             actual = render(b, tmp_path, 'normal_input', tangent=tangent)
-        normal = texel[:3]/255.*2-1
+        normal = held(texel[:3]/255.)*2-1
         normal[:2] *= scale
         t = np.array(tangent[:3])
         normal = t*normal[0]+np.cross([0, 0, 1], t)*tangent[3]*normal[1]+np.array([0, 0, normal[2]])
@@ -313,6 +321,7 @@ def test_all_extension_maps_coexist_with_core_texture_stack(tmp_path):
         sample = pixel/255.
         if srgb:
             sample[:3] = srgb_to_linear(sample[:3])
+        sample = held(sample)
         texture = actual.image_png(np.broadcast_to(pixel, (3+i, 5+i, 4)).copy())
         info = {'index': texture}
         if field == 'clearcoatNormalTexture':

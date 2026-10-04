@@ -41,9 +41,9 @@ def renderer(path, attrs='', object_attrs='', lighting='<light id="l" type="dire
     scene.write_text(f'''<scene version="1.1">
       <project width="80" height="80" fps="24" duration="2"/>
       <materials><material id="m" materialX="{path}" {attrs}>{material_animation}</material></materials>
-      <composition><camera id="c" z="200" projection="orthographic" orthoHeight="80"/>
+      <composition><camera id="c" x="40" y="40" z="-200" projection="orthographic" orthoHeight="80"/>
       {under}
-      <object3D id="o" primitive="plane" width="64" height="64" material="m" {object_attrs}/>
+      <object3D id="o" primitive="plane" x="40" y="40" width="64" height="64" material="m" {object_attrs}/>
       </composition><lights>{lighting}</lights></scene>''')
     return Renderer.open(str(scene), strict=True)
 
@@ -153,7 +153,7 @@ def test_nearest_opacity_border_matches_main_and_shadow_depth(tmp_path, coordina
                       texture(tmp_path, np.ones((4, 4, 1)), kind='float', extra=extra))
     control = material(tmp_path, 'gltf_pbr', inputs+inp('alpha', 'float', alpha), name='control')
     lights = '<light id="l" type="directional" yaw="20" castShadow="true" shadowMapSize="128"/>'
-    back = '<object3D id="back" primitive="plane" width="80" height="80" z="-30"/>'
+    back = '<object3D id="back" primitive="plane" x="40" y="40" width="80" height="80" z="30"/>'
     a, b = [renderer(path, lighting=lights, under=back).rc.render_frame(0).px for path in (actual, control)]
     np.testing.assert_allclose(a, b, atol=3e-6)
 
@@ -276,8 +276,8 @@ def test_normalmap_retains_geometric_frame_and_vector_scale(tmp_path, scale, enc
     normal = np.array([[math.cos(angle), 0., math.sin(angle)], [0., 1., 0.],
                        [-math.sin(angle), 0., math.cos(angle)]]) @ normal
     control = material(tmp_path, inputs=inp('normal', 'vector3', normal), name='control')
-    actual = renderer(path, object_attrs='rotationY="25"').rc.render_frame(0).px[40, 40]
-    expected = renderer(control, object_attrs='rotationY="25"').rc.render_frame(0).px[40, 40]
+    actual = renderer(path, object_attrs='rotationY="-25"').rc.render_frame(0).px[40, 40]
+    expected = renderer(control, object_attrs='rotationY="-25"').rc.render_frame(0).px[40, 40]
     np.testing.assert_allclose(actual, expected, atol=3e-6)
 
 
@@ -371,9 +371,9 @@ def test_preview_surface_uses_geometry_frame_for_its_normal_graph(tmp_path, via_
         normal = np.array([[c, 0., s], [0., 1., 0.], [-s, 0., c]]) @ normal
     path = material(tmp_path, 'UsdPreviewSurface', f'<input name="normal" type="vector3" nodename="{source}"/>', nodes)
     control = material(tmp_path, 'UsdPreviewSurface', inp('normal', 'vector3', normal), name='control')
-    expected = renderer(control, object_attrs='rotationY="25"').rc.render_frame(0).px[40, 40]
+    expected = renderer(control, object_attrs='rotationY="-25"').rc.render_frame(0).px[40, 40]
     assert expected[:3].sum() > .01
-    np.testing.assert_allclose(renderer(path, object_attrs='rotationY="25"').rc.render_frame(0).px[40, 40], expected, atol=3e-6)
+    np.testing.assert_allclose(renderer(path, object_attrs='rotationY="-25"').rc.render_frame(0).px[40, 40], expected, atol=3e-6)
 
 
 @pytest.mark.parametrize('handedness', [-1., 1.])
@@ -395,7 +395,7 @@ def test_normalmap_preserves_authored_mesh_tangent(tmp_path, handedness):
     nodes += '<normalmap name="normal" type="vector3"><input name="in" type="vector3" nodename="image"/></normalmap>'
     path = material(tmp_path, inputs='<input name="normal" type="vector3" nodename="normal"/>', nodes=nodes)
     lights = '<light id="l" type="directional" yaw="-35" pitch="20"/>'
-    body = '<camera id="c" z="200" projection="orthographic" orthoHeight="80"/><object3D id="o" primitive="mesh" mesh="mesh" material="m"/>'
+    body = '<camera id="c" x="40" y="40" z="-200" projection="orthographic" orthoHeight="80"/><object3D id="o" primitive="mesh" x="40" y="40" scaleX="0.01" scaleY="0.01" scaleZ="0.01" mesh="mesh" material="m"/>'
     actual = doc(tmp_path, body, w=80, h=80, materials=f'<material id="m" materialX="{path}"/>',
                  assets=f'<mesh id="mesh" src="{mesh}" format="gltf"/>', lights=lights).rc.render_frame(0).px[40, 40]
     normal = np.array([.4*handedness, .2, .8]); normal /= np.linalg.norm(normal)

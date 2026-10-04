@@ -154,7 +154,7 @@ def test_translucent_surface_composites_against_an_opaque_mesh(tmp_path, mode, o
         set_input(s, 'opacityMode', mode)
         set_input(s, 'opacity', opacity)
     empty = scene.renderer(lights=FRONT).rc.render_frame(0).px[40, 40]
-    back = '<object3D id="back" primitive="plane" width="80" height="80" z="-10" material="red"/>'
+    back = '<object3D id="back" primitive="plane" x="40" y="40" width="80" height="80" z="10" material="red"/>'
     actual = control.renderer(lights=FRONT, under=back).rc.render_frame(0).px[40, 40]
     expected = empty+np.array([1., 0., 0., 1.])*(1-empty[3])
     np.testing.assert_allclose(actual, expected, atol=2e-6)
@@ -196,7 +196,7 @@ def test_translucent_opacity_map_also_masks_shadow_depth(tmp_path):
         s.connect('opacity', s.texture('Opacity', pixels, s.reader()), 'r')
         set_input(s, 'opacityMode', 'presence')
     set_input(control, 'opacityThreshold', .5)
-    back = '<object3D id="back" primitive="plane" width="80" height="80" z="-10"/>'
+    back = '<object3D id="back" primitive="plane" x="40" y="40" width="80" height="80" z="10"/>'
     light = '<light id="l" type="directional" yaw="20" castShadow="true" shadowMapSize="128"/>'
     a, b = [s.renderer(lights=light, under=back).rc.render_frame(0).px for s in [actual, control]]
     # Compare fully transparent/opaque regions, excluding the filtered alpha edge.
@@ -274,6 +274,6 @@ def test_translucent_double_sided_back_faces_match_front_faces(tmp_path, mode):
         set_input(s, 'opacity', .4)
         set_input(s, 'opacityMode', mode)
         set_input(s, 'emissiveColor', (.1, .2, .3))
-    back = '<object3D id="back" primitive="plane" width="80" height="80" z="-10" material="red"/>'
+    back = '<object3D id="back" primitive="plane" x="40" y="40" width="80" height="80" z="10" material="red"/>'
     np.testing.assert_allclose(scene.renderer(under=back).rc.render_frame(0).px,
                                control.renderer(under=back).rc.render_frame(0).px, atol=2e-6)

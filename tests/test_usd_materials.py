@@ -99,9 +99,9 @@ class Scene:
           <project width="80" height="80" fps="24" duration="2"/>
           <assets><mesh id="m" src="{self.path}" format="usd"/></assets>
           <materials><material id="red" baseColor="#FF0000" unlit="true"/></materials>
-          <composition><camera id="c" z="200" projection="orthographic" orthoHeight="80"/>
+          <composition><camera id="c" x="40" y="40" z="-200" projection="orthographic" orthoHeight="80"/>
             {under}
-            <object3D id="o" primitive="mesh" mesh="m" {'animationClip="default"' if animation else ''}/>
+            <object3D id="o" x="40" y="40" scaleX="0.01" scaleY="0.01" scaleZ="0.01" primitive="mesh" mesh="m" {'animationClip="default"' if animation else ''}/>
             {extra}</composition>
           <lights>{lights}</lights>
         </scene>''')
@@ -133,6 +133,12 @@ def test_scale_bias_and_channel_outputs(tmp_path, name, output, key, channel):
         np.testing.assert_allclose(material.textures[key][..., 0], expected[..., channel], atol=1e-7)
 
 
+def held(value):
+    """What the loader keeps of an 8-bit texel: float16 (11 significant bits, fbefd04). The sRGB decode
+    comes from the exact code table before the rounding, so the reference is rounded the same way."""
+    return np.asarray(value, np.float32).astype(np.float16).astype(np.float64)
+
+
 @pytest.mark.parametrize('mode,space,expected', [
     ('RGB', 'auto', .2158605), ('RGB', 'raw', 128/255), ('RGB', 'sRGB', .2158605),
     ('L', 'auto', 128/255), ('L', 'sRGB', .2158605), ('LA', 'auto', 128/255),
@@ -144,7 +150,7 @@ def test_texture_color_space_is_independent_of_surface_input(tmp_path, mode, spa
     tex = scene.texture('Tex', np.ones((2, 2, 4)), space=space)
     tex.GetInput('file').Set(str(path))
     scene.connect('roughness', tex, 'g')
-    np.testing.assert_allclose(scene.model().pose(None, 0)[0].material.textures['roughnessMap'][..., 0], expected, atol=1e-7)
+    np.testing.assert_allclose(scene.model().pose(None, 0)[0].material.textures['roughnessMap'][..., 0], held(expected), atol=1e-7)
 
 
 def pattern():
@@ -259,7 +265,7 @@ def test_opacity_map_reaches_depth_pass_without_using_diffuse_texture_alpha(tmp_
     scene.connect('diffuseColor', diffuse)
     scene.connect('opacity', opacity, 'a')
     scene.pbr.CreateInput('opacityThreshold', Sdf.ValueTypeNames.Float).Set(.5)
-    back = '<object3D id="back" primitive="plane" width="64" height="64" z="-10" material="red"/>'
+    back = '<object3D id="back" primitive="plane" x="40" y="40" width="64" height="64" z="10" material="red"/>'
     rendered = scene.renderer(extra=back).rc.render_frame(0).px
     np.testing.assert_allclose(rendered[40, 20], [1., 0., 0., 1.], atol=1e-6)
     assert rendered[40, 60, 1] > rendered[40, 60, 0]
@@ -417,7 +423,7 @@ def test_auto_color_space_and_wrap_modes_from_png_metadata(tmp_path, gamma, expe
     tex.GetInput('file').Set(str(path))
     scene.connect('diffuseColor', tex)
     spec = scene.model().pose(None, 0)[0].material
-    np.testing.assert_allclose(spec.textures['baseColorMap'][..., :3], expected, atol=1e-7)
+    np.testing.assert_allclose(spec.textures['baseColorMap'][..., :3], held(expected), atol=1e-7)
     assert spec.params['mapSamplers']['baseColorMap']['wrapS'] == 33648
     assert spec.params['mapSamplers']['baseColorMap']['wrapT'] == 33071
 
@@ -432,7 +438,7 @@ def test_auto_recognizes_embedded_srgb_profile_on_grayscale_texture(tmp_path):
     tex.GetInput('file').Set(str(path))
     scene.connect('roughness', tex, 'r')
     spec = scene.model().pose(None, 0)[0].material
-    np.testing.assert_allclose(spec.textures['roughnessMap'][..., 0], .2158605, atol=1e-7)
+    np.testing.assert_allclose(spec.textures['roughnessMap'][..., 0], held(.2158605), atol=1e-7)
 
 
 def test_animated_constant_coordinates_use_start_value_and_reuse_image_storage(tmp_path):

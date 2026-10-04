@@ -11,7 +11,7 @@ from test_3d_render import doc, frame, FLOOR, WHITE, MEDIA
 
 pytestmark = pytest.mark.skipif(not gl.available(), reason='no GL')
 ENV = f'{MEDIA}/env_sky.npy'
-CAMERA = '<camera id="c" z="500"/>'
+CAMERA = '<camera id="c" z="-500"/>'
 
 
 def image(tmp_path, lights, name, *, body=None, material=WHITE):
@@ -85,8 +85,10 @@ def test_multiple_visible_domes_preserve_transmission_and_alpha(tmp_path):
 def test_transparent_instances_do_not_write_occluding_depth(tmp_path):
     material = '<material id="w" baseColor="#FF000080" alphaMode="blend" unlit="true"/>'
     # Front instance is submitted before the rear one. Both must contribute.
-    body = CAMERA+('<object3D id="o" primitive="plane" width="40" height="40" material="w" instances="2">'
-                   '<expression property="z">-10*index</expression></object3D>')
+    # Scene space: origin top-left, +z away from the viewer; the 96x64 frame centre is (48, 32).
+    body = '<camera id="c" x="48" y="32" z="-500"/>'+(
+        '<object3D id="o" x="48" y="32" primitive="plane" width="40" height="40" material="w" instances="2">'
+        '<expression property="z">10*index</expression></object3D>')
     actual = image(tmp_path, '<light id="l" type="ambient"/>', 'overlap.xml', body=body, material=material)
     alpha = 1-(1-128/255)**2
     np.testing.assert_allclose(actual[32, 48], [alpha, 0., 0., alpha], atol=2e-6)

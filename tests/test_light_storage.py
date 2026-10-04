@@ -23,7 +23,7 @@ def image(tmp_path, lights, name, *, body=None, material=WHITE):
 def test_all_direct_light_types_beyond_old_counts(tmp_path, kind, shadow):
     count = 19
     intensity = .1 if kind == 'directional' else 10
-    attrs = f'type="{kind}" y="500" pitch="-80" castShadow="{str(shadow).lower()}" shadowMapSize="64"'
+    attrs = f'type="{kind}" x="100" y="-440" pitch="-80" castShadow="{str(shadow).lower()}" shadowMapSize="64"'
     many = ''.join(f'<light id="l{i}" {attrs} intensity="{intensity}"/>' for i in range(count))
     expected = image(tmp_path, f'<light id="l" {attrs} intensity="{count*intensity}"/>', 'control.xml')
     actual = image(tmp_path, many, 'many.xml')
@@ -46,7 +46,7 @@ def test_light_records_cross_texture_rows(tmp_path, count):
     '<material id="w" baseColor="#A0C0F0FF" transmission=".8" thickness="10" roughness=".1"/>',
 ])
 def test_many_lights_preserve_transparency_and_transmission(tmp_path, material):
-    body = '<object3D id="s" primitive="sphere" radius="35" material="w"/>'
+    body = '<object3D id="s" x="48" y="32" primitive="sphere" radius="35" material="w"/>'
     many = ''.join(f'<light id="l{i}" type="directional" pitch="-30" intensity=".1"/>' for i in range(23))
     expected = image(tmp_path, '<light id="l" type="directional" pitch="-30" intensity="2.3"/>', 'control.xml', body=body, material=material)
     actual = image(tmp_path, many, 'many.xml', body=body, material=material)
@@ -65,7 +65,7 @@ def test_mixed_lights_and_ies_match_sum_of_individual_renders(tmp_path):
         color = ['#FF8040FF', '#40FF80FF', '#8040FFFF'][i % 3]
         ies = f'ies="{profile}"' if i % 2 else ''
         flags = 'affectsDiffuse="false"' if i % 4 == 0 else 'affectsSpecular="false"' if i % 4 == 1 else ''
-        lights.append(f'<light id="l{i}" type="{kind}" x="{25*i-300}" y="500" pitch="-75" yaw="{i*3}" '
+        lights.append(f'<light id="l{i}" type="{kind}" x="{25*i-200}" y="-440" pitch="-75" yaw="{i*3}" '
                       f'intensity="{intensity}" color="{color}" range="1500" falloff="1.7" {ies} {flags}/>')
     expected = sum(image(tmp_path, light, f'one{i}.xml')[..., :3] for i, light in enumerate(lights))
     actual = image(tmp_path, ''.join(lights), 'all.xml')[..., :3]
@@ -98,7 +98,7 @@ def test_mixed_shadow_sizes_and_multiple_array_pages(tmp_path, monkeypatch):
         intensity = .15 if kind == 'directional' else 12
         size = [24, 32, 48, 64][i % 4]
         color = ['#FF4020FF', '#20FF40FF', '#4020FFFF'][i % 3]
-        lights.append(f'<light id="l{i}" type="{kind}" x="{i*30-180}" y="500" pitch="-75" '
+        lights.append(f'<light id="l{i}" type="{kind}" x="{i*30-80}" y="-440" pitch="-75" '
                       f'color="{color}" intensity="{intensity}" castShadow="true" '
                       f'shadowMapSize="{size}" shadowSoftness=".1"/>')
     expected = sum(image(tmp_path, light, f'one{i}.xml')[..., :3] for i, light in enumerate(lights))
@@ -119,17 +119,17 @@ def test_dome_shadow_with_many_direct_shadows(tmp_path):
 
 @pytest.mark.skipif(not gl.available(), reason='no GL')
 def test_animated_last_light_and_shadow_survive_backward_seeks(tmp_path):
-    values = {'type': ['point', 'spot', 'directional'], 'x': ['-100', '30', '90'],
+    values = {'type': ['point', 'spot', 'directional'], 'x': ['0', '130', '190'],
               'color': ['#FF4000FF', '#00FF40FF', '#4000FFFF'], 'castShadow': ['true', 'false', 'true'],
               'shadowMapSize': ['64', '96', '48']}
     keys = ''.join(f'<animate property="{name}">'+''.join(f'<key time="{i}" value="{value}"/>' for i, value in enumerate(series))+'</animate>'
                    for name, series in values.items())
     prefix = ''.join(f'<light id="l{i}" type="directional" intensity="0"/>' for i in range(23))
-    lights = prefix+f'<light id="last" type="point" y="500" pitch="-80" intensity="30">{keys}</light>'
+    lights = prefix+f'<light id="last" type="point" x="100" y="-440" pitch="-80" intensity="30">{keys}</light>'
     scene = doc(tmp_path, FLOOR.format(cs=''), materials=WHITE, lights=lights, w=96, h=64)
     for t in [0, 1, 2, 1, 0]:
         attrs = ' '.join(f'{name}="{series[t]}"' for name, series in values.items())
-        expected = image(tmp_path, f'<light id="l" {attrs} y="500" pitch="-80" intensity="30"/>', f'control{t}.xml')
+        expected = image(tmp_path, f'<light id="l" {attrs} y="-440" pitch="-80" intensity="30"/>', f'control{t}.xml')
         assert expected[..., :3].max() > .01
         np.testing.assert_allclose(frame(scene, t), expected, atol=3e-6)
 

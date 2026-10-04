@@ -273,7 +273,7 @@ def test_every_material_slot_retains_authored_levels(tmp_path, decoder, slot):
 @pytest.mark.skipif(not gl.available(), reason='no GL')
 @pytest.mark.parametrize('slot', SLOTS, ids=[s[1] for s in SLOTS])
 @pytest.mark.parametrize('minified', [False, True])
-def test_every_material_slot_renders_authored_mips(tmp_path, decoder, slot, minified):
+def test_every_material_slot_renders_authored_mips(tmp_path, decoder, slot, minified, float32_png):
     source = name(CODECS[SLOTS.index(slot) % 3], slot[3])
     a, b = Builder(), Builder()
     ia = texture(a, source)
@@ -284,6 +284,16 @@ def test_every_material_slot_renders_authored_mips(tmp_path, decoder, slot, mini
     actual, expected = render(a, tmp_path, 'ktx'), render(b, tmp_path, 'png')
     assert expected[..., :3].max() > .01
     np.testing.assert_allclose(actual, expected, atol=8e-6)
+
+
+@pytest.fixture
+def float32_png(monkeypatch):
+    """The PNG controls are 8-bit sources, which the loader keeps as float16 (ae9a8db, fbefd04) while the KTX
+    levels keep the authored float32. Decode the controls in float32 so that both are compared at the
+    original tolerance, which float16 quantisation (about 2**-12 per texel) would otherwise exceed."""
+    from scenerender.three import loaders
+    decode = loaders.decode_image
+    monkeypatch.setattr(loaders, 'decode_image', lambda src, srgb, half=True: decode(src, srgb, False))
 
 
 def filtered_levels(levels, scale, lod, sampler, channel=0):
@@ -358,7 +368,7 @@ def test_animated_materials_retain_mips_through_seeks_and_eviction(tmp_path, dec
 
 @pytest.mark.skipif(not gl.available(), reason='no GL')
 @pytest.mark.parametrize('codec', CODECS)
-def test_basis_alpha_mips_match_animated_color_and_shadow_controls(tmp_path, decoder, codec):
+def test_basis_alpha_mips_match_animated_color_and_shadow_controls(tmp_path, decoder, codec, float32_png):
     from test_3d_render import doc, frame
     from test_gltf_animation_pointer import channel
     b = Builder()
@@ -369,10 +379,10 @@ def test_basis_alpha_mips_match_animated_color_and_shadow_controls(tmp_path, dec
     plane(b)
     channel(b, '/materials/0/alphaCutoff', [.25, .85], times=(0., 2.))
     path = b.save(tmp_path/'alpha.gltf')
-    under = '<object3D id="under" primitive="plane" width="150" height="110" z="-15" material="white"/>'
+    under = '<object3D id="under" primitive="plane" x="80" y="60" width="150" height="110" z="15" material="white"/>'
     materials = '<material id="white" baseColor="#FFFFFFFF" roughness=".8"/>'
-    lights = '<light id="key" type="directional" intensity="2" yaw="25" pitch="-15" shadow="true" shadowMapSize="128"/>'
-    actual = doc(tmp_path, under+'<object3D id="o" primitive="mesh" mesh="m" animationClip="clip"/>', h=120,
+    lights = '<light id="key" type="directional" intensity="2" yaw="25" pitch="-15" castShadow="true" shadowMapSize="128"/>'
+    actual = doc(tmp_path, under+'<object3D id="o" x="80" y="60" scaleX="0.01" scaleY="0.01" scaleZ="0.01" primitive="mesh" mesh="m" animationClip="clip"/>', h=120,
         assets=f'<mesh id="m" src="{path}" format="gltf"/>', materials=materials, lights=lights)
     observations = []
     for i, time in enumerate((.2, 1.8, .7, .2)):
@@ -383,7 +393,7 @@ def test_basis_alpha_mips_match_animated_color_and_shadow_controls(tmp_path, dec
         control.g.materials[0].alphaCutoff = .25+.6*time/2
         plane(control)
         src = control.save(tmp_path/f'alpha-control-{i}.gltf')
-        expected = doc(tmp_path, under+'<object3D id="o" primitive="mesh" mesh="m"/>', h=120,
+        expected = doc(tmp_path, under+'<object3D id="o" x="80" y="60" scaleX="0.01" scaleY="0.01" scaleZ="0.01" primitive="mesh" mesh="m"/>', h=120,
             assets=f'<mesh id="m" src="{src}" format="gltf"/>', materials=materials, lights=lights, name=f'control-{i}.xml')
         observations.append(frame(actual, time))
         np.testing.assert_allclose(observations[-1], frame(expected), atol=8e-6)

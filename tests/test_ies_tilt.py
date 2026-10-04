@@ -65,12 +65,12 @@ def test_animated_tilt_matches_explicit_intensity_control(tmp_path):
     if not gl.available():
         pytest.skip('no GL')
     p = profile(tmp_path, external=True)
-    light = f'<light id="l" type="point" y="500" intensity="200" ies="{p}">' \
+    light = f'<light id="l" type="point" x="100" y="-440" intensity="200" ies="{p}">' \
             '<animate property="pitch"><key time="0" value="-90"/><key time="1" value="0"/></animate></light>'
     r = doc(tmp_path, FLOOR.format(cs='castShadow="false"'), materials=WHITE, lights=light, w=120, h=72)
     for t, factor in ((0., 1.), (.5, .75), (1., .5), (.5, .75)):
         control = doc(tmp_path, FLOOR.format(cs='castShadow="false"'), materials=WHITE,
-                      lights=f'<light id="l" type="point" y="500" intensity="{200*factor}"/>',
+                      lights=f'<light id="l" type="point" x="100" y="-440" intensity="{200*factor}"/>',
                       w=120, h=72, name='control.xml')
         expected = frame(control, t)
         assert expected[..., :3].max() > .01

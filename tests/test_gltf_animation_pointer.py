@@ -400,7 +400,7 @@ def test_animated_mask_cutoff_matches_color_and_shadow_controls(tmp_path):
     path = b.save(tmp_path/'mask.gltf')
     under = '<object3D id="under" primitive="plane" width="150" height="110" z="-15" material="white"/>'
     materials = '<material id="white" baseColor="#FFFFFFFF" roughness=".8"/>'
-    lights = '<light id="key" type="directional" intensity="2" yaw="25" pitch="-15" shadow="true" shadowMapSize="128"/>'
+    lights = '<light id="key" type="directional" intensity="2" yaw="25" pitch="-15" castShadow="true" shadowMapSize="128"/>'
     actual = doc(tmp_path, under+'<object3D id="o" primitive="mesh" mesh="m" animationClip="clip"/>', h=120,
                  assets=f'<mesh id="m" src="{path}" format="gltf"/>', materials=materials, lights=lights)
     observed = []
