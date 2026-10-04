@@ -115,9 +115,14 @@ class PreviewMaterial:
                 width, height, rows, info = png.Reader(bytes=data).asDirect()
                 values = np.asarray(list(rows), np.uint16).reshape(height, width, info['planes'])
                 pixels = _rgba(values, alpha=info['alpha'], maximum=65535)
+                decoded = False
             else:
-                pixels = decode_image(data, False)
-            if space.lower() == 'srgb' or (space == 'auto' and automatic_srgb):
+                # 8-bit sources decode to float16 (decode_image): the sRGB transfer function then comes from
+                # its exact code table, not from srgb_to_linear, which would compute in float16 arithmetic.
+                linearise = space.lower() == 'srgb' or (space == 'auto' and automatic_srgb)
+                pixels = decode_image(data, linearise)
+                decoded = True
+            if not decoded and (space.lower() == 'srgb' or (space == 'auto' and automatic_srgb)):
                 pixels = pixels.copy()
                 pixels[..., :3] = srgb_to_linear(pixels[..., :3])
             result = pixels, metadata

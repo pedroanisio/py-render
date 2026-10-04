@@ -40,7 +40,9 @@ def _dome_visible(rc, t: float | None = None) -> bool:
     if t is None:
         return any(L.get("type") == "dome" and parse_bool(L.get("environmentVisible")) for L in L3.light_elements(rc))
     ctx = Ctx(t=t, comp_t=t)
-    return any(L.get("type") == "dome" and rc.ev.bool(L, "environmentVisible", ctx, False) for L in L3.light_elements(rc))
+    # `type` may be animated (a light that becomes a dome), so it is evaluated like environmentVisible.
+    return any(rc.ev.str(L, "type", ctx, "point") == "dome" and rc.ev.bool(L, "environmentVisible", ctx, False)
+               for L in L3.light_elements(rc))
 
 
 @NODES.register("camera", level=FULL, note="films the 3D scene and 2.5D layers; its layer is the visible dome background")
