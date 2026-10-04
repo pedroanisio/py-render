@@ -1,0 +1,351 @@
+SCHEMA DELTA
+  A: schemas/rs-1.2.xsd + schemas/rs-1.2.sch
+  B: schemas/rs-1.3.xsd + schemas/rs-1.3.sch
+
+== XSD: global declarations ==
+  complexType: +13 -0
+    + craterType
+    + fractureType
+    + mediumType
+    + meshSequenceAssetType
+    + oceanType
+    + oceanWaveType
+    + particles3DType
+    + pyroImpulseType
+    + pyroSourceType
+    + pyroType
+    + volumeAssetType
+    + waterImpulseType
+    + whitewaterType
+  simpleType: +7 -0
+    + meshSequenceInterpolationType
+    + volumeChannelType
+    + volumeFrameIndexType
+    + volumeInterpolationType
+    + volumeMissingFrameType
+    + volumeSequencePatternType
+    + volumeSourceType
+  attributeGroup: +1 -0
+    + pyroShape
+  named complexType/group/attributeGroup with changed structure (3):
+    ~ complexType assetsType
+    ~ complexType object3DType
+    ~ group nodeChoice
+
+== XSD: element paths (A=13737, B=15531) ==
+  new element names (13): crater, fracture, medium, meshSequence, ocean, particles3D, pyro, pyroImpulse, pyroSource, volume, waterImpulse, wave, whitewater
+  gone element names (0): 
+  added paths: 1794 total (the same group/type is reachable by many paths); 194 subtree roots:
+    + scene/assets/meshSequence
+    + scene/assets/volume
+    + scene/composition/group/object3D/crater
+    + scene/composition/group/object3D/fracture
+    + scene/composition/group/object3D/medium
+    + scene/composition/group/object3D/pyro
+    + scene/composition/group/ocean
+    + scene/composition/group/particles3D
+    + scene/composition/group/repeat/object3D/crater
+    + scene/composition/group/repeat/object3D/fracture
+    + scene/composition/group/repeat/object3D/medium
+    + scene/composition/group/repeat/object3D/pyro
+    + scene/composition/group/repeat/ocean
+    + scene/composition/group/repeat/particles3D
+    + scene/composition/group/repeat/sequence/object3D/crater
+    + scene/composition/group/repeat/sequence/object3D/fracture
+    + scene/composition/group/repeat/sequence/object3D/medium
+    + scene/composition/group/repeat/sequence/object3D/pyro
+    + scene/composition/group/repeat/sequence/ocean
+    + scene/composition/group/repeat/sequence/particles3D
+    + scene/composition/group/sequence/object3D/crater
+    + scene/composition/group/sequence/object3D/fracture
+    + scene/composition/group/sequence/object3D/medium
+    + scene/composition/group/sequence/object3D/pyro
+    + scene/composition/group/sequence/ocean
+    + scene/composition/group/sequence/particles3D
+    + scene/composition/group/sequence/repeat/object3D/crater
+    + scene/composition/group/sequence/repeat/object3D/fracture
+    + scene/composition/group/sequence/repeat/object3D/medium
+    + scene/composition/group/sequence/repeat/object3D/pyro
+    + scene/composition/group/sequence/repeat/ocean
+    + scene/composition/group/sequence/repeat/particles3D
+    + scene/composition/object3D/crater
+    + scene/composition/object3D/fracture
+    + scene/composition/object3D/medium
+    + scene/composition/object3D/pyro
+    + scene/composition/ocean
+    + scene/composition/particles3D
+    + scene/composition/repeat/group/object3D/crater
+    + scene/composition/repeat/group/object3D/fracture
+    + scene/composition/repeat/group/object3D/medium
+    + scene/composition/repeat/group/object3D/pyro
+    + scene/composition/repeat/group/ocean
+    + scene/composition/repeat/group/particles3D
+    + scene/composition/repeat/group/sequence/object3D/crater
+    + scene/composition/repeat/group/sequence/object3D/fracture
+    + scene/composition/repeat/group/sequence/object3D/medium
+    + scene/composition/repeat/group/sequence/object3D/pyro
+    + scene/composition/repeat/group/sequence/ocean
+    + scene/composition/repeat/group/sequence/particles3D
+    + scene/composition/repeat/object3D/crater
+    + scene/composition/repeat/object3D/fracture
+    + scene/composition/repeat/object3D/medium
+    + scene/composition/repeat/object3D/pyro
+    + scene/composition/repeat/ocean
+    + scene/composition/repeat/particles3D
+    + scene/composition/repeat/sequence/group/object3D/crater
+    + scene/composition/repeat/sequence/group/object3D/fracture
+    + scene/composition/repeat/sequence/group/object3D/medium
+    + scene/composition/repeat/sequence/group/object3D/pyro
+    + scene/composition/repeat/sequence/group/ocean
+    + scene/composition/repeat/sequence/group/particles3D
+    + scene/composition/repeat/sequence/object3D/crater
+    + scene/composition/repeat/sequence/object3D/fracture
+    + scene/composition/repeat/sequence/object3D/medium
+    + scene/composition/repeat/sequence/object3D/pyro
+    + scene/composition/repeat/sequence/ocean
+    + scene/composition/repeat/sequence/particles3D
+    + scene/composition/sequence/group/object3D/crater
+    + scene/composition/sequence/group/object3D/fracture
+    + scene/composition/sequence/group/object3D/medium
+    + scene/composition/sequence/group/object3D/pyro
+    + scene/composition/sequence/group/ocean
+    + scene/composition/sequence/group/particles3D
+    + scene/composition/sequence/group/repeat/object3D/crater
+    + scene/composition/sequence/group/repeat/object3D/fracture
+    + scene/composition/sequence/group/repeat/object3D/medium
+    + scene/composition/sequence/group/repeat/object3D/pyro
+    + scene/composition/sequence/group/repeat/ocean
+    + scene/composition/sequence/group/repeat/particles3D
+    + scene/composition/sequence/object3D/crater
+    + scene/composition/sequence/object3D/fracture
+    + scene/composition/sequence/object3D/medium
+    + scene/composition/sequence/object3D/pyro
+    + scene/composition/sequence/ocean
+    + scene/composition/sequence/particles3D
+    + scene/composition/sequence/repeat/group/object3D/crater
+    + scene/composition/sequence/repeat/group/object3D/fracture
+    + scene/composition/sequence/repeat/group/object3D/medium
+    + scene/composition/sequence/repeat/group/object3D/pyro
+    + scene/composition/sequence/repeat/group/ocean
+    + scene/composition/sequence/repeat/group/particles3D
+    + scene/composition/sequence/repeat/object3D/crater
+    + scene/composition/sequence/repeat/object3D/fracture
+    + scene/composition/sequence/repeat/object3D/medium
+    + scene/composition/sequence/repeat/object3D/pyro
+    + scene/composition/sequence/repeat/ocean
+    + scene/composition/sequence/repeat/particles3D
+    + scene/symbols/symbol/group/object3D/crater
+    + scene/symbols/symbol/group/object3D/fracture
+    + scene/symbols/symbol/group/object3D/medium
+    + scene/symbols/symbol/group/object3D/pyro
+    + scene/symbols/symbol/group/ocean
+    + scene/symbols/symbol/group/particles3D
+    + scene/symbols/symbol/group/repeat/object3D/crater
+    + scene/symbols/symbol/group/repeat/object3D/fracture
+    + scene/symbols/symbol/group/repeat/object3D/medium
+    + scene/symbols/symbol/group/repeat/object3D/pyro
+    + scene/symbols/symbol/group/repeat/ocean
+    + scene/symbols/symbol/group/repeat/particles3D
+    + scene/symbols/symbol/group/repeat/sequence/object3D/crater
+    + scene/symbols/symbol/group/repeat/sequence/object3D/fracture
+    + scene/symbols/symbol/group/repeat/sequence/object3D/medium
+    + scene/symbols/symbol/group/repeat/sequence/object3D/pyro
+    + scene/symbols/symbol/group/repeat/sequence/ocean
+    + scene/symbols/symbol/group/repeat/sequence/particles3D
+    + scene/symbols/symbol/group/sequence/object3D/crater
+    + scene/symbols/symbol/group/sequence/object3D/fracture
+    + scene/symbols/symbol/group/sequence/object3D/medium
+    + scene/symbols/symbol/group/sequence/object3D/pyro
+    + scene/symbols/symbol/group/sequence/ocean
+    + scene/symbols/symbol/group/sequence/particles3D
+    + scene/symbols/symbol/group/sequence/repeat/object3D/crater
+    + scene/symbols/symbol/group/sequence/repeat/object3D/fracture
+    + scene/symbols/symbol/group/sequence/repeat/object3D/medium
+    + scene/symbols/symbol/group/sequence/repeat/object3D/pyro
+    + scene/symbols/symbol/group/sequence/repeat/ocean
+    + scene/symbols/symbol/group/sequence/repeat/particles3D
+    + scene/symbols/symbol/object3D/crater
+    + scene/symbols/symbol/object3D/fracture
+    + scene/symbols/symbol/object3D/medium
+    + scene/symbols/symbol/object3D/pyro
+    + scene/symbols/symbol/ocean
+    + scene/symbols/symbol/particles3D
+    + scene/symbols/symbol/repeat/group/object3D/crater
+    + scene/symbols/symbol/repeat/group/object3D/fracture
+    + scene/symbols/symbol/repeat/group/object3D/medium
+    + scene/symbols/symbol/repeat/group/object3D/pyro
+    + scene/symbols/symbol/repeat/group/ocean
+    + scene/symbols/symbol/repeat/group/particles3D
+    + scene/symbols/symbol/repeat/group/sequence/object3D/crater
+    + scene/symbols/symbol/repeat/group/sequence/object3D/fracture
+    + scene/symbols/symbol/repeat/group/sequence/object3D/medium
+    + scene/symbols/symbol/repeat/group/sequence/object3D/pyro
+    + scene/symbols/symbol/repeat/group/sequence/ocean
+    + scene/symbols/symbol/repeat/group/sequence/particles3D
+    + scene/symbols/symbol/repeat/object3D/crater
+    + scene/symbols/symbol/repeat/object3D/fracture
+    + scene/symbols/symbol/repeat/object3D/medium
+    + scene/symbols/symbol/repeat/object3D/pyro
+    + scene/symbols/symbol/repeat/ocean
+    + scene/symbols/symbol/repeat/particles3D
+    + scene/symbols/symbol/repeat/sequence/group/object3D/crater
+    + scene/symbols/symbol/repeat/sequence/group/object3D/fracture
+    + scene/symbols/symbol/repeat/sequence/group/object3D/medium
+    + scene/symbols/symbol/repeat/sequence/group/object3D/pyro
+    + scene/symbols/symbol/repeat/sequence/group/ocean
+    + scene/symbols/symbol/repeat/sequence/group/particles3D
+    + scene/symbols/symbol/repeat/sequence/object3D/crater
+    + scene/symbols/symbol/repeat/sequence/object3D/fracture
+    + scene/symbols/symbol/repeat/sequence/object3D/medium
+    + scene/symbols/symbol/repeat/sequence/object3D/pyro
+    + scene/symbols/symbol/repeat/sequence/ocean
+    + scene/symbols/symbol/repeat/sequence/particles3D
+    + scene/symbols/symbol/sequence/group/object3D/crater
+    + scene/symbols/symbol/sequence/group/object3D/fracture
+    + scene/symbols/symbol/sequence/group/object3D/medium
+    + scene/symbols/symbol/sequence/group/object3D/pyro
+    + scene/symbols/symbol/sequence/group/ocean
+    + scene/symbols/symbol/sequence/group/particles3D
+    + scene/symbols/symbol/sequence/group/repeat/object3D/crater
+    + scene/symbols/symbol/sequence/group/repeat/object3D/fracture
+    + scene/symbols/symbol/sequence/group/repeat/object3D/medium
+    + scene/symbols/symbol/sequence/group/repeat/object3D/pyro
+    + scene/symbols/symbol/sequence/group/repeat/ocean
+    + scene/symbols/symbol/sequence/group/repeat/particles3D
+    + scene/symbols/symbol/sequence/object3D/crater
+    + scene/symbols/symbol/sequence/object3D/fracture
+    + scene/symbols/symbol/sequence/object3D/medium
+    + scene/symbols/symbol/sequence/object3D/pyro
+    + scene/symbols/symbol/sequence/ocean
+    + scene/symbols/symbol/sequence/particles3D
+    + scene/symbols/symbol/sequence/repeat/group/object3D/crater
+    + scene/symbols/symbol/sequence/repeat/group/object3D/fracture
+    + scene/symbols/symbol/sequence/repeat/group/object3D/medium
+    + scene/symbols/symbol/sequence/repeat/group/object3D/pyro
+    + scene/symbols/symbol/sequence/repeat/group/ocean
+    + scene/symbols/symbol/sequence/repeat/group/particles3D
+    + scene/symbols/symbol/sequence/repeat/object3D/crater
+    + scene/symbols/symbol/sequence/repeat/object3D/fracture
+    + scene/symbols/symbol/sequence/repeat/object3D/medium
+    + scene/symbols/symbol/sequence/repeat/object3D/pyro
+    + scene/symbols/symbol/sequence/repeat/ocean
+    + scene/symbols/symbol/sequence/repeat/particles3D
+  removed (0):
+  moved (0):
+
+== XSD: content model changes (131) ==
+  (4 distinct changes; identical changes on several paths are shown once)
+  scene/assets
+    children_added: meshSequence, volume
+    old: choice{0,unbounded}(image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator, chart, audiogram, code, formula, generated, geo, tiles, map)
+    new: choice{0,unbounded}(image, video, imageSequence, audio, text, vector, mesh, meshSequence, volume, lottie, font, generator, chart, audiogram, code, formula, generated, geo, tiles, map)
+  scene/composition  (+1 more paths, same change)
+    children_added: ocean, particles3D
+    old: choice{0,unbounded}(group, sequence, layer, shape, object3D, camera, particleEmitter, flock, fluid, slime, erosion, instance, include, repeat, adjustment, transition, skeleton)
+    new: choice{0,unbounded}(group, sequence, layer, shape, object3D, camera, particleEmitter, particles3D, ocean, flock, fluid, slime, erosion, instance, include, repeat, adjustment, transition, skeleton)
+  scene/composition/group  (+95 more paths, same change)
+    children_added: ocean, particles3D
+    old: choice{0,unbounded}(choice(choice(animate, expression, motionPath, link), mask, transformConstraint), choice(group, sequence, layer, shape, object3D, camera, particleEmitter, flock, fluid, slime, erosion, instance, include, repeat, adjustment, transition, skeleton))
+    new: choice{0,unbounded}(choice(choice(animate, expression, motionPath, link), mask, transformConstraint), choice(group, sequence, layer, shape, object3D, camera, particleEmitter, particles3D, ocean, flock, fluid, slime, erosion, instance, include, repeat, adjustment, transition, skeleton))
+  scene/composition/group/object3D  (+31 more paths, same change)
+    children_added: crater, fracture, medium, pyro
+    old: choice{0,unbounded}(choice(animate, expression, motionPath, link), transformConstraint, blob, rigidBody)
+    new: choice{0,unbounded}(choice(animate, expression, motionPath, link), transformConstraint, blob, rigidBody, medium, pyro, crater, fracture)
+
+== XSD: attribute changes (33 elements) ==
+  scene
+    ~ @version : enumeration added: ['1.3']
+  scene/composition/group/object3D  (+31 more paths, same change)
+    + @planetRadius : positiveDecimal use=optional default=6378137
+    + @terrainMemoryMiB : (inline) use=optional default=128
+    + @terrainMissing : (inline) use=optional default=error
+    + @terrainTileSize : (inline) use=optional default=256
+    + @terrainZoom : (inline) use=optional
+    + @volume : xs:IDREF use=optional
+    ~ @primitive : enumeration added: ['volume']
+
+== XSD: named simpleType changes (0) ==
+
+== XSD: element text type changes (0) ==
+
+== XSD: identity constraints (0 elements) ==
+
+== Schematron (A=140 rules, B=185) ==
+  added (45):
+    + CRT1 [assert] ctx=object3D/crater
+    + CRT2 [assert] ctx=object3D/crater
+    + CRT3 [assert] ctx=object3D/crater
+    + CRT4 [assert] ctx=object3D/crater
+    + CRT5 [assert] ctx=object3D/crater
+    + FRX1 [assert] ctx=fracture
+    + FRX2 [assert] ctx=fracture
+    + FRX3 [assert] ctx=fracture
+    + FRX4 [assert] ctx=fracture
+    + GEO1 [assert] ctx=object3D
+    + GEO2 [assert] ctx=object3D
+    + GEO3 [assert] ctx=object3D
+    + MSQ1 [assert] ctx=assets/meshSequence
+    + MSQ2 [assert] ctx=assets/meshSequence
+    + MSQ3 [assert] ctx=assets/meshSequence
+    + MSQ4 [assert] ctx=object3D|pyro|particles3D
+    + OCN1 [assert] ctx=ocean
+    + OCN2 [assert] ctx=ocean
+    + OCN3 [assert] ctx=ocean
+    + OCN4 [assert] ctx=ocean
+    + OCN5 [assert] ctx=ocean
+    + P3D1 [assert] ctx=particles3D
+    + P3D2 [assert] ctx=particles3D
+    + P3D3 [assert] ctx=particles3D
+    + P3D4 [assert] ctx=particles3D
+    + P3D5 [assert] ctx=particles3D
+    + P3D6 [assert] ctx=particles3D
+    + PYRO1 [assert] ctx=pyro
+    + PYRO2 [assert] ctx=pyroSource|pyroImpulse
+    + PYRO3 [assert] ctx=pyroSource|pyroImpulse
+    + PYRO4 [assert] ctx=pyroSource|pyroImpulse
+    + PYRO5 [assert] ctx=pyroSource|pyroImpulse
+    + PYRO6 [assert] ctx=pyroSource|pyroImpulse
+    + PYRO7 [assert] ctx=pyro
+    + PYRO8 [assert] ctx=pyro
+    + V8 [assert] ctx=/scene[@version!='1.3']
+    + VOL1 [assert] ctx=object3D
+    + VOL2 [assert] ctx=object3D
+    + VOL3 [assert] ctx=object3D
+    + VOL4 [assert] ctx=assets/volume
+    + VOL5 [assert] ctx=object3D
+    + VOL6 [assert] ctx=assets/volume
+    + VOL7 [assert] ctx=assets/volume
+    + VOL8 [assert] ctx=assets/volume
+    + VOL9 [assert] ctx=assets/volume
+  removed (0):
+  changed (1):
+    ~ R5
+        test:
+          old: not(@mesh) or /scene/assets/mesh[@id=current()/@mesh]
+          new: not(@mesh) or /scene/assets/*[(self::mesh or self::meshSequence) and @id=current()/@mesh]
+        message:
+          old: object3D/@mesh must name a mesh asset.
+          new: object3D/@mesh must name a mesh or meshSequence asset.
+
+== SUMMARY ==
+  elements_added_paths               1794
+  elements_added_subtree_roots       194
+  element_names_added                13
+  element_names_removed              0
+  elements_removed_paths             0
+  elements_moved                     0
+  content_model_changes              131
+  elements_with_attribute_changes    33
+  attributes_added                   192
+  attributes_removed                 0
+  attributes_changed                 33
+  simpleTypes_added                  7
+  simpleTypes_removed                0
+  simpleTypes_changed                0
+  element_text_type_changes          0
+  identity_constraint_changes        0
+  global_other_added                 14
+  global_other_removed               0
+  sch_added                          45
+  sch_removed                        0
+  sch_changed                        1

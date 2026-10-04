@@ -1,0 +1,325 @@
+SCHEMA DELTA
+  A: schemas/py-1.1.xsd + schemas/py-1.1.sch
+  B: schemas/rs-1.1.3.xsd + schemas/rs-1.1.3.sch
+
+== XSD: global declarations ==
+  complexType: +14 -0
+    + clayBlobType
+    + erosionType
+    + featureStyleType
+    + flockType
+    + fluidSourceType
+    + fluidType
+    + flyToType
+    + geoAssetType
+    + geoLayerType
+    + graticuleType
+    + mapAssetType
+    + pinType
+    + routeType
+    + slimeType
+  simpleType: +7 -0
+    + colorListType
+    + colorProfileType
+    + geoPointsType
+    + latitudeType
+    + longitudeType
+    + projectionType
+    + simBoundsType
+  named complexType/group/attributeGroup with changed structure (8):
+    ~ complexType assetsType
+    ~ complexType cameraType
+    ~ complexType captionTrackType
+    ~ complexType imageAssetType
+    ~ complexType imageSequenceAssetType
+    ~ complexType lightType
+    ~ complexType object3DType
+    ~ group nodeChoice
+
+== XSD: element paths (A=10251, B=13661) ==
+  new element names (13): blob, erosion, featureStyle, flock, fluid, fluidSource, flyTo, geo, geoLayer, graticule, map, route, slime
+  gone element names (0): 
+  added paths: 3410 total (the same group/type is reachable by many paths); 162 subtree roots:
+    + scene/assets/geo
+    + scene/assets/map
+    + scene/composition/erosion
+    + scene/composition/flock
+    + scene/composition/fluid
+    + scene/composition/group/erosion
+    + scene/composition/group/flock
+    + scene/composition/group/fluid
+    + scene/composition/group/object3D/blob
+    + scene/composition/group/repeat/erosion
+    + scene/composition/group/repeat/flock
+    + scene/composition/group/repeat/fluid
+    + scene/composition/group/repeat/object3D/blob
+    + scene/composition/group/repeat/sequence/erosion
+    + scene/composition/group/repeat/sequence/flock
+    + scene/composition/group/repeat/sequence/fluid
+    + scene/composition/group/repeat/sequence/object3D/blob
+    + scene/composition/group/repeat/sequence/slime
+    + scene/composition/group/repeat/slime
+    + scene/composition/group/sequence/erosion
+    + scene/composition/group/sequence/flock
+    + scene/composition/group/sequence/fluid
+    + scene/composition/group/sequence/object3D/blob
+    + scene/composition/group/sequence/repeat/erosion
+    + scene/composition/group/sequence/repeat/flock
+    + scene/composition/group/sequence/repeat/fluid
+    + scene/composition/group/sequence/repeat/object3D/blob
+    + scene/composition/group/sequence/repeat/slime
+    + scene/composition/group/sequence/slime
+    + scene/composition/group/slime
+    + scene/composition/object3D/blob
+    + scene/composition/repeat/erosion
+    + scene/composition/repeat/flock
+    + scene/composition/repeat/fluid
+    + scene/composition/repeat/group/erosion
+    + scene/composition/repeat/group/flock
+    + scene/composition/repeat/group/fluid
+    + scene/composition/repeat/group/object3D/blob
+    + scene/composition/repeat/group/sequence/erosion
+    + scene/composition/repeat/group/sequence/flock
+    + scene/composition/repeat/group/sequence/fluid
+    + scene/composition/repeat/group/sequence/object3D/blob
+    + scene/composition/repeat/group/sequence/slime
+    + scene/composition/repeat/group/slime
+    + scene/composition/repeat/object3D/blob
+    + scene/composition/repeat/sequence/erosion
+    + scene/composition/repeat/sequence/flock
+    + scene/composition/repeat/sequence/fluid
+    + scene/composition/repeat/sequence/group/erosion
+    + scene/composition/repeat/sequence/group/flock
+    + scene/composition/repeat/sequence/group/fluid
+    + scene/composition/repeat/sequence/group/object3D/blob
+    + scene/composition/repeat/sequence/group/slime
+    + scene/composition/repeat/sequence/object3D/blob
+    + scene/composition/repeat/sequence/slime
+    + scene/composition/repeat/slime
+    + scene/composition/sequence/erosion
+    + scene/composition/sequence/flock
+    + scene/composition/sequence/fluid
+    + scene/composition/sequence/group/erosion
+    + scene/composition/sequence/group/flock
+    + scene/composition/sequence/group/fluid
+    + scene/composition/sequence/group/object3D/blob
+    + scene/composition/sequence/group/repeat/erosion
+    + scene/composition/sequence/group/repeat/flock
+    + scene/composition/sequence/group/repeat/fluid
+    + scene/composition/sequence/group/repeat/object3D/blob
+    + scene/composition/sequence/group/repeat/slime
+    + scene/composition/sequence/group/slime
+    + scene/composition/sequence/object3D/blob
+    + scene/composition/sequence/repeat/erosion
+    + scene/composition/sequence/repeat/flock
+    + scene/composition/sequence/repeat/fluid
+    + scene/composition/sequence/repeat/group/erosion
+    + scene/composition/sequence/repeat/group/flock
+    + scene/composition/sequence/repeat/group/fluid
+    + scene/composition/sequence/repeat/group/object3D/blob
+    + scene/composition/sequence/repeat/group/slime
+    + scene/composition/sequence/repeat/object3D/blob
+    + scene/composition/sequence/repeat/slime
+    + scene/composition/sequence/slime
+    + scene/composition/slime
+    + scene/symbols/symbol/erosion
+    + scene/symbols/symbol/flock
+    + scene/symbols/symbol/fluid
+    + scene/symbols/symbol/group/erosion
+    + scene/symbols/symbol/group/flock
+    + scene/symbols/symbol/group/fluid
+    + scene/symbols/symbol/group/object3D/blob
+    + scene/symbols/symbol/group/repeat/erosion
+    + scene/symbols/symbol/group/repeat/flock
+    + scene/symbols/symbol/group/repeat/fluid
+    + scene/symbols/symbol/group/repeat/object3D/blob
+    + scene/symbols/symbol/group/repeat/sequence/erosion
+    + scene/symbols/symbol/group/repeat/sequence/flock
+    + scene/symbols/symbol/group/repeat/sequence/fluid
+    + scene/symbols/symbol/group/repeat/sequence/object3D/blob
+    + scene/symbols/symbol/group/repeat/sequence/slime
+    + scene/symbols/symbol/group/repeat/slime
+    + scene/symbols/symbol/group/sequence/erosion
+    + scene/symbols/symbol/group/sequence/flock
+    + scene/symbols/symbol/group/sequence/fluid
+    + scene/symbols/symbol/group/sequence/object3D/blob
+    + scene/symbols/symbol/group/sequence/repeat/erosion
+    + scene/symbols/symbol/group/sequence/repeat/flock
+    + scene/symbols/symbol/group/sequence/repeat/fluid
+    + scene/symbols/symbol/group/sequence/repeat/object3D/blob
+    + scene/symbols/symbol/group/sequence/repeat/slime
+    + scene/symbols/symbol/group/sequence/slime
+    + scene/symbols/symbol/group/slime
+    + scene/symbols/symbol/object3D/blob
+    + scene/symbols/symbol/repeat/erosion
+    + scene/symbols/symbol/repeat/flock
+    + scene/symbols/symbol/repeat/fluid
+    + scene/symbols/symbol/repeat/group/erosion
+    + scene/symbols/symbol/repeat/group/flock
+    + scene/symbols/symbol/repeat/group/fluid
+    + scene/symbols/symbol/repeat/group/object3D/blob
+    + scene/symbols/symbol/repeat/group/sequence/erosion
+    + scene/symbols/symbol/repeat/group/sequence/flock
+    + scene/symbols/symbol/repeat/group/sequence/fluid
+    + scene/symbols/symbol/repeat/group/sequence/object3D/blob
+    + scene/symbols/symbol/repeat/group/sequence/slime
+    + scene/symbols/symbol/repeat/group/slime
+    + scene/symbols/symbol/repeat/object3D/blob
+    + scene/symbols/symbol/repeat/sequence/erosion
+    + scene/symbols/symbol/repeat/sequence/flock
+    + scene/symbols/symbol/repeat/sequence/fluid
+    + scene/symbols/symbol/repeat/sequence/group/erosion
+    + scene/symbols/symbol/repeat/sequence/group/flock
+    + scene/symbols/symbol/repeat/sequence/group/fluid
+    + scene/symbols/symbol/repeat/sequence/group/object3D/blob
+    + scene/symbols/symbol/repeat/sequence/group/slime
+    + scene/symbols/symbol/repeat/sequence/object3D/blob
+    + scene/symbols/symbol/repeat/sequence/slime
+    + scene/symbols/symbol/repeat/slime
+    + scene/symbols/symbol/sequence/erosion
+    + scene/symbols/symbol/sequence/flock
+    + scene/symbols/symbol/sequence/fluid
+    + scene/symbols/symbol/sequence/group/erosion
+    + scene/symbols/symbol/sequence/group/flock
+    + scene/symbols/symbol/sequence/group/fluid
+    + scene/symbols/symbol/sequence/group/object3D/blob
+    + scene/symbols/symbol/sequence/group/repeat/erosion
+    + scene/symbols/symbol/sequence/group/repeat/flock
+    + scene/symbols/symbol/sequence/group/repeat/fluid
+    + scene/symbols/symbol/sequence/group/repeat/object3D/blob
+    + scene/symbols/symbol/sequence/group/repeat/slime
+    + scene/symbols/symbol/sequence/group/slime
+    + scene/symbols/symbol/sequence/object3D/blob
+    + scene/symbols/symbol/sequence/repeat/erosion
+    + scene/symbols/symbol/sequence/repeat/flock
+    + scene/symbols/symbol/sequence/repeat/fluid
+    + scene/symbols/symbol/sequence/repeat/group/erosion
+    + scene/symbols/symbol/sequence/repeat/group/flock
+    + scene/symbols/symbol/sequence/repeat/group/fluid
+    + scene/symbols/symbol/sequence/repeat/group/object3D/blob
+    + scene/symbols/symbol/sequence/repeat/group/slime
+    + scene/symbols/symbol/sequence/repeat/object3D/blob
+    + scene/symbols/symbol/sequence/repeat/slime
+    + scene/symbols/symbol/sequence/slime
+    + scene/symbols/symbol/slime
+  removed (0):
+  moved (0):
+
+== XSD: content model changes (131) ==
+  (4 distinct changes; identical changes on several paths are shown once)
+  scene/assets
+    children_added: geo, map
+    old: choice{0,unbounded}(image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator, chart, audiogram, code, formula, generated)
+    new: choice{0,unbounded}(image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator, chart, audiogram, code, formula, generated, geo, map)
+  scene/composition  (+1 more paths, same change)
+    children_added: erosion, flock, fluid, slime
+    old: choice{0,unbounded}(group, sequence, layer, shape, object3D, camera, particleEmitter, instance, include, repeat, adjustment, transition, skeleton)
+    new: choice{0,unbounded}(group, sequence, layer, shape, object3D, camera, particleEmitter, flock, fluid, slime, erosion, instance, include, repeat, adjustment, transition, skeleton)
+  scene/composition/group  (+95 more paths, same change)
+    children_added: erosion, flock, fluid, slime
+    old: choice{0,unbounded}(choice(choice(animate, expression, motionPath, link), mask, transformConstraint), choice(group, sequence, layer, shape, object3D, camera, particleEmitter, instance, include, repeat, adjustment, transition, skeleton))
+    new: choice{0,unbounded}(choice(choice(animate, expression, motionPath, link), mask, transformConstraint), choice(group, sequence, layer, shape, object3D, camera, particleEmitter, flock, fluid, slime, erosion, instance, include, repeat, adjustment, transition, skeleton))
+  scene/composition/group/object3D  (+31 more paths, same change)
+    children_added: blob
+    old: choice{0,unbounded}(choice(animate, expression, motionPath, link), transformConstraint)
+    new: choice{0,unbounded}(choice(animate, expression, motionPath, link), transformConstraint, blob)
+
+== XSD: attribute changes (68 elements) ==
+  scene/assets/image  (+1 more paths, same change)
+    + @colorProfile : colorProfileType use=optional default=embedded
+  scene/captions/captionTrack
+    + @model : xs:string use=optional default=base
+    + @prompt : xs:string use=optional
+    + @provider : xs:string use=optional default=whisper
+  scene/composition/camera  (+31 more paths, same change)
+    + @ambientOcclusion : xs:boolean use=optional default=false
+    + @aoIntensity : nonNegativeDecimal use=optional default=1
+    + @aoRadius : positiveDecimal use=optional default=40
+    + @denoise : xs:boolean use=optional default=true
+    + @maxBounces : (inline) use=optional default=4
+    + @pathSamples : (inline) use=optional default=64
+    + @renderer : (inline) use=optional default=raster
+    + @screenSpaceReflections : xs:boolean use=optional default=false
+  scene/composition/group/object3D  (+31 more paths, same change)
+    + @boil : nonNegativeDecimal use=optional default=0
+    + @fingerprints : nonNegativeDecimal use=optional default=0
+    + @resolution : (inline) use=optional default=64
+    + @seed : xs:unsignedLong use=optional
+    ~ @primitive : enumeration added: ['clay']
+  scene/lights/light
+    + @contactShadowLength : positiveDecimal use=optional default=20
+    + @contactShadows : xs:boolean use=optional default=false
+
+== XSD: named simpleType changes (0) ==
+
+== XSD: element text type changes (0) ==
+
+== XSD: identity constraints (0 elements) ==
+
+== Schematron (A=87 rules, B=123) ==
+  added (36):
+    + C45 [assert] ctx=route
+    + C50 [assert] ctx=*[@shape='sprite'][self::flock or self::particleEmitter]
+    + C51 [assert] ctx=object3D[@primitive='clay']
+    + C52 [assert] ctx=fluidSource[@start and @end]
+    + C53 [assert] ctx=geoLayer[@domain]
+    + R26 [assert] ctx=map
+    + R30-colorEnd [assert] ctx=*[@colorEnd or @colorHigh or @colorLow or @headFill or @noData or @outline or @paint2]
+    + R30-colorHigh [assert] ctx=*[@colorEnd or @colorHigh or @colorLow or @headFill or @noData or @outline or @paint2]
+    + R30-colorLow [assert] ctx=*[@colorEnd or @colorHigh or @colorLow or @headFill or @noData or @outline or @paint2]
+    + R30-headFill [assert] ctx=*[@colorEnd or @colorHigh or @colorLow or @headFill or @noData or @outline or @paint2]
+    + R30-noData [assert] ctx=*[@colorEnd or @colorHigh or @colorLow or @headFill or @noData or @outline or @paint2]
+    + R30-outline [assert] ctx=*[@colorEnd or @colorHigh or @colorLow or @headFill or @noData or @outline or @paint2]
+    + R30-paint2 [assert] ctx=*[@colorEnd or @colorHigh or @colorLow or @headFill or @noData or @outline or @paint2]
+    + R31-attenuationColor [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-baseColor [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-colorEnd [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-colorHigh [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-colorLow [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-emissive [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-foreground [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-headFill [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-keyColor [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-noData [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-outline [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-paint2 [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-shadowColor [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-sheenColor [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R31-specularColor [assert] ctx=*[@attenuationColor or @baseColor or @colorEnd or @colorHigh or @colorLow or @emissive or @foreground or @headFill or @keyColor or @noData or @outline or @paint2 or @shadowColor or @sheenColor or @specularColor]
+    + R32 [assert] ctx=*[@sprite][self::flock or self::particleEmitter]
+    + R33 [assert] ctx=erosion[@heightmap]
+    + R34 [assert] ctx=*[@forceFields]
+    + R35 [assert] ctx=*[@textStyle]
+    + R36 [assert] ctx=geoLayer
+    + R37 [assert] ctx=route
+    + V6 [assert] ctx=/scene[@version='1.0']
+    + V7 [assert] ctx=/scene[@version='1.0']
+  removed (0):
+  changed (1):
+    ~ R10
+        context:
+          old: *[@parent][self::layer or self::shape or self::group or self::sequence or self::instance or self::repeat or self::particleEmitter or self::object3D or self::adjustment or self::include]
+          new: *[@parent][@id]
+
+== SUMMARY ==
+  elements_added_paths               3410
+  elements_added_subtree_roots       162
+  element_names_added                13
+  element_names_removed              0
+  elements_removed_paths             0
+  elements_moved                     0
+  content_model_changes              131
+  elements_with_attribute_changes    68
+  attributes_added                   391
+  attributes_removed                 0
+  attributes_changed                 32
+  simpleTypes_added                  7
+  simpleTypes_removed                0
+  simpleTypes_changed                0
+  element_text_type_changes          0
+  identity_constraint_changes        0
+  global_other_added                 14
+  global_other_removed               0
+  sch_added                          36
+  sch_removed                        0
+  sch_changed                        1

@@ -332,11 +332,23 @@ def markdown(summary: dict, rows: list[dict]) -> str:
     return "\n".join(out) + "\n"
 
 
+def _compact(row: dict) -> dict:
+    """The row without the bulky raw diagnostics: counts plus the first few messages."""
+    g = dict(row["python"])
+    for k in ("xsd", "sch", "warnings"):
+        items = g.get(k) or []
+        g[k + "_count"] = len(items)
+        g[k] = items[:3]
+    g["unmapped"] = (g.get("unmapped") or [])[:3]
+    return {**row, "python": g}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     ap.add_argument("--json", type=Path, help="write the full report here")
     ap.add_argument("--md", type=Path, help="write the table here (default: print)")
+    ap.add_argument("--full", action="store_true", help="keep every raw Python diagnostic in the JSON (large)")
     ap.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 2))
     ap.add_argument("--only", help="only documents whose name contains this")
     ap.add_argument("--schema", type=Path, help="what-if: validate with this scene-render-1.1.xsd (and the .sch beside it)"
@@ -359,7 +371,8 @@ def main() -> int:
     md = markdown(summary, rows)
     if a.json:
         a.json.parent.mkdir(parents=True, exist_ok=True)
-        a.json.write_text(json.dumps({"summary": summary, "documents": rows}, indent=1, default=str))
+        docs = rows if a.full else [_compact(r) for r in rows]
+        a.json.write_text(json.dumps({"summary": summary, "documents": docs}, indent=1, default=str))
     if a.md:
         a.md.parent.mkdir(parents=True, exist_ok=True)
         a.md.write_text(md)

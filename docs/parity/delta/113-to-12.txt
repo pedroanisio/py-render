@@ -1,0 +1,188 @@
+SCHEMA DELTA
+  A: schemas/rs-1.1.3.xsd + schemas/rs-1.1.3.sch
+  B: schemas/rs-1.2.xsd + schemas/rs-1.2.sch
+
+== XSD: global declarations ==
+  complexType: +4 -0
+    + basemapType
+    + rigidBody3DType
+    + segmentType
+    + tilesAssetType
+  simpleType: +3 -0
+    + audioRoleListType
+    + audioRoleType
+    + tileZoomType
+  named complexType/group/attributeGroup with changed structure (12):
+    ~ complexType assetsType
+    ~ complexType audioTrackType
+    ~ complexType captionTrackType
+    ~ complexType constraintType
+    ~ complexType flockType
+    ~ complexType fluidType
+    ~ complexType forceFieldType
+    ~ complexType mapAssetType
+    ~ complexType object3DType
+    ~ complexType outputType
+    ~ complexType particleEmitterType
+    ~ complexType physicsType
+
+== XSD: element paths (A=13661, B=13737) ==
+  new element names (3): basemap, segment, tiles
+  gone element names (0): 
+  added paths: 76 total (the same group/type is reachable by many paths); 37 subtree roots:
+    + scene/assets/map/basemap
+    + scene/assets/tiles
+    + scene/composition/group/object3D/rigidBody
+    + scene/composition/group/repeat/object3D/rigidBody
+    + scene/composition/group/repeat/sequence/object3D/rigidBody
+    + scene/composition/group/sequence/object3D/rigidBody
+    + scene/composition/group/sequence/repeat/object3D/rigidBody
+    + scene/composition/object3D/rigidBody
+    + scene/composition/repeat/group/object3D/rigidBody
+    + scene/composition/repeat/group/sequence/object3D/rigidBody
+    + scene/composition/repeat/object3D/rigidBody
+    + scene/composition/repeat/sequence/group/object3D/rigidBody
+    + scene/composition/repeat/sequence/object3D/rigidBody
+    + scene/composition/sequence/group/object3D/rigidBody
+    + scene/composition/sequence/group/repeat/object3D/rigidBody
+    + scene/composition/sequence/object3D/rigidBody
+    + scene/composition/sequence/repeat/group/object3D/rigidBody
+    + scene/composition/sequence/repeat/object3D/rigidBody
+    + scene/output/audioTrack
+    + scene/output/captionTrack
+    + scene/output/segment
+    + scene/symbols/symbol/group/object3D/rigidBody
+    + scene/symbols/symbol/group/repeat/object3D/rigidBody
+    + scene/symbols/symbol/group/repeat/sequence/object3D/rigidBody
+    + scene/symbols/symbol/group/sequence/object3D/rigidBody
+    + scene/symbols/symbol/group/sequence/repeat/object3D/rigidBody
+    + scene/symbols/symbol/object3D/rigidBody
+    + scene/symbols/symbol/repeat/group/object3D/rigidBody
+    + scene/symbols/symbol/repeat/group/sequence/object3D/rigidBody
+    + scene/symbols/symbol/repeat/object3D/rigidBody
+    + scene/symbols/symbol/repeat/sequence/group/object3D/rigidBody
+    + scene/symbols/symbol/repeat/sequence/object3D/rigidBody
+    + scene/symbols/symbol/sequence/group/object3D/rigidBody
+    + scene/symbols/symbol/sequence/group/repeat/object3D/rigidBody
+    + scene/symbols/symbol/sequence/object3D/rigidBody
+    + scene/symbols/symbol/sequence/repeat/group/object3D/rigidBody
+    + scene/symbols/symbol/sequence/repeat/object3D/rigidBody
+  removed (0):
+  moved (0):
+
+== XSD: content model changes (35) ==
+  (4 distinct changes; identical changes on several paths are shown once)
+  scene/assets
+    children_added: tiles
+    old: choice{0,unbounded}(image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator, chart, audiogram, code, formula, generated, geo, map)
+    new: choice{0,unbounded}(image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator, chart, audiogram, code, formula, generated, geo, tiles, map)
+  scene/assets/map
+    children_added: basemap
+    old: choice{0,unbounded}(geoLayer, graticule, route, pin, flyTo, choice(animate, expression, motionPath, link))
+    new: choice{0,unbounded}(basemap, geoLayer, graticule, route, pin, flyTo, choice(animate, expression, motionPath, link))
+  scene/composition/group/object3D  (+31 more paths, same change)
+    children_added: rigidBody
+    old: choice{0,unbounded}(choice(animate, expression, motionPath, link), transformConstraint, blob)
+    new: choice{0,unbounded}(choice(animate, expression, motionPath, link), transformConstraint, blob, rigidBody)
+  scene/output
+    children_added: audioTrack, captionTrack, segment
+    old: choice{0,unbounded}(poster, thumbnail, destination)
+    new: choice{0,unbounded}(poster, thumbnail, destination, segment, audioTrack, captionTrack)
+
+== XSD: attribute changes (135 elements) ==
+  scene
+    ~ @version : enumeration added: ['1.2']
+  scene/audioMix/audioTrack
+    ~ @role : type: (inline) -> audioRoleType
+  scene/captions/captionTrack
+    + @lineBreaks : (inline) use=optional default=greedy
+  scene/composition/flock  (+95 more paths, same change)
+    + @useForceFields : xs:boolean use=optional default=true
+  scene/composition/group/object3D  (+31 more paths, same change)
+    + @buildings : xs:boolean use=optional default=false
+    + @exaggeration : nonNegativeDecimal use=optional default=1
+    + @map : xs:IDREF use=optional
+    + @terrain : xs:IDREF use=optional
+    + @terrainEncoding : (inline) use=optional default=terrarium
+    + @textureSize : (inline) use=optional default=2048
+    ~ @primitive : enumeration added: ['map', 'globe']
+  scene/output
+    + @audioBuses : xs:IDREFS use=optional
+    + @audioRoles : audioRoleListType use=optional
+    + @audioTracks : xs:IDREFS use=optional
+    + @joinFade : nonNegativeDecimal use=optional default=0.01
+    + @overlay : xs:IDREF use=optional
+  scene/physics
+    + @gravityZ : xs:double use=optional default=0
+  scene/physics/constraint
+    + @axisX : xs:double use=optional
+    + @axisY : xs:double use=optional
+    + @axisZ : xs:double use=optional
+    + @z : xs:double use=optional
+    ~ @type : enumeration added: ['ball']
+  scene/physics/forceField
+    + @forceZ : xs:double use=optional default=0
+    + @z : xs:double use=optional default=0
+
+== XSD: named simpleType changes (0) ==
+
+== XSD: element text type changes (0) ==
+
+== XSD: identity constraints (0 elements) ==
+
+== Schematron (A=123 rules, B=140) ==
+  added (17):
+    + C46 [assert] ctx=tiles
+    + C47 [assert] ctx=object3D
+    + C48 [assert] ctx=object3D/rigidBody
+    + C54 [assert] ctx=output
+    + C55 [assert] ctx=segment
+    + C56 [assert] ctx=segment
+    + C57 [assert] ctx=segment
+    + C58 [assert] ctx=segment
+    + C59 [assert] ctx=segment/transition
+    + R27 [assert] ctx=basemap
+    + R28 [assert] ctx=object3D
+    + R29 [assert] ctx=object3D
+    + R38 [assert] ctx=segment
+    + R39 [assert] ctx=output
+    + R40 [assert] ctx=output
+    + R41 [assert] ctx=output/captionTrack[@transcribe]
+    + V5 [assert] ctx=/scene[@version='1.0' or @version='1.1']
+  removed (0):
+  changed (3):
+    ~ C20
+        test:
+          old: @from or @to
+          new: @from or @to or parent::segment
+    ~ C33
+        test:
+          old: not(@transcribe) or /scene/audioMix/audioTrack[@id=current()/@transcribe]
+          new: not(@transcribe) or parent::output or /scene/audioMix/audioTrack[@id=current()/@transcribe]
+    ~ R14
+        test:
+          old: not(@burnCaptions) or /scene/captions/captionTrack[@id=current()/@burnCaptions]
+          new: not(@burnCaptions) or /scene/captions/captionTrack[@id=current()/@burnCaptions] or captionTrack[@id=current()/@burnCaptions]
+
+== SUMMARY ==
+  elements_added_paths               76
+  elements_added_subtree_roots       37
+  element_names_added                3
+  element_names_removed              0
+  elements_removed_paths             0
+  elements_moved                     0
+  content_model_changes              35
+  elements_with_attribute_changes    135
+  attributes_added                   301
+  attributes_removed                 0
+  attributes_changed                 35
+  simpleTypes_added                  3
+  simpleTypes_removed                0
+  simpleTypes_changed                0
+  element_text_type_changes          0
+  identity_constraint_changes        0
+  global_other_added                 4
+  global_other_removed               0
+  sch_added                          17
+  sch_removed                        0
+  sch_changed                        3
