@@ -39,7 +39,7 @@ def state(r, t, instanced=False):
 
 
 def camera(projection='orthographic', content=''):
-    return f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" z="160">'+content+'</camera>'
+    return f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" x="80" y="60" z="-160">'+content+'</camera>'
 
 
 def compare(r, control, *, instanced=False, scale=1):
@@ -136,7 +136,7 @@ def test_moving_projected_parent_matches_affine_control(tmp_path, instanced, mot
         group_motion = '<expression property="x">30*time</expression>'
         affine_motion = '<expression property="x">40+15*time</expression>'
     elif motion == 'camera':
-        cam = camera(content='<expression property="x">30*time</expression>')
+        cam = camera(content='<expression property="x">80+30*time</expression>')
         affine_motion = '<expression property="x">40-15*time</expression>'
     elif motion == 'zoom':
         cam = camera(content='<expression property="orthoHeight">240/(1+time)</expression>')
@@ -144,7 +144,7 @@ def test_moving_projected_parent_matches_affine_control(tmp_path, instanced, mot
         affine_motion = '<expression property="scaleX">.5*(1+time)</expression><expression property="scaleY">.5*(1+time)</expression>' \
                         '<expression property="x">40-40*time</expression><expression property="y">30-30*time</expression>'
     else:
-        cam = camera('perspective', '<expression property="z">160+30*time</expression>')
+        cam = camera('perspective', '<expression property="z">-(160+30*time)</expression>')
         affine_attrs = ''
         affine_motion = '<expression property="scaleX">80/(160+30*time)</expression><expression property="scaleY">80/(160+30*time)</expression>' \
                         '<expression property="x">80-6400/(160+30*time)</expression><expression property="y">60-4800/(160+30*time)</expression>'

@@ -52,7 +52,7 @@ def test_ancestor_alpha_matches_independent_full_render(tmp_path, kind, instance
     elif kind == 'clip':
         attrs = 'clip="true" width="60" height="70"'
     elif kind == 'mask':
-        children = '<mask type="rect" height="120"><expression property="width">56+8*time</expression></mask>'
+        children = '<mask type="rect" width="56" height="120"><expression property="width">56+8*time</expression></mask>'
     elif kind == 'effect':
         attrs = 'effects="fx"'
         extra = '<effects><effect id="fx" type="blur"><expression property="radius">1+3*time</expression></effect></effects>'

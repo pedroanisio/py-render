@@ -58,7 +58,7 @@ def body(placement, angle=0):
 @pytest.mark.parametrize('projection', ['orthographic', 'perspective'])
 @pytest.mark.parametrize('instanced,scale', [(False, 1), (True, .5), (True, 1), (True, 2)])
 def test_parallel_projected_motion_matches_affine_control(tmp_path, placement, projection, instanced, scale):
-    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" z="160"/>'
+    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" x="80" y="60" z="-160"/>'
     control_body = '<group id="g" scaleX=".5" scaleY=".5" y="30"><expression property="x">40+15*time</expression>'+WALL+'</group>'
     r = scene(tmp_path, camera+body(placement)+PARTICLE, instanced=instanced, scale=scale)
     control = scene(tmp_path, control_body+PARTICLE, name='control')
@@ -75,7 +75,7 @@ def test_parallel_projected_motion_matches_affine_control(tmp_path, placement, p
 @pytest.mark.parametrize('angle', [-35, 25])
 @pytest.mark.parametrize('instanced', [False, True])
 def test_projective_local_to_scene_matrix_matches_pinhole_geometry(tmp_path, placement, angle, instanced):
-    camera = '<camera id="camera" fov="90" z="160"/>'
+    camera = '<camera id="camera" fov="90" x="80" y="60" z="-160"/>'
     r = scene(tmp_path, camera+body(placement, angle)+PARTICLE, instanced=instanced)
     points = np.array([[0, 0, 1], [10, 0, 1], [10, 60, 1], [0, 60, 1], [3, 17, 1]], float)
     c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
@@ -96,7 +96,7 @@ def test_projective_local_to_scene_matrix_matches_pinhole_geometry(tmp_path, pla
 @pytest.mark.parametrize('placement', ['leaf', 'group', 'collapsed'])
 @pytest.mark.parametrize('angle', [-35, 25])
 def test_tilted_plane_contact_velocity_matches_independent_pinhole_derivative(tmp_path, placement, angle):
-    r = scene(tmp_path, '<camera id="camera" fov="90" z="160"/>'+body(placement, angle)+PARTICLE)
+    r = scene(tmp_path, '<camera id="camera" fov="90" x="80" y="60" z="-160"/>'+body(placement, angle)+PARTICLE)
     c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
     for step in range(1, 61):
         t = step/60
@@ -121,11 +121,11 @@ def test_tilted_plane_contact_velocity_matches_independent_pinhole_derivative(tm
 @pytest.mark.parametrize('instanced', [False, True])
 @pytest.mark.parametrize('motion', ['translate', 'zoom', 'dolly'])
 def test_camera_motion_matches_animated_affine_control(tmp_path, motion, instanced):
-    camera_motion = {'translate': '<expression property="x">30*time</expression>',
+    camera_motion = {'translate': '<expression property="x">80+30*time</expression>',
                      'zoom': '<expression property="orthoHeight">240/(1+time)</expression>',
-                     'dolly': '<expression property="z">160+30*time</expression>'}[motion]
+                     'dolly': '<expression property="z">-(160+30*time)</expression>'}[motion]
     projection = 'perspective' if motion == 'dolly' else 'orthographic'
-    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" z="160">'+camera_motion+'</camera>'
+    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" x="80" y="60" z="-160">'+camera_motion+'</camera>'
     if motion == 'translate':
         attrs = 'scaleX=".5" scaleY=".5" y="30"'
         expressions = '<expression property="x">40-15*time</expression>'
@@ -148,7 +148,7 @@ def test_camera_motion_matches_animated_affine_control(tmp_path, motion, instanc
 @pytest.mark.parametrize('instanced', [False, True])
 @pytest.mark.parametrize('projection', ['orthographic', 'perspective'])
 def test_projected_dynamic_body_uses_simulated_render_pose(tmp_path, instanced, projection):
-    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" z="160"/>'
+    camera = f'<camera id="camera" projection="{projection}" orthoHeight="240" fov="90" x="80" y="60" z="-160"/>'
     wall = WALL.replace('type="static"', 'type="dynamic" velocityX=".3" linearDamping="0" angularDamping="0"')
     projected = '<group id="g" threeD="true">'+wall+'</group>'
     # Rigid-body velocity uses world m/s, so the affine control halves it to

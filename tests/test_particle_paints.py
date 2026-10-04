@@ -39,7 +39,7 @@ def test_particle_paints_match_shape_sources(tmp_path, kind, shape, rotation):
     body = particle(shape=shape, extra=f'rotation0="{rotation}"')
     expected_shape = 'rect' if shape == 'square' else 'ellipse'
     control = (f'<shape id="control" shape="{expected_shape}" x="48" y="48" width="40" height="40" '
-               f'anchorX="50%" anchorY="50%" rotation="{rotation}" fill="url(#paint)"/>')
+               f'anchorX="20" anchorY="20" rotation="{rotation}" fill="url(#paint)"/>')  # centre of the 40px box; % anchors refer to the parent (CONVENTIONS 1.2)
     r = scene(tmp_path, 'particle', body, PAINTS[kind], TILE)
     q = scene(tmp_path, 'control', control, PAINTS[kind], TILE)
     actual, expected = r.frame_linear(.2), q.frame_linear(.2)

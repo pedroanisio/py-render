@@ -78,7 +78,11 @@ def test_animated_display_properties_match_static_controls(tmp_path, prop, first
     for t in (.2, .8, 1.2, .2, .8):
         value = first if t < .5 else second
         np.testing.assert_array_equal(r.frame_linear(t), controls[value].frame_linear(t))
-    assert np.any(controls[first].frame_linear(.8) != controls[second].frame_linear(.8))
+    # With spriteFps=0 the cell is a per-particle seeded random frame (constant in time, either 0 or 1 of
+    # 2); with spriteFps=2 the cell is 0 at t=.2 and 1 at t=.8. Whatever the seeded draw is, the two
+    # controls must differ at one of those two times, so the control pair is distinguishable for any seed.
+    times = (.2, .8) if prop == 'spriteFps' else (.8,)
+    assert any(np.any(controls[first].frame_linear(t) != controls[second].frame_linear(t)) for t in times)
 
 
 def test_animated_sprite_asset_uses_current_time_and_keeps_instances_separate(tmp_path):

@@ -61,7 +61,7 @@ def test_current_silhouette_matches_static_control_after_change(tmp_path, prop, 
 def test_snapshot_matches_rendered_alpha_at_each_time(tmp_path, kind):
     attrs, content, other, extra = 'shape="rect" width="50" height="40" x="30" y="20"', '', '', ''
     if kind == 'mask':
-        content = '<mask type="rect" height="40"><expression property="width">10+30*time</expression></mask>'
+        content = '<mask type="rect" width="10" height="40"><expression property="width">10+30*time</expression></mask>'
     elif kind == 'effect':
         attrs += ' effects="fx"'
         extra = '<effects><effect id="fx" type="blur"><expression property="radius">1+3*time</expression></effect></effects>'
@@ -69,7 +69,7 @@ def test_snapshot_matches_rendered_alpha_at_each_time(tmp_path, kind):
         attrs += ' matte="m"'
         other = '<shape id="m" shape="rect" x="30" y="20" width="10" height="40"><expression property="width">10+30*time</expression></shape>'
     elif kind == 'path':
-        attrs = 'shape="path" x="30" y="20" width="50" height="40"'
+        attrs = 'shape="path" path="M0 0 L50 0 L0 40 Z" x="30" y="20" width="50" height="40"'
         content = '<expression property="path">time &lt; .5 ? "M0 0 L50 0 L0 40 Z" : "M0 40 L50 40 L50 0 Z"</expression>'
     elif kind == 'rotation':
         content = '<expression property="rotation">20*time</expression>'

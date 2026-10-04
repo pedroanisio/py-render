@@ -90,8 +90,11 @@ def test_birth_transform_samples_ancestor_box_layout_and_indirect_inputs(tmp_pat
         attrs = 'alignX="right" y="30" speed="0"'
         expected = [[80, 30, 0, 0], [80+20/clock_scale, 30, 0, 0]]
     elif source == 'anchor':
-        attrs, changes = 'x="50" y="30" speed="0" emitterWidth="20" anchorX="50%" emitterShape="point"', ''
-        children = '<expression property="emitterWidth">20+20*time</expression>'
+        # CONVENTIONS 1.2: a percent anchor refers to the PARENT box, so the former "50% of the emitter
+        # width" anchor is spelled out as the same length: 50% of (20+20*time) = 10+10*time
+        attrs, changes = 'x="50" y="30" speed="0" emitterWidth="20" emitterShape="point"', ''
+        children = ('<expression property="emitterWidth">20+20*time</expression>'
+                    '<expression property="anchorX">10+10*time</expression>')
         expected = [[40, 30, 0, 0], [35, 30, 0, 0]]
     elif source == 'motion_path':
         attrs, changes = 'speed="0"', ''
