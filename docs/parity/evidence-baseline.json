@@ -12,7 +12,7 @@
       "gap": 0
     }
   },
-  "python_tree_commit": "96cf06cbc912d6c82b2e0e6514d42bb85142ed65",
+  "python_tree_commit": "e4500e3c2129d0a635da4688b1ffd0fd164e652b",
   "python_counts": {
     "native": 12,
     "degraded": 1,
@@ -36,9 +36,9 @@
       "gap": 0
     },
     "wrong": {
-      "native": 1,
+      "native": 0,
       "degraded": 0,
-      "wrong": 1,
+      "wrong": 0,
       "error": 0,
       "gap": 0
     },
@@ -58,11 +58,15 @@
     }
   },
   "summary": {
-    "n": 24,
-    "py_native": 12,
-    "same": 12,
+    "n": 22,
+    "host_gated": [
+      "ocio-pipeline",
+      "still-formats"
+    ],
+    "py_native": 11,
+    "same": 11,
     "py_worse": 10,
-    "py_better": 2
+    "py_better": 1
   },
   "cases": [
     {
@@ -73,6 +77,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "warning[A04]: image sequence is missing 4 of 9 frames (6\u20139); missingFrame=\"hold\" applies",
       "python_evidence": "",
       "python_failed_checks": []
@@ -85,6 +90,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -97,6 +103,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -109,6 +116,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -121,6 +129,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -133,6 +142,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -145,6 +155,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -157,6 +168,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -169,6 +181,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -181,8 +194,9 @@
       "rust": "degraded",
       "python": "degraded",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "note: not rendered yet: fx: GLSL compile/link failed; passed through.; error: Unknown variable: notDeclared",
-      "python_evidence": "warning: effect-shader '/home/admin/src/rs-scene-render/crates/sr-gpu/tests/shaders/broken.glsl#8f5970': GLSL compile/link failed; falling back.",
+      "python_evidence": "warning: effect-shader '/home/admin/src/rs-scene-render/crates/sr-gpu/tests/shaders/broken.glsl#3a2fa5': GLSL compile/link failed; falling back.",
       "python_failed_checks": []
     },
     {
@@ -192,7 +206,8 @@
       "manifest_expect": "native",
       "rust": "wrong",
       "python": "native",
-      "verdict": "PY-BETTER",
+      "verdict": "HOST-GATED",
+      "host_gate": "`ociobakelut` not found on this host: Rust falls back to built-in looks without ociobakelut (sr-gpu/src/ocio.rs:149)",
       "rust_evidence": "mid gray through ACES 2.0 SDR is OCIO's 0.3861 (98/255) (got #808080)",
       "python_evidence": "",
       "python_failed_checks": []
@@ -205,6 +220,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   6: Element 'fluid': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, incl",
       "python_failed_checks": []
@@ -217,6 +233,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   6: Element 'flock': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, incl",
       "python_failed_checks": []
@@ -229,6 +246,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   6: Element 'slime': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, incl",
       "python_failed_checks": []
@@ -241,6 +259,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   6: Element 'erosion': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, in",
       "python_failed_checks": []
@@ -253,6 +272,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   8: Element 'blob': This element is not expected. Expected is one of ( animate, expression, motionPath, link, transformConstraint ).",
       "python_failed_checks": []
@@ -265,6 +285,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   12: Element 'camera', attribute 'maxBounces': The attribute 'maxBounces' is not allowed.",
       "python_failed_checks": []
@@ -277,6 +298,7 @@
       "rust": "native",
       "python": "native",
       "verdict": "SAME",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "",
       "python_failed_checks": []
@@ -289,6 +311,7 @@
       "rust": "degraded",
       "python": "native",
       "verdict": "PY-BETTER",
+      "host_gate": null,
       "rust_evidence": "note: not rendered yet: stage: 1 time-sampled attribute(s) use their first sample; USD animation is not imported",
       "python_evidence": "",
       "python_failed_checks": []
@@ -300,7 +323,8 @@
       "manifest_expect": "native",
       "rust": "wrong",
       "python": "wrong",
-      "verdict": "SAME",
+      "verdict": "HOST-GATED",
+      "host_gate": "`heif-convert` not found on this host: Rust falls back to FFmpeg, which misreads identity-matrix AVIF, silently (sr-media/src/still.rs:85)",
       "rust_evidence": "AVIF (lossless) decodes exactly (got #89B7A1)",
       "python_evidence": "HEIC tagged Display P3 (nclx) converts to sRGB as LittleCMS does (got #101418); JPEG XL (lossless) decodes exactly (got #101418)",
       "python_failed_checks": [
@@ -316,6 +340,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   7: Element 'geo': This element is not expected. Expected is one of ( image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator ).",
       "python_failed_checks": []
@@ -328,6 +353,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   7: Element 'tiles': This element is not expected. Expected is one of ( image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator ",
       "python_failed_checks": []
@@ -340,6 +366,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   21: Element 'object3D', attribute 'textureSize': The attribute 'textureSize' is not allowed.",
       "python_failed_checks": []
@@ -352,6 +379,7 @@
       "rust": "native",
       "python": "error",
       "verdict": "PY-WORSE",
+      "host_gate": null,
       "rust_evidence": "",
       "python_evidence": "error:   27: Element 'constraint', attribute 'type': [facet 'enumeration'] The value 'ball' is not an element of the set {'spring', 'distance', 'pin', 'rope', '",
       "python_failed_checks": []
