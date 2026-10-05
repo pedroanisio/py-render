@@ -1,0 +1,360 @@
+{
+  "date": "2026-10-04",
+  "rust": {
+    "renderer_version": "scene-render 0.1.2",
+    "commit": "f296a4c7b002380c79ad765593cca905aa88fd63",
+    "binary_sha256": "bbdf268bfc5c0a8ece025c9323b49462b369972b76a12b0f4b28c1f660e0ea72",
+    "counts": {
+      "native": 20,
+      "degraded": 2,
+      "wrong": 2,
+      "error": 0,
+      "gap": 0
+    }
+  },
+  "python_tree_commit": "96cf06cbc912d6c82b2e0e6514d42bb85142ed65",
+  "python_counts": {
+    "native": 12,
+    "degraded": 1,
+    "wrong": 1,
+    "error": 10,
+    "gap": 0
+  },
+  "matrix": {
+    "native": {
+      "native": 10,
+      "degraded": 0,
+      "wrong": 0,
+      "error": 10,
+      "gap": 0
+    },
+    "degraded": {
+      "native": 1,
+      "degraded": 1,
+      "wrong": 0,
+      "error": 0,
+      "gap": 0
+    },
+    "wrong": {
+      "native": 1,
+      "degraded": 0,
+      "wrong": 1,
+      "error": 0,
+      "gap": 0
+    },
+    "error": {
+      "native": 0,
+      "degraded": 0,
+      "wrong": 0,
+      "error": 0,
+      "gap": 0
+    },
+    "gap": {
+      "native": 0,
+      "degraded": 0,
+      "wrong": 0,
+      "error": 0,
+      "gap": 0
+    }
+  },
+  "summary": {
+    "n": 24,
+    "py_native": 12,
+    "same": 12,
+    "py_worse": 10,
+    "py_better": 2
+  },
+  "cases": [
+    {
+      "id": "stopmotion-holds",
+      "reference": "Object stop-motion (PES-style replacement animation)",
+      "technique": "imageSequence at 12 fps on a 24 fps timeline, missingFrame=hold",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "warning[A04]: image sequence is missing 4 of 9 frames (6\u20139); missingFrame=\"hold\" applies",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "splat-object",
+      "reference": "Captured real-world objects (photogrammetry / Gaussian splats)",
+      "technique": "mesh format=splat drawn by the splat rasteriser",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "softbody-jelly",
+      "reference": "Squash-and-stretch motion graphics",
+      "technique": "softBody kind=jelly under gravity with frame bounds",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "rigid-particles-fields",
+      "reference": "Physics-driven motion graphics (bodies, fire, sparks, fields)",
+      "technique": "rigidBody, particleEmitter presets and a vortex forceField",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "cinematic-pbr",
+      "reference": "Cinematic product / CG shots",
+      "technique": "PBR metals, shadowed spot light, a clear glass pane in front of the set (z < 0) refracting the 2D band painted before it, depth of field",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "object3d-depth-order",
+      "reference": "Any clip mixing 2D layers with 3D objects that come towards camera",
+      "technique": "object3D at z < 0 (in front of the 2D plane) after a full-frame 2D layer",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "gltf-character",
+      "reference": "Character animation (Animist-style imported rigs)",
+      "technique": "glTF import with a named animationClip",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "shadertoy-look",
+      "reference": "Shader-driven looks (Shadertoy ports)",
+      "technique": "effect type=shader with a mainImage() Shadertoy source",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "animated-z",
+      "reference": "Layered 2D animation that re-stacks elements over time",
+      "technique": "animate property=z on overlapping layers",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "broken-shader",
+      "reference": "Any clip depending on a custom shader",
+      "technique": "effect type=shader whose source fails to compile",
+      "manifest_expect": "degraded",
+      "rust": "degraded",
+      "python": "degraded",
+      "verdict": "SAME",
+      "rust_evidence": "note: not rendered yet: fx: GLSL compile/link failed; passed through.; error: Unknown variable: notDeclared",
+      "python_evidence": "warning: effect-shader '/home/admin/src/rs-scene-render/crates/sr-gpu/tests/shaders/broken.glsl#8f5970': GLSL compile/link failed; falling back.",
+      "python_failed_checks": []
+    },
+    {
+      "id": "ocio-pipeline",
+      "reference": "Studio-graded footage (OCIO / ACES pipelines)",
+      "technique": "colorManagement ocioConfig: OCIO's ACES CG config, ACES 2.0 SDR view",
+      "manifest_expect": "native",
+      "rust": "wrong",
+      "python": "native",
+      "verdict": "PY-BETTER",
+      "rust_evidence": "mid gray through ACES 2.0 SDR is OCIO's 0.3861 (98/255) (got #808080)",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "fluid",
+      "reference": "Liquid / smoke simulation",
+      "technique": "<fluid> stable fluids (MAC grid) with buoyancy and vorticity",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   6: Element 'fluid': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, incl",
+      "python_failed_checks": []
+    },
+    {
+      "id": "flocking",
+      "reference": "Swarms and crowds",
+      "technique": "<flock> boids",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   6: Element 'flock': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, incl",
+      "python_failed_checks": []
+    },
+    {
+      "id": "erosion-slime",
+      "reference": "Generative growth (slime-mould trails)",
+      "technique": "<slime> Physarum network",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   6: Element 'slime': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, incl",
+      "python_failed_checks": []
+    },
+    {
+      "id": "erosion",
+      "reference": "Landscape erosion",
+      "technique": "<erosion> droplet hydraulic erosion",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   6: Element 'erosion': This element is not expected. Expected is one of ( group, sequence, layer, shape, object3D, camera, particleEmitter, instance, in",
+      "python_failed_checks": []
+    },
+    {
+      "id": "clay-3d",
+      "reference": "3D claymation look",
+      "technique": "object3D primitive=clay: SDF blobs, fingerprints, boil",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   8: Element 'blob': This element is not expected. Expected is one of ( animate, expression, motionPath, link, transformConstraint ).",
+      "python_failed_checks": []
+    },
+    {
+      "id": "path-tracing",
+      "reference": "Offline-quality global illumination",
+      "technique": "camera renderer=pathtrace",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   12: Element 'camera', attribute 'maxBounces': The attribute 'maxBounces' is not allowed.",
+      "python_failed_checks": []
+    },
+    {
+      "id": "fbx-animation",
+      "reference": "Rigs delivered as FBX",
+      "technique": "FBX animation stack (skinned, baked by ufbx)",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "native",
+      "verdict": "SAME",
+      "rust_evidence": "",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "usd-binary",
+      "reference": "USD pipeline assets",
+      "technique": "binary USD (usdc) in a USDZ package",
+      "manifest_expect": "degraded",
+      "rust": "degraded",
+      "python": "native",
+      "verdict": "PY-BETTER",
+      "rust_evidence": "note: not rendered yet: stage: 1 time-sampled attribute(s) use their first sample; USD animation is not imported",
+      "python_evidence": "",
+      "python_failed_checks": []
+    },
+    {
+      "id": "still-formats",
+      "reference": "photo and design assets",
+      "technique": "HEIC, JPEG XL, AVIF, PSD and TIFF stills with embedded colour",
+      "manifest_expect": "native",
+      "rust": "wrong",
+      "python": "wrong",
+      "verdict": "SAME",
+      "rust_evidence": "AVIF (lossless) decodes exactly (got #89B7A1)",
+      "python_evidence": "HEIC tagged Display P3 (nclx) converts to sRGB as LittleCMS does (got #101418); JPEG XL (lossless) decodes exactly (got #101418)",
+      "python_failed_checks": [
+        "HEIC tagged Display P3 (nclx) converts to sRGB as LittleCMS does (got #101418)",
+        "JPEG XL (lossless) decodes exactly (got #101418)"
+      ]
+    },
+    {
+      "id": "world-map",
+      "reference": "GEOlayers / Flourish maps",
+      "technique": "projected world map with a highlighted country, a great-circle route and a globe fly-to",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   7: Element 'geo': This element is not expected. Expected is one of ( image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator ).",
+      "python_failed_checks": []
+    },
+    {
+      "id": "basemap",
+      "reference": "MapLibre / Protomaps street maps",
+      "technique": "vector-tile basemap with a MapLibre style, and raster tiles on a globe",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   7: Element 'tiles': This element is not expected. Expected is one of ( image, video, imageSequence, audio, text, vector, mesh, lottie, font, generator ",
+      "python_failed_checks": []
+    },
+    {
+      "id": "map-3d",
+      "reference": "Google Earth Studio / 3D city maps",
+      "technique": "a globe draped with its map, terrain from elevation tiles, buildings extruded from a basemap",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   21: Element 'object3D', attribute 'textureSize': The attribute 'textureSize' is not allowed.",
+      "python_failed_checks": []
+    },
+    {
+      "id": "rigid-3d",
+      "reference": "3D physics motion graphics (tumbling crates, pendulums)",
+      "technique": "rigidBody on object3D: box, sphere and convex-hull shapes, a static triangle-mesh ground and a ball joint",
+      "manifest_expect": "native",
+      "rust": "native",
+      "python": "error",
+      "verdict": "PY-WORSE",
+      "rust_evidence": "",
+      "python_evidence": "error:   27: Element 'constraint', attribute 'type': [facet 'enumeration'] The value 'ball' is not an element of the set {'spring', 'distance', 'pin', 'rope', '",
+      "python_failed_checks": []
+    }
+  ]
+}
